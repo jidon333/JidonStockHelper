@@ -28,6 +28,7 @@ nyse = mcal.get_calendar('NYSE')
 
 exception_ticker_list = {}
 merge_fail_ticker_list = []
+data_folder = os.path.join(os.getcwd(), 'StockData')
 
 
 class Chart:
@@ -166,7 +167,8 @@ class Chart:
 class StockDataManager:
     def __init__(self):
         self.index_data = fdr.DataReader('US500')
-        self.csv_names = [os.path.splitext(f)[0] for f in os.listdir('./') if f.endswith('.csv')]
+
+        self.csv_names = [os.path.splitext(f)[0] for f in os.listdir(data_folder) if f.endswith('.csv')]
 
 # ------------------- private -----------------------------------------------
 
@@ -263,7 +265,8 @@ class StockDataManager:
     def _ExportDatasToCsv(self, data_dic):
         for ticker, data in data_dic.items():
             try:
-                data.to_csv(f"{ticker}.csv", encoding='utf-8-sig')
+                save_path = os.path.join('StockData', f"{ticker}.csv")
+                data.to_csv(save_path, encoding='utf-8-sig')
                 print(f"{ticker}.csv", "is saved!")
             except Exception as e:
                 print(f"An error occurred: {e}")
@@ -316,7 +319,8 @@ class StockDataManager:
         # 주식 종목의 전일 대비 수익률 계산
         #data = fdr.DataReader(ticker, start_date, end_date)
         try:
-            data = pd.read_csv(f"{ticker}.csv")
+            save_path = os.path.join('StockData', f"{ticker}.csv")
+            data = pd.read_csv(save_path)
             data.set_index('Date', inplace=True)
             returns = (data['Close'] - data['Close'].shift(1)) / data['Close'].shift(1)
         except Exception as e:
@@ -376,13 +380,13 @@ class StockDataManager:
 
 
         daily_changes_nyse_df = self._getUpDownChanges_df(nyse_list, valid_start_date, valid_end_date)
-        daily_changes_nyse_df.to_csv('up_down_nyse.csv')
+        daily_changes_nyse_df.to_csv(os.path.join(data_folder, 'up_down_nyse.csv'))
 
         daily_changes_nasdaq_df = self._getUpDownChanges_df(nasdaq_list, valid_start_date, valid_end_date)
-        daily_changes_nasdaq_df.to_csv('up_down_nasdaq.csv')
+        daily_changes_nasdaq_df.to_csv(os.path.join(data_folder, 'up_down_nasdaq.csv'))
 
         daily_changes_sp500_df = self._getUpDownChanges_df(sp500_list, valid_start_date, valid_end_date)
-        daily_changes_sp500_df.to_csv('up_down_sp500.csv')
+        daily_changes_sp500_df.to_csv(os.path.join(data_folder, 'up_down_sp500.csv'))
 
         with open("exception.json", "w") as outfile:
                 json.dump(exception_ticker_list, outfile, indent = 4)
@@ -403,8 +407,11 @@ class StockDataManager:
         startDay = dt.date.today() - dt.timedelta(days=daysNum)
         endDay = dt.date.today()
 
+
         # ------------ nyse -------------------
-        data = pd.read_csv("up_down_nyse.csv")
+        nyse_file_path = os.path.join(data_folder, "up_down_nyse.csv")
+        data = pd.read_csv(nyse_file_path)
+
         # 문자열을 datetime 객체로 변경
         data['Date'] = pd.to_datetime(data['Date'])
 
@@ -417,7 +424,9 @@ class StockDataManager:
 
 
         # ------------ nasdaq -------------------
-        data = pd.read_csv("up_down_nasdaq.csv")
+        nasdaq_file_path = os.path.join(data_folder, "up_down_nasdaq.csv")
+        data = pd.read_csv(nasdaq_file_path)
+
         # 문자열을 datetime 객체로 변경
         data['Date'] = pd.to_datetime(data['Date'])
 
@@ -427,8 +436,10 @@ class StockDataManager:
         data = data[startDay:endDay]
         updown_nasdaq = data
 
-            # ------------ nasdaq -------------------
-        data = pd.read_csv("up_down_sp500.csv")
+        # ------------ sp500 -------------------
+        sp500_file_path = os.path.join(data_folder, "up_down_sp500.csv")
+        data = pd.read_csv(sp500_file_path)
+
         # 문자열을 datetime 객체로 변경
         data['Date'] = pd.to_datetime(data['Date'])
 
@@ -444,7 +455,9 @@ class StockDataManager:
         print("--- getStockDatasFromCsv ---")
         for ticker in stock_list['Symbol']:
             try:
-                data = pd.read_csv(f"{ticker}.csv")
+                csv_path = os.path.join('StockData', f"{ticker}.csv")
+                data = pd.read_csv(csv_path)
+
                 # 문자열을 datetime 객체로 변경
                 data['Date'] = pd.to_datetime(data['Date'])
 
@@ -462,7 +475,6 @@ class StockDataManager:
                 print(f"An error occurred: {e}")
                 name = stock_list.loc[stock_list['Symbol'] == ticker, 'Name'].values[0]
                 exception_ticker_list[ticker] = name
-
 
 
 def DrawStockDatas(stock_datas_dic, tickers, maxCnt = -1):
@@ -504,11 +516,9 @@ def remove_outdated_tickers():
         keys = data.keys()
 
         for key in keys:
-            file_path = "./" + key + '.csv'
+            file_path = os.path.join(data_folder, key + '.csv')
             if os.path.exists(file_path):
                 os.remove(file_path)
-
-
 
 
 
