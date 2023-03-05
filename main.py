@@ -1,6 +1,7 @@
 
 import FinanceDataReader as fdr
 import pandas as pd
+import numpy as np
 import pandas_market_calendars as mcal
 import matplotlib.pyplot as plt
 import sys
@@ -9,6 +10,7 @@ import json
 import glob
 import os
 import time
+
 
 plt.switch_backend('Qt5Agg')
 
@@ -27,8 +29,10 @@ nyse = mcal.get_calendar('NYSE')
 
 
 exception_ticker_list = {}
-merge_fail_ticker_list = []
+sync_fail_ticker_list = []
 data_folder = os.path.join(os.getcwd(), 'StockData')
+
+stockIterateLimit = 99999
 
 
 class Chart:
@@ -172,7 +176,38 @@ class StockDataManager:
 
 # ------------------- private -----------------------------------------------
 
-    def _calcIndicators(self, stock_data):
+    def _CookIndexData(self, index_data):
+        index_new_data = index_data
+
+        # TR(True Range) 계산
+        high = index_new_data['High']
+        low = index_new_data['Low']
+        prev_close = index_new_data['Close'].shift(1)
+
+        d1 = high - low
+        d2 = np.abs(high - prev_close)
+        d3 = np.abs(low - prev_close)
+        
+        tr = np.maximum(d1, d2)
+        tr = np.maximum(tr, d3)
+
+        # ATR(Average True Range)
+        n = 14
+        atr = tr.rolling(n).mean()
+        index_new_data['ATR'] = atr
+
+        # TC(True Change) 계산
+        tc = (index_new_data['Close'] - index_new_data['Close'].shift(1)) / atr
+        index_new_data['TC'] = tc
+
+        # ATC(Average True Change) 계산
+        n = 14
+        atc = tc.rolling(n).mean()
+        index_new_data['ATC'] = atc
+
+        return index_new_data
+
+    def _CookStockData(self, stock_data):
 
         new_data = stock_data
 
@@ -196,6 +231,43 @@ class StockDataManager:
         # 150MA Slope
         ma_diff = stock_data['150MA'].diff()
         new_data['MA150_Slope'] = ma_diff / 2
+
+        # TR 계산
+        high = stock_data['High']
+        low = stock_data['Low']
+        prev_close = stock_data['Close'].shift(1)
+
+        d1 = high - low
+        d2 = np.abs(high - prev_close)
+        d3 = np.abs(low - prev_close)
+        
+        tr = np.maximum(d1, d2)
+        tr = np.maximum(tr, d3)
+
+        # ATR 계산
+        n = 14
+        atr = tr.rolling(n).mean()
+        new_data['ATR'] = atr
+
+        # TC(True Change) 계산
+        tc = (stock_data['Close'] - stock_data['Close'].shift(1)) / atr
+        new_data['TC'] = tc
+
+        # ATC(Average True Change) 계산
+        atc = tc.rolling(n).mean()
+        new_data['ATC'] = atc
+
+        new_index_data = self._CookIndexData(self.index_data)
+     
+        # TRS(True Relative Strength)
+        sp500_tc = new_index_data['TC']
+        stock_tc = tc
+        trs = stock_tc - sp500_tc
+        new_data['TRS'] = trs
+
+        # ATRS(Average True Relative Strength)
+        atrs = trs.rolling(n).mean()
+        new_data['ATRS'] = atrs
 
         return new_data
 
@@ -224,12 +296,15 @@ class StockDataManager:
             stock_data['Industry'] = stock_list.loc[stock_list['Symbol'] == ticker, 'Industry'].values[0]
 
             try:
-                stock_data = self._calcIndicators(stock_data)
+                stock_data = self._CookStockData(stock_data)
 
                 # 딕셔너리에 데이터 추가
                 out_data_dic[ticker] = stock_data
                 i = i+1
                 print(f"{i/stockNums*100:.2f}% Done")
+                
+                if i > stockIterateLimit:
+                    break
 
 
             except Exception as e:
@@ -296,7 +371,7 @@ class StockDataManager:
             webData = stock_datas_fromWeb.get(ticker, pd.DataFrame())
 
             if csvData.empty or webData.empty:
-                merge_fail_ticker_list.append(ticker)
+                sync_fail_ticker_list.append(ticker)
                 continue
 
             # remove duplicate index from df2
@@ -304,7 +379,7 @@ class StockDataManager:
 
             # concatenate the two dataframes
             df = pd.concat([csvData, webData])
-            df = self._calcIndicators(df)
+            df = self._CookStockData(df)
             sync_data_dic[ticker] = df
 
             print(ticker, ' sync Done')
@@ -312,7 +387,7 @@ class StockDataManager:
         self._ExportDatasToCsv(sync_data_dic)
 
         with open('merge_fail_list.txt', 'wb') as f:
-            for ticker in merge_fail_ticker_list:
+            for ticker in sync_fail_ticker_list:
                 f.writelines(ticker.encode())
 
     def _getCloseChanges_df(self, stock_list, ticker, start_date, end_date):
@@ -394,6 +469,38 @@ class StockDataManager:
         return daily_changes_nyse_df, daily_changes_nasdaq_df, daily_changes_sp500_df
 
 # ------------------- public -----------------------------------------------
+    # cooking 공식이 변하는 경우 로컬 데이터를 업데이트하기 위해 호출
+    def cookLocalStockData(self):
+        print("-------------------cookLocalStockData-----------------\n ") 
+
+        nyse_list = fdr.StockListing('NYSE')
+        nasdaq_list = fdr.StockListing('NASDAQ')
+        all_list = pd.concat([nyse_list, nasdaq_list])
+
+        # all_list에서 Symbol이 csv_names에 있는 경우만 추려냄
+        all_list = all_list[all_list['Symbol'].isin(self.csv_names)]
+
+        tickers = []
+        stock_datas_fromCsv = {}
+        self.getStockDatasFromCsv(all_list, tickers, stock_datas_fromCsv)
+
+        cooked_data_dic = {}
+
+        for ticker in tickers:
+            csvData = stock_datas_fromCsv.get(ticker, pd.DataFrame())
+
+            if csvData.empty:
+                sync_fail_ticker_list.append(ticker)
+                continue
+
+            # concatenate the two dataframes
+            cookedData = self._CookStockData(csvData)
+            cooked_data_dic[ticker] = cookedData
+
+            print(ticker, ' cooked!')
+
+        self._ExportDatasToCsv(cooked_data_dic)
+
 
     def syncCsvFromWeb(self, daysNum = 14):
         self._SyncStockDatas(daysNum)
@@ -406,7 +513,6 @@ class StockDataManager:
 
         startDay = dt.date.today() - dt.timedelta(days=daysNum)
         endDay = dt.date.today()
-
 
         # ------------ nyse -------------------
         nyse_file_path = os.path.join(data_folder, "up_down_nyse.csv")
@@ -522,7 +628,11 @@ def remove_outdated_tickers():
 
 
 
-print("Select the chart type. \n 0: Stock Data Chart \n 1: Momentum Index Chart \n 2: Sync local .csv datas from web(It will takes so long...) \n")
+print("Select the chart type. \n \
+      0: Stock Data Chart \n \
+      1: Momentum Index Chart \n \
+      2: Sync local .csv datas from web(It will takes so long...) \n \
+      3: cook local stock data. ")
 index = int(input())
 
 sd = StockDataManager()
@@ -537,4 +647,7 @@ elif index == 1:
     updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*3)
     DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500)
 elif index == 2:
-    sd.syncCsvFromWeb(14)
+    sd.syncCsvFromWeb(120)
+elif index == 3:
+    sd.cookLocalStockData()
+
