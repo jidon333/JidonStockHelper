@@ -280,13 +280,13 @@ class StockDataManager:
         retry_delay = 5  # seconds
 
         for ticker in stock_list['Symbol']:
-            stock_data = fdr.DataReader(ticker, trading_days[0], trading_days[-1]) # fdr.DataReader 종목 싱크에 시간이 좀 걸리므로 
+            stock_data = fdr.DataReader(ticker, trading_days[0]) 
 
             if stock_data.empty:
                 for retryCnt in range(max_retries):
                     print('fdr.DataReader({}) request failed. Retry request {} seconds later. '.format(ticker, retry_delay * (retryCnt+1)))
                     time.sleep(retry_delay * (retryCnt+1))
-                    stock_data = fdr.DataReader(ticker, trading_days[0], trading_days[-1])
+                    stock_data = fdr.DataReader(ticker, trading_days[0])
                     if stock_data.empty != True:
                         print('fdr.DataReader({}) request success!'.format(ticker))
                         break         
@@ -312,7 +312,7 @@ class StockDataManager:
                 name = stock_list.loc[stock_list['Symbol'] == ticker, 'Name'].values[0]
                 exception_ticker_list[ticker] = name
 
-        with open("exception.json", "w") as outfile:
+        with open("DataReader_exception.json", "w") as outfile:
             json.dump(exception_ticker_list, outfile)
 
     def _getAllDatasFromWeb(self, daysNum = 5*365, all_list = pd.DataFrame()):
@@ -334,27 +334,33 @@ class StockDataManager:
         out_data_dic = {}
         self._getDatasFromWeb(all_list, trading_days, out_data_dic)
 
-
         return out_data_dic
 
     def _ExportDatasToCsv(self, data_dic):
+        i = 0
         for ticker, data in data_dic.items():
             try:
                 save_path = os.path.join('StockData', f"{ticker}.csv")
                 data.to_csv(save_path, encoding='utf-8-sig')
-                print(f"{ticker}.csv", "is saved!")
+                i = i+1
+                print(f"{ticker}.csv", "is saved! {}/{}".format(i, len(data_dic.items())))
             except Exception as e:
                 print(f"An error occurred: {e}")
 
-    def _SyncStockDatas(self, daysToSync = 14):
-        print("-------------------SyncStockDatas-----------------\n ") 
-
+    def _getStockListFromLocalCsv(self):
         nyse_list = fdr.StockListing('NYSE')
         nasdaq_list = fdr.StockListing('NASDAQ')
         all_list = pd.concat([nyse_list, nasdaq_list])
 
         # all_list에서 Symbol이 csv_names에 있는 경우만 추려냄
         all_list = all_list[all_list['Symbol'].isin(self.csv_names)]
+
+        return all_list
+
+    def _SyncStockDatas(self, daysToSync = 14):
+        print("-------------------SyncStockDatas-----------------\n ") 
+
+        all_list = self._getStockListFromLocalCsv()
         
         sync_data_dic = {}
 
@@ -363,6 +369,10 @@ class StockDataManager:
         tickers = []
         stock_datas_fromCsv = {}
         self.getStockDatasFromCsv(all_list, tickers, stock_datas_fromCsv)
+
+
+        i = 0
+        tickerNum = len(tickers)
 
         # tickers를 csv 파일 리스트로부터 가져오기 때문에 최근 상장한 주식은 포함하지 못하는 단점이 있다.
         # 이건 주기적으로 전체 데이터를 받거나 해야될듯?
@@ -382,17 +392,17 @@ class StockDataManager:
             df = self._CookStockData(df)
             sync_data_dic[ticker] = df
 
-            print(ticker, ' sync Done')
+            i = i+1
+            print(ticker, ' sync Done. {}/{}'.format(i, tickerNum))
+
 
         self._ExportDatasToCsv(sync_data_dic)
 
-        with open('merge_fail_list.txt', 'wb') as f:
+        with open('sync_fail_list.txt', 'wb') as f:
             for ticker in sync_fail_ticker_list:
-                f.writelines(ticker.encode())
+                f.write(str(ticker) + '\n')
 
     def _getCloseChanges_df(self, stock_list, ticker, start_date, end_date):
-        # 주식 종목의 전일 대비 수익률 계산
-        #data = fdr.DataReader(ticker, start_date, end_date)
         try:
             save_path = os.path.join('StockData', f"{ticker}.csv")
             data = pd.read_csv(save_path)
@@ -434,8 +444,14 @@ class StockDataManager:
     def _SyncUpDownDatas(self):
         # S&P 500 지수의 모든 종목에 대해 매일 상승/하락한 종목 수 계산
         nyse_list = fdr.StockListing('NYSE')
+        nyse_list = nyse_list[nyse_list['Symbol'].isin(self.csv_names)]
+
         nasdaq_list = fdr.StockListing('NASDAQ')
+        nasdaq_list = nasdaq_list[nasdaq_list['Symbol'].isin(self.csv_names)]
+
         sp500_list = fdr.StockListing('S&P500')
+        sp500_list = sp500_list[sp500_list['Symbol'].isin(self.csv_names)]
+
 
         daysNum = 365*5
         end_date = dt.date.today()
@@ -463,22 +479,65 @@ class StockDataManager:
         daily_changes_sp500_df = self._getUpDownChanges_df(sp500_list, valid_start_date, valid_end_date)
         daily_changes_sp500_df.to_csv(os.path.join(data_folder, 'up_down_sp500.csv'))
 
-        with open("exception.json", "w") as outfile:
+        with open("up_down_exception.json", "w") as outfile:
                 json.dump(exception_ticker_list, outfile, indent = 4)
 
         return daily_changes_nyse_df, daily_changes_nasdaq_df, daily_changes_sp500_df
 
 # ------------------- public -----------------------------------------------
+    def downloadStockDatasFromWeb(self, daysNum = 365 * 5):
+        print("-------------------_downloadStockDatasFromWeb-----------------\n ")
+
+        while(True):
+            print('It will override all your local .csv files. \n Are you sure to execute this? (y/n)')
+            k = input()
+            if(k == 'y'):
+                break
+            elif(k == 'n'):
+                return
+            else:
+                print('input \'y\' or \'n\' to continue...')
+
+
+
+        all_list = self._getStockListFromLocalCsv()
+        
+        sync_data_dic = {}
+
+        stock_data_dic_fromWeb = self._getAllDatasFromWeb(daysNum, all_list)
+        tickers = stock_data_dic_fromWeb.keys()
+
+        i = 0
+        tickerNum = len(tickers)
+        for ticker in tickers:
+            webData = stock_data_dic_fromWeb.get(ticker, pd.DataFrame())
+
+            if webData.empty:
+                sync_fail_ticker_list.append(ticker)
+                continue
+
+            # concatenate the two dataframes
+            df = self._CookStockData(webData)
+            sync_data_dic[ticker] = df
+
+            i = i+1
+            if i > stockIterateLimit:
+                break
+            print(ticker, ' download Done. {}/{}'.format(i, tickerNum))
+
+        self._ExportDatasToCsv(sync_data_dic)
+
+        with open('download_fail_list.txt', 'wb') as f:
+            for ticker in sync_fail_ticker_list:
+                f.write(str(ticker) + '\n')
+
+
     # cooking 공식이 변하는 경우 로컬 데이터를 업데이트하기 위해 호출
     def cookLocalStockData(self):
         print("-------------------cookLocalStockData-----------------\n ") 
 
-        nyse_list = fdr.StockListing('NYSE')
-        nasdaq_list = fdr.StockListing('NASDAQ')
-        all_list = pd.concat([nyse_list, nasdaq_list])
+        all_list = self._getStockListFromLocalCsv()
 
-        # all_list에서 Symbol이 csv_names에 있는 경우만 추려냄
-        all_list = all_list[all_list['Symbol'].isin(self.csv_names)]
 
         tickers = []
         stock_datas_fromCsv = {}
@@ -500,7 +559,6 @@ class StockDataManager:
             print(ticker, ' cooked!')
 
         self._ExportDatasToCsv(cooked_data_dic)
-
 
     def syncCsvFromWeb(self, daysNum = 14):
         self._SyncStockDatas(daysNum)
@@ -632,7 +690,8 @@ print("Select the chart type. \n \
       0: Stock Data Chart \n \
       1: Momentum Index Chart \n \
       2: Sync local .csv datas from web(It will takes so long...) \n \
-      3: cook local stock data. ")
+      3: cook local stock data. \n \
+      4: Download stock data from web and overwrite local files. \n")
 index = int(input())
 
 sd = StockDataManager()
@@ -644,10 +703,12 @@ if index == 0:
     sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic)
     DrawStockDatas(out_stock_datas_dic, out_tickers)
 elif index == 1:
-    updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*3)
+    updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*5)
     DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500)
 elif index == 2:
-    sd.syncCsvFromWeb(120)
+    sd.syncCsvFromWeb(7)
 elif index == 3:
     sd.cookLocalStockData()
+elif index == 4:
+    sd.downloadStockDatasFromWeb()
 
