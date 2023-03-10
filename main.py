@@ -8,9 +8,13 @@ import time
 
 import FinanceDataReader as fdr
 import matplotlib.pyplot as plt
+from matplotlib.dates import num2date
+
 import numpy as np
 import pandas as pd
 import pandas_market_calendars as mcal
+
+import pickle
 
 plt.switch_backend('Qt5Agg')
 
@@ -49,12 +53,11 @@ class Chart:
         self.updown_sp500 = updown_sp500
 
         if stockData is not None:
-            self.fig, (self.ax1, self.ax2, self.ax3) = plt.subplots(
-            3, 1, gridspec_kw={'height_ratios': [3, 1, 1]}, figsize=(20, 10))
+            self.fig, (self.ax1, self.ax2, self.ax3, self.ax4) = plt.subplots(
+            4, 1, gridspec_kw={'height_ratios': [3, 1, 1, 1]}, figsize=(20, 10))
         else:
             self.fig, (self.ax1) = plt.subplots(figsize=(20, 10))
 
-       
 
         plt.ion()
 
@@ -78,18 +81,19 @@ class Chart:
         if event.inaxes == self.ax1:
             drawAxis = self.ax1
 
-        # 좌표값을 표시할 텍스트 박스 생성
-        if drawAxis != None:
-            if self.text_box is None:
-                self.text_box = drawAxis.text(0.5, 0.95,
-                                              f'x = {drawAxis.get_xaxis().get_major_formatter().format_data(x)}, y = {y:.2f}',
-                                              transform=drawAxis.transAxes,
-                                              ha='center', va='top')
-            else:
-                self.text_box.set_text(
-                    f'x = {drawAxis.get_xaxis().get_major_formatter().format_data(x)}, y = {y:.2f}')
+        if drawAxis is None:
+            return
 
-            self.fig.canvas.draw()
+        if self.text_box is None:
+            self.text_box = drawAxis.text(0.5, 0.95,
+                                        f'x = {num2date(x).strftime("%Y-%m-%d")}, y = {y:.2f}',
+                                        transform=drawAxis.transAxes,
+                                        ha='center', va='top')
+        else:
+            self.text_box.set_text(
+                f'x = {num2date(x).strftime("%Y-%m-%d")}, y = {y:.2f}')
+
+        self.fig.canvas.draw()
 
     def on_key_press(self, event):
         if event.key == 'escape':
@@ -105,7 +109,8 @@ class Chart:
             self.retVal = 1
         if event.key == 'enter':
             ticker = self.stockData['Symbol'].iloc[-1]
-            markedTickerList.append(ticker)
+            if ticker not in markedTickerList:
+                markedTickerList.append(ticker)
             print(ticker, 'is marked!')
             #plt.close()
             
@@ -123,6 +128,8 @@ class Chart:
 
         self.ax1.plot(self.stockData['Close'], label='Close')
         self.ax1.plot(self.stockData['150MA'], label='MA150', color='blue')
+        self.ax1.plot(self.stockData['50MA'], label='MA50', color='orange')
+
         self.ax1.legend(loc='best')
         self.ax1.grid()
         self.ax1.set_title(titleName, fontsize=30)
@@ -134,9 +141,18 @@ class Chart:
 
         self.ax3.cla()
         self.ax3.plot(self.stockData['RS'], label='RS')
-        self.ax3.legend(loc='best')
-
+        self.ax3.legend(loc='lower right')
+        self.ax3.fill_between(self.stockData.index, self.stockData['RS'], 0, where=self.stockData['RS'] < 0, color='red', alpha=0.3)
+        self.ax3.fill_between(self.stockData.index, self.stockData['RS'], 0, where=self.stockData['RS'] >= 0, color='green', alpha=0.3)
         self.ax3.axhline(y=0, color='black', linestyle='--')
+
+        self.ax4.cla()
+        self.ax4.plot(self.stockData['ATRS'], label='ATRS')
+        self.ax4.legend(loc='lower right')
+        self.ax4.fill_between(self.stockData.index, self.stockData['ATRS'], 0, where=self.stockData['ATRS'] < 0, color='red', alpha=0.3)
+        self.ax4.fill_between(self.stockData.index, self.stockData['ATRS'], 0, where=self.stockData['ATRS'] >= 0, color='green', alpha=0.3)
+        self.ax4.axhline(y=0, color='black', linestyle='--')
+
 
         plt.draw()
 
@@ -234,6 +250,10 @@ class StockDataManager:
             # 150MA Slope
             ma_diff = stock_data['150MA'].diff()
             new_data['MA150_Slope'] = ma_diff / 2
+
+            # 50MA
+            ma50 = stock_data['Close'].rolling(window=50).mean()
+            new_data['50MA'] = ma50
 
             # TR 계산
             high = stock_data['High']
@@ -625,6 +645,8 @@ class StockDataManager:
 
     def getStockDatasFromCsv(self, stock_list, out_tickers, out_stock_datas_dic, daysNum = 365*5):
         print("--- getStockDatasFromCsv ---")
+        i = 0
+        stockNums = len(stock_list)
         for ticker in stock_list['Symbol']:
             try:               
                 csv_path = os.path.join('StockData', f"{ticker}.csv")
@@ -642,6 +664,9 @@ class StockDataManager:
                 
                 out_stock_datas_dic[ticker] = data
                 out_tickers.append(ticker)
+
+                i = i+1
+                print(f"{i/stockNums*100:.2f}% Done")
 
             except Exception as e:
                 print(f"An error occurred: {e}")
@@ -707,15 +732,31 @@ sd = StockDataManager()
 #stock_list = fdr.StockListing('S&P500')
 stock_list = sd.getStockListFromLocalCsv()
 
-
-
 out_tickers = []
 out_stock_datas_dic = {}
 
 if index == 1:
-    sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, 365*3)
+    try:
+        with open('temp_tickers', "rb") as f:
+            out_tickers = pickle.load(f)
 
-    # ---------------- 조건식 -----------------------------------------------------
+        with open('temp_stock_datas_dic', 'rb') as f:
+            out_stock_datas_dic = pickle.load(f)
+            
+
+    except FileNotFoundError:
+        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, 365*3)
+
+
+    # 데이터를 파일에 저장
+    with open('temp_tickers', "wb") as f:
+        pickle.dump(out_tickers, f)
+
+    # 파일에서 데이터를 불러옴
+    with open('temp_stock_datas_dic', "wb") as f:
+        pickle.dump(out_stock_datas_dic, f)
+
+    ##---------------- 조건식 -----------------------------------------------------
 
     filtered_data = pd.DataFrame(columns=['RS', 'MA150_Slope', 'Close', '150MA'])
 
@@ -729,11 +770,11 @@ if index == 1:
 
         filtered_data.loc[ticker] = [rs, ma150_slope, close, ma150]
 
-        ## 150ma 이격도 검사
-        # diff_ma_close = abs(close - ma150)
-        # diffRatio = diff_ma_close / close
-        # if diffRatio < 0.1:
-        #     filtered_data.loc[ticker] = [rs, ma150_slope, close, ma150]
+        # 150ma 이격도 검사
+        diff_ma_close = abs(close - ma150)
+        diffRatio = diff_ma_close / close
+        if diffRatio < 0.1:
+            filtered_data.loc[ticker] = [rs, ma150_slope, close, ma150]
 
     
 
@@ -749,6 +790,17 @@ if index == 1:
     quantTickers = [s.split(':')[1] for s in quantTickers]
 
     selected_tickers = list(set(selected_tickers) & set(quantTickers))
+    selected_tickers.sort()
+
+
+    # '종목명'에 '애퀴지션'이 들어가는 종목 제외
+    new_selected_tickers = []
+    for ticker in selected_tickers:
+        name = data.loc[data['종목코드'].str.contains(f":{ticker}"), '종목명'].values[0]
+        if '애퀴지션' not in name:
+            new_selected_tickers.append(ticker)
+    selected_tickers = new_selected_tickers
+
     print('filtered by quant data: \n', selected_tickers)
 
 
@@ -756,8 +808,6 @@ if index == 1:
     DrawStockDatas(out_stock_datas_dic, selected_tickers)
 
     # -----------------------------------------------------------------------------------------------------
-
-    #DrawStockDatas(out_stock_datas_dic, out_tickers)
 
 
 
