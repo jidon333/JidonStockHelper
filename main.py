@@ -7,8 +7,11 @@ import sys
 import time
 
 import FinanceDataReader as fdr
+
 import matplotlib.pyplot as plt
 from matplotlib.dates import num2date
+import matplotlib.font_manager as fm
+
 
 import numpy as np
 import pandas as pd
@@ -123,16 +126,23 @@ class Chart:
         self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)
         self.fig.canvas.mpl_connect('close_event', self.on_close)
 
+        name = self.stockData['Name'][0]
+        industry = self.stockData['Industry'][0]
+        ticker = titleName
+        font_path = 'NanumGothic.ttf'
+        fontprop = fm.FontProperties(fname=font_path, size=30)
+        titleStr = f"{ticker} ({name}) \n {industry}"
+
 
         self.ax1.cla()
-
         self.ax1.plot(self.stockData['Close'], label='Close')
         self.ax1.plot(self.stockData['150MA'], label='MA150', color='blue')
         self.ax1.plot(self.stockData['50MA'], label='MA50', color='orange')
 
         self.ax1.legend(loc='best')
         self.ax1.grid()
-        self.ax1.set_title(titleName, fontsize=30)
+        self.ax1.set_title(titleStr, fontproperties=fontprop)
+
 
         self.ax2.cla()
         self.ax2.bar(self.stockData.index,
@@ -513,17 +523,9 @@ class StockDataManager:
     def downloadStockDatasFromWeb(self, daysNum = 365 * 5):
         print("-------------------_downloadStockDatasFromWeb-----------------\n ")
 
-        while(True):
-            print('It will override all your local .csv files. \n Are you sure to execute this? (y/n)')
-            k = input()
-            if(k == 'y'):
-                break
-            elif(k == 'n'):
-                return
-            else:
-                print('input \'y\' or \'n\' to continue...')
-
-
+        inputRes = get_yes_no_input('It will override all your local .csv files. \n Are you sure to execute this? (y/n)')
+        if inputRes == False:
+            return
 
         all_list = self.getStockListFromLocalCsv()
         
@@ -718,6 +720,17 @@ def remove_outdated_tickers():
                 os.remove(file_path)
 
 
+def get_yes_no_input(qustionString):
+    while(True):
+        print(qustionString)
+        k = input()
+        if(k == 'y' or k == 'Y'):
+            return True
+        elif(k == 'n' or k == 'N'):
+            return False
+        else:
+            print('input \'y\' or \'n\' to continue...')
+
 
 print("Select the chart type. \n \
       1: Stock Data Chart \n \
@@ -729,84 +742,100 @@ print("Select the chart type. \n \
 index = int(input())
 
 sd = StockDataManager()
-#stock_list = fdr.StockListing('S&P500')
-stock_list = sd.getStockListFromLocalCsv()
-
 out_tickers = []
 out_stock_datas_dic = {}
 
 if index == 1:
-    try:
-        with open('temp_tickers', "rb") as f:
-            out_tickers = pickle.load(f)
 
-        with open('temp_stock_datas_dic', 'rb') as f:
-            out_stock_datas_dic = pickle.load(f)
+    bUseLocalCache = get_yes_no_input('Do you want to see last chart data? \n It will use cached local data and it will save loading time. \n (y/n)')
+    daysNum = 365*3
+
+    if bUseLocalCache:
+        try:
+            with open('temp_tickers', "rb") as f:
+                out_tickers = pickle.load(f)
+
+            with open('temp_stock_datas_dic', 'rb') as f:
+                out_stock_datas_dic = pickle.load(f)
             
+        except FileNotFoundError:
+            print('Can not find your last stock chart data in local.\n The chart data will be re-generated. ')
+            bUseLocalCache = False
+            stock_list = sd.getStockListFromLocalCsv()
+            sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum)
+    else:
+        stock_list = sd.getStockListFromLocalCsv()
+        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum)
 
-    except FileNotFoundError:
-        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, 365*3)
-
-
-    # 데이터를 파일에 저장
-    with open('temp_tickers', "wb") as f:
-        pickle.dump(out_tickers, f)
-
-    # 파일에서 데이터를 불러옴
-    with open('temp_stock_datas_dic', "wb") as f:
-        pickle.dump(out_stock_datas_dic, f)
 
     ##---------------- 조건식 -----------------------------------------------------
 
-    filtered_data = pd.DataFrame(columns=['RS', 'MA150_Slope', 'Close', '150MA'])
-
-    # 각 종목들의 'RS'와 'MA150_Slope' 값을 추출하여 DataFrame으로 저장합니다.
-    for ticker, stock_data in out_stock_datas_dic.items():
-        rs = stock_data['RS'].iloc[-1]
-        ma150_slope = stock_data['MA150_Slope'].iloc[-1]
-        close = stock_data['Close'].iloc[-1]
-        ma150 = stock_data['150MA'].iloc[-1]
 
 
-        filtered_data.loc[ticker] = [rs, ma150_slope, close, ma150]
+    # Collect Technical data for screening.
+    if not bUseLocalCache:
+        filtered_data = pd.DataFrame(columns=['RS', 'MA150_Slope', 'Close', '150MA'])
 
-        # 150ma 이격도 검사
-        diff_ma_close = abs(close - ma150)
-        diffRatio = diff_ma_close / close
-        if diffRatio < 0.1:
+        # 각 종목들의 'RS'와 'MA150_Slope' 값을 추출하여 DataFrame으로 저장합니다.
+        for ticker, stock_data in out_stock_datas_dic.items():
+            rs = stock_data['RS'].iloc[-1]
+            ma150_slope = stock_data['MA150_Slope'].iloc[-1]
+            close = stock_data['Close'].iloc[-1]
+            ma150 = stock_data['150MA'].iloc[-1]
+
+
             filtered_data.loc[ticker] = [rs, ma150_slope, close, ma150]
 
-    
+            # 150ma 이격도 검사
+            diff_ma_close = abs(close - ma150)
+            diffRatio = diff_ma_close / close
+            if diffRatio < 0.1:
+                filtered_data.loc[ticker] = [rs, ma150_slope, close, ma150]
 
-    # 조건에 맞게 필터링하여 선택된 종목들을 리스트로 저장합니다.
-    print(filtered_data)
-    selected_tickers = filtered_data[(filtered_data['RS'] > -2) & (filtered_data['MA150_Slope'] > 0)].index.tolist()
-    print('selected by technical data: \n', selected_tickers)
+        
+        # 공매도 리스트. RS, 150MA 약세
+        print(filtered_data)
+        selected_tickers = filtered_data[(filtered_data['RS'] < 0) & (filtered_data['MA150_Slope'] < 0)].index.tolist()
+        print('selected by technical data: \n', selected_tickers)
+
+        # RS, 150MA 강세
+        # print(filtered_data)
+        # selected_tickers = filtered_data[(filtered_data['RS'] > -2) & (filtered_data['MA150_Slope'] > 0)].index.tolist()
+        # print('selected by technical data: \n', selected_tickers)
+
+        # HTS ScreenerList와의 교집합 티커 수집
+        # data = pd.read_csv('ScreenerList.csv')
+        # quantTickers = data['종목코드'].tolist()
+        # quantTickers = [s.split(':')[1] for s in quantTickers]
+
+        # selected_tickers = list(set(selected_tickers) & set(quantTickers))
+        # selected_tickers.sort()
+
+        # '종목명'에 '애퀴지션'이 들어가는 종목 제외
+        # new_selected_tickers = []
+        # for ticker in selected_tickers:
+        #     name = data.loc[data['종목코드'].str.contains(f":{ticker}"), '종목명'].values[0]
+        #     if '애퀴지션' not in name:
+        #         new_selected_tickers.append(ticker)
+        # selected_tickers = new_selected_tickers
+
+    elif bUseLocalCache:
+        selected_tickers = out_tickers
 
 
+    if not bUseLocalCache:
+        # 데이터를 파일에 저장
+        with open('temp_tickers', "wb") as f:
+            pickle.dump(selected_tickers, f)
 
-    data = pd.read_csv('ScreenerList.csv')
-    quantTickers = data['종목코드'].tolist()
-    quantTickers = [s.split(':')[1] for s in quantTickers]
-
-    selected_tickers = list(set(selected_tickers) & set(quantTickers))
-    selected_tickers.sort()
-
-
-    # '종목명'에 '애퀴지션'이 들어가는 종목 제외
-    new_selected_tickers = []
-    for ticker in selected_tickers:
-        name = data.loc[data['종목코드'].str.contains(f":{ticker}"), '종목명'].values[0]
-        if '애퀴지션' not in name:
-            new_selected_tickers.append(ticker)
-    selected_tickers = new_selected_tickers
+        # 파일에서 데이터를 불러옴
+        with open('temp_stock_datas_dic', "wb") as f:
+            pickle.dump(out_stock_datas_dic, f)
 
     print('filtered by quant data: \n', selected_tickers)
-
-
     print('selected tickers num: ', len(selected_tickers))
     DrawStockDatas(out_stock_datas_dic, selected_tickers)
-
+    
     # -----------------------------------------------------------------------------------------------------
 
 
@@ -826,4 +855,5 @@ elif index == 6:
 
 #TODO: RS Slope
 #TODO: ATRS or RS가 양전으로 바뀐 종목 찾기?
-#TODO: 20MA와 150MA 사이가 좁은거 찾는것도 괜춘할듯??
+#TODO: 50MA와 150MA 사이가 좁은거 찾는것도 괜춘할듯??
+#TODO: 10년 20전 데이터까지 땡겨와서 관리하기??
