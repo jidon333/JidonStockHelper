@@ -253,17 +253,27 @@ class StockDataManager:
             # MRS를 주식 데이터에 추가
             new_data['RS'] = mrs
 
+            # 50MA
+            ma50 = stock_data['Close'].rolling(window=50).mean()
+            new_data['50MA'] = ma50
+
             # 150MA
             ma150 = stock_data['Close'].rolling(window=150).mean()
             new_data['150MA'] = ma150
+
+            # 200MA
+            ma200 = stock_data['Close'].rolling(window=200).mean()
+            new_data['200MA'] = ma200
 
             # 150MA Slope
             ma_diff = stock_data['150MA'].diff()
             new_data['MA150_Slope'] = ma_diff / 2
 
-            # 50MA
-            ma50 = stock_data['Close'].rolling(window=50).mean()
-            new_data['50MA'] = ma50
+            # 200MA Slope
+            ma_diff = stock_data['200MA'].diff()
+            new_data['MA200_Slope'] = ma_diff / 2
+
+
 
             # TR 계산
             high = stock_data['High']
@@ -298,15 +308,25 @@ class StockDataManager:
             trs = stock_tc - sp500_tc
             new_data['TRS'] = trs
 
-            # ATRS(Average True Relative Strength)
+            # ATRS (14 days Average True Relative Strength)
             atrs = trs.rolling(n).mean()
             new_data['ATRS'] = atrs
+
+            # ATRS150 (150 days Average True Relative Strength)
+            atrs150 = trs.rolling(150).mean()
+            new_data['ATRS150'] = atrs150
+
+            new_data = new_data.reindex(columns=['Symbol', 'Name', 'Industry',
+                                                 'Open', 'High', 'Low', 'Close', 'Adj Close',
+                                                 'Volume', 'RS', '50MA', '150MA', '200MA',
+                                                 'MA150_Slope', 'MA200_Slope', 
+                                                 'ATR', 'TC', 'ATC', 'TRS', 'ATRS', 'ATRS150',
+                                                 'IsOriginData_NaN'])
+
 
         except Exception as e:
             print(e)
             raise
-
-       
 
         return new_data
 
@@ -422,8 +442,24 @@ class StockDataManager:
                 sync_fail_ticker_list.append(ticker)
                 continue
 
-            # remove duplicate index from df2
-            webData = webData[~webData.index.isin(csvData.index)]
+            # 새로운 데이터프레임을 생성하여 webData_copy에 할당합니다.
+            webData_copy = webData.copy()
+
+            # IsOriginData_NaN 레이블을 추가하고, 기본값으로 False를 할당합니다.
+            csvData['IsOriginData_NaN'] = False
+            webData_copy['IsOriginData_NaN'] = False
+
+            # forward fill을 사용하여 NaN값을 이전 값으로 대체하면서, IsOriginData_NaN 레이블을 변경합니다.
+            webData_copy.fillna(method='ffill', inplace=True)
+            webData_copy.loc[webData['Open'].isnull(), 'IsOriginData_NaN'] = True
+
+            webData = webData_copy
+
+
+
+            # remove duplicate index from csvData.
+            csvData = csvData[~csvData.index.isin(webData.index)]
+
 
             try:
                 # concatenate the two dataframes
@@ -783,14 +819,18 @@ if index == 1:
             close = stock_data['Close'].iloc[-1]
             ma150 = stock_data['150MA'].iloc[-1]
 
-
-            filtered_data.loc[ticker] = [rs, ma150_slope, close, ma150]
-
             # 150ma 이격도 검사
+            # (x1 - x0)/x0 * 100
             diff_ma_close = abs(close - ma150)
-            diffRatio = diff_ma_close / close
+            diffRatio = diff_ma_close / ma150
+
+            # 150ma 이격도 10% 미만
             if diffRatio < 0.1:
                 filtered_data.loc[ticker] = [rs, ma150_slope, close, ma150]
+
+            # 150ma 이격도 10% 미만에 150ma 위에 있는종목
+            # if diffRatio < 0.1 and close > ma150:
+            #     filtered_data.loc[ticker] = [rs, ma150_slope, close, ma150]
 
         
         # 공매도 리스트. RS, 150MA 약세
@@ -803,7 +843,7 @@ if index == 1:
         # selected_tickers = filtered_data[(filtered_data['RS'] > -2) & (filtered_data['MA150_Slope'] > 0)].index.tolist()
         # print('selected by technical data: \n', selected_tickers)
 
-        # HTS ScreenerList와의 교집합 티커 수집
+        # # HTS ScreenerList와의 교집합 티커 수집
         # data = pd.read_csv('ScreenerList.csv')
         # quantTickers = data['종목코드'].tolist()
         # quantTickers = [s.split(':')[1] for s in quantTickers]
@@ -811,7 +851,7 @@ if index == 1:
         # selected_tickers = list(set(selected_tickers) & set(quantTickers))
         # selected_tickers.sort()
 
-        # '종목명'에 '애퀴지션'이 들어가는 종목 제외
+        # # '종목명'에 '애퀴지션'이 들어가는 종목 제외
         # new_selected_tickers = []
         # for ticker in selected_tickers:
         #     name = data.loc[data['종목코드'].str.contains(f":{ticker}"), '종목명'].values[0]
@@ -852,8 +892,8 @@ elif index == 5:
 elif index == 6:
     sd.downloadStockDatasFromWeb()
 
-
 #TODO: RS Slope
 #TODO: ATRS or RS가 양전으로 바뀐 종목 찾기?
 #TODO: 50MA와 150MA 사이가 좁은거 찾는것도 괜춘할듯??
+#TODO: 200MA도 중요한거같다. 150MA가 200MA위로 올라가면 더욱 확실한 신호.
 #TODO: 10년 20전 데이터까지 땡겨와서 관리하기??
