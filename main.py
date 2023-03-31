@@ -19,6 +19,7 @@ import pandas as pd
 import pandas_market_calendars as mcal
 
 import pickle
+import math
 
 plt.switch_backend('Qt5Agg')
 
@@ -119,7 +120,7 @@ class Chart:
             #plt.close()
             
 
-    def Show(self, titleName, ranks_atrs, ranks_atrs150):
+    def Show(self, titleName, ranks_atrs):
         # 차트 그리기
         self.text_box = None
 
@@ -152,15 +153,11 @@ class Chart:
 
 
         ############### Rank data를 그래프에 추가하기 ###############
-        ranks_atrs150_df = ranks_atrs150.to_frame()
-        ranks_atrs150_df.index = pd.to_datetime(ranks_atrs150_df.index)  # 문자열을 datetime 객체로 변경
-
-        ranks_atrs_df = ranks_atrs.to_frame()
-        ranks_atrs_df.index = pd.to_datetime(ranks_atrs_df.index)
+        ranks_atrs_exp_df = ranks_atrs.to_frame()
+        ranks_atrs_exp_df.index = pd.to_datetime(ranks_atrs_exp_df.index) # 문자열을 datetime 객체로 변경
 
         # self.stockData와 rank_df를 합치기 위해 index 기준으로 join
-        self.stockData = self.stockData.join(ranks_atrs150_df, how='left')
-        self.stockData = self.stockData.join(ranks_atrs_df, how='left')
+        self.stockData = self.stockData.join(ranks_atrs_exp_df, how='left')
 
         # NaN 값을 0으로 대체
         self.stockData.fillna(0, inplace=True)
@@ -169,10 +166,8 @@ class Chart:
         self.ax3.cla()
 
         self.ax3.set_ylim([0, 1])
-        if len(ranks_atrs150_df) != 0:
-            self.ax3.plot(self.stockData['Rank_ATRS150'], label='Rank_ATRS150', color='blue')
-        if len(ranks_atrs_df) != 0:
-            self.ax3.plot(self.stockData['Rank_ATRS'], label='Rank_ATRS', color='red', alpha=0.3)
+        if len(ranks_atrs_exp_df) != 0:
+            self.ax3.plot(self.stockData['Rank_ATRS150_Exp'], label='Rank_ATRS150_Exp', color='red', alpha=0.5)
         self.ax3.legend(loc='lower right')
         self.ax3.axhline(y=0.5, color='black', linestyle='--')
  
@@ -272,8 +267,8 @@ class StockDataManager:
 
         new_data = stock_data
 
-        # MRS 계산
         try:
+            # MRS 계산
             n = 20
             rs = (stock_data['Close'] / self.index_data['Close']) * 100
             rs_ma = rs.rolling(n).mean()
@@ -301,8 +296,6 @@ class StockDataManager:
             # 200MA Slope
             ma_diff = stock_data['200MA'].diff()
             new_data['MA200_Slope'] = ma_diff / 2
-
-
 
             # TR 계산
             high = stock_data['High']
@@ -345,11 +338,14 @@ class StockDataManager:
             atrs150 = trs.rolling(150).mean()
             new_data['ATRS150'] = atrs150
 
+            atrs150_exp = trs.ewm(span=150, adjust=False).mean()
+            new_data['ATRS150_Exp'] = atrs150_exp
+
             new_data = new_data.reindex(columns=['Symbol', 'Name', 'Industry',
                                                  'Open', 'High', 'Low', 'Close', 'Adj Close',
-                                                 'Volume', 'RS', '50MA', '150MA', '200MA',
+                                                 'Volume', 'RS','50MA', '150MA', '200MA',
                                                  'MA150_Slope', 'MA200_Slope', 
-                                                 'ATR', 'TC', 'ATC', 'TRS', 'ATRS', 'ATRS150',
+                                                 'ATR', 'TC', 'ATC', 'TRS', 'ATRS', 'ATRS150', 'ATRS150_Exp',
                                                  'IsOriginData_NaN'])
 
 
@@ -768,14 +764,10 @@ class StockDataManager:
                 print(file_path, 'is removed from local directory!')
 
  
-    def cook_Nday_ATRS(self, N=150, bATRS150 = False):
+    def cook_Nday_ATRS150_exp(self, N=150):
         all_list = self.getStockListFromLocalCsv()
 
-        propertyName = ''
-        if bATRS150:
-            propertyName = 'ATRS150'
-        else:
-            propertyName = 'ATRS'
+        propertyName = 'ATRS150_Exp'
 
         tickers = []
         stock_datas_fromCsv = {}
@@ -784,10 +776,12 @@ class StockDataManager:
         atrs_dict = {}
         for ticker in tickers:
             data = stock_datas_fromCsv[ticker]
-            atrs_list = data[propertyName].iloc[-N:].tolist() # 최근 N일 동안의 ATRS150 값만 가져오기
+            atrs_list = data[propertyName].iloc[-N:].tolist() # 최근 N일 동안의 ATRS150 값만 가져오기=
+            atrs_list = [x if not math.isnan(x) else -1 for x in atrs_list] # NaN의 경우 -1로 대체
+            while len(atrs_list) < N:
+                atrs_list.insert(0, -1) # 리스트앞에 -1을 추가하여 과거 NaN 데이터를 -1로 치환
             if pd.notna(atrs_list).all() and len(atrs_list) == N: # ATRS150 값이 모두 유효한 경우에만 추가
                 atrs_dict[ticker] = atrs_list
-
 
         date_list = [(dt.date.today() - dt.timedelta(days=i)).strftime('%Y-%m-%d') for i in range(N)]
         date_list.reverse()
@@ -801,13 +795,9 @@ class StockDataManager:
 
         return atrs_df
 
-    def cook_ATRS_Rank(self, N = 150, bATRS150 = False):
+    def cook_ATRS150_exp_Rank(self, N = 150):
 
-        propertyName = ''
-        if bATRS150:
-            propertyName = 'ATRS150'
-        else:
-            propertyName = 'ATRS'
+        propertyName = 'ATRS150_Exp'
 
         csv_path = os.path.join('StockData', f'{N}day_{propertyName}.csv')
         data = pd.read_csv(csv_path)
@@ -820,12 +810,10 @@ class StockDataManager:
         save_path = os.path.join('StockData', f'{propertyName}_Ranking.csv')
         rank_df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
 
-    def get_ATRS_Ranks(self, Symbol, bATRS150 = False):
-        propertyName = ''
-        if bATRS150:
-            propertyName = 'ATRS150'
-        else:
-            propertyName = 'ATRS'
+    def get_ATRS_Ranks(self, Symbol):
+
+        propertyName = 'ATRS150_Exp'
+
         try:
             csv_path = os.path.join('StockData', f'{propertyName}_Ranking.csv')
             rank_df = pd.read_csv(csv_path)
@@ -837,10 +825,8 @@ class StockDataManager:
             # normalize ranking [0, 1] so that value '1' is most strong ranking.
             serise_rankChanges = max_value - serise_rankChanges
             serise_rankChanges = serise_rankChanges / max_value
-            if bATRS150:
-                serise_rankChanges.name = 'Rank_ATRS150'
-            else:
-                serise_rankChanges.name = 'Rank_ATRS'
+            
+            serise_rankChanges.name = f'Rank_{propertyName}'
 
             return serise_rankChanges
         
@@ -852,9 +838,8 @@ class StockDataManager:
 def DrawStockDatas(stock_datas_dic, tickers, maxCnt = -1):
     stock_data = stock_datas_dic[tickers[0]]
     chart = Chart(stock_data)
-    ranksATRS = sd.get_ATRS_Ranks(tickers[0], False)
-    ranksATRS150 = sd.get_ATRS_Ranks(tickers[0], True)
-    chart.Show(tickers[0], ranksATRS, ranksATRS150)
+    ranksATRS = sd.get_ATRS_Ranks(tickers[0])
+    chart.Show(tickers[0], ranksATRS)
     if maxCnt > 0:
         num = maxCnt
     else:
@@ -868,9 +853,8 @@ def DrawStockDatas(stock_datas_dic, tickers, maxCnt = -1):
 
         stock_data = stock_datas_dic[ticker]
         chart.reset(stock_data)
-        ranksATRS = sd.get_ATRS_Ranks(ticker, False)
-        ranksATRS150 = sd.get_ATRS_Ranks(ticker, True)
-        chart.Show(ticker, ranksATRS, ranksATRS150)
+        ranksATRS = sd.get_ATRS_Ranks(ticker)
+        chart.Show(ticker, ranksATRS)
         index = index + chart.retVal
 
         if index < 0:
@@ -916,7 +900,8 @@ print("Select the chart type. \n \
       3: Sync local .csv datas from web \n \
       4: cook up-down datas using local csv files. \n \
       5: cook local stock data. \n \
-      6: Download stock data from web and overwrite local files. (It will takes so long...)\n")
+      6: Download stock data from web and overwrite local files. (It will takes so long...) \n \
+      7: cook ATRS Ranking \n")
 
 index = int(input())
 
@@ -998,10 +983,9 @@ if index == 1:
             if filterMatchNum == 5:
                 match_five.append(ticker)
 
-            if filterMatchNum >= 5:
+            if filterMatchNum >= 0:
                 selected_tickers.append(ticker)
-            # if filterMatchNum < 3:
-            #     selected_tickers.append(ticker)
+   
 
 
 
@@ -1021,13 +1005,7 @@ if index == 1:
         #         new_selected_tickers.append(ticker)
         # selected_tickers = new_selected_tickers
 
-
-        # myList = ['ACLS', 'ADI', 'AEHR', 'ALGM', 'ANET', 'AVGO', 'CHDN', 'CLH', 'GRBK',
-        #       'GTY', 'GWW', 'KTB', 'LSCC', 'MMSI', 'MTH', 'NEU', 'NSIT', 'NSSC', 
-        #       'NVEC', 'OLK', 'OMAB', 'SIRE', 'SMCI', 'STM', 'TMHC', 'VTRU', 'XPOF']
         
-        # selected_tickers = [ ticker for ticker in selected_tickers if ticker in myList]
-
 
     elif bUseLocalCache:
         selected_tickers = out_tickers
@@ -1042,6 +1020,17 @@ if index == 1:
         with open('temp_stock_datas_dic', "wb") as f:
             pickle.dump(out_stock_datas_dic, f)
 
+
+
+    data = pd.read_csv('auto.csv', encoding='euc-kr')
+    quantTickers = data['종목코드'].tolist()
+    #quantTickers = ['NVDA', 'TSLA', 'ADI', 'ALGM', 'CLH', 'KTB', 'LSCC', 'NEU', 'NSIT', 'NVEC', 'OLK', 'STM', 'TMHC']
+
+    selected_tickers = list(set(selected_tickers) & set(quantTickers))
+    selected_tickers.sort()
+
+
+
     print('filtered by quant data: \n', selected_tickers)
     print('selected tickers num: ', len(selected_tickers))
     DrawStockDatas(out_stock_datas_dic, selected_tickers)
@@ -1049,12 +1038,14 @@ if index == 1:
     # -----------------------------------------------------------------------------------------------------
 
 
-
 elif index == 2:
     updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*3)
     DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500)
 elif index == 3:
     sd.syncCsvFromWeb(2)
+    sd.cookUpDownDatas()
+    sd.cook_Nday_ATRS150_exp(365*2)
+    sd.cook_ATRS150_exp_Rank(365*2)
 elif index == 4:
     sd.cookUpDownDatas()
 elif index == 5:
@@ -1062,13 +1053,7 @@ elif index == 5:
 elif index == 6:
     sd.downloadStockDatasFromWeb()
 elif index == 7:
-    sd.cook_Nday_ATRS(365, False)
-    sd.cook_ATRS_Rank(365, False)
-    sd.cook_Nday_ATRS(365, True)
-    sd.cook_ATRS_Rank(365, True)
+    sd.cook_Nday_ATRS150_exp(365*2)
+    sd.cook_ATRS150_exp_Rank(365*2)
 
-#TODO: RS Slope
-#TODO: ATRS or RS가 양전으로 바뀐 종목 찾기?
-#TODO: 50MA와 150MA 사이가 좁은거 찾는것도 괜춘할듯??
-#TODO: 200MA도 중요한거같다. 150MA가 200MA위로 올라가면 더욱 확실한 신호.
-#TODO: 10년 20전 데이터까지 땡겨와서 관리하기??
+
