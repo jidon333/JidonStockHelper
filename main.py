@@ -7,6 +7,8 @@ import sys
 import time
 
 import FinanceDataReader as fdr
+import yahooquery as yq 
+
 
 import matplotlib.pyplot as plt
 from matplotlib.dates import num2date
@@ -120,7 +122,7 @@ class Chart:
             #plt.close()
             
 
-    def Show(self, titleName, ranks_atrs):
+    def Show(self, titleName, ranks_atrs, curr_rank):
         # 차트 그리기
         self.text_box = None
 
@@ -133,9 +135,10 @@ class Chart:
         ticker = titleName
         font_path = 'NanumGothic.ttf'
         fontprop = fm.FontProperties(fname=font_path, size=30)
-        titleStr = f"{ticker} ({name}) \n {industry}"
+        titleStr = f"{ticker} ({name}) \n {industry},  ATRS Rank: {int(curr_rank)}th"
 
         self.ax1.cla()
+
         self.ax1.plot(self.stockData['Close'], label='Close')
         self.ax1.plot(self.stockData['200MA'], label='MA200', color='green')
         self.ax1.plot(self.stockData['150MA'], label='MA150', color='blue')
@@ -149,8 +152,6 @@ class Chart:
         self.ax2.bar(self.stockData.index,
                      self.stockData['Volume'], alpha=0.3, color='blue', width=0.7)
         self.ax2.set_ylabel('Volume')
-
-
 
         ############### Rank data를 그래프에 추가하기 ###############
         ranks_atrs_exp_df = ranks_atrs.to_frame()
@@ -181,10 +182,10 @@ class Chart:
 
         self.ax4.cla()
         self.ax4.set_ylim([-0.5, 0.5])
-        self.ax4.plot(self.stockData['ATRS'], label='ATRS')
+        self.ax4.plot(self.stockData['ATRS_Exp'], label='ATRS_Exp')
         self.ax4.legend(loc='lower right')
-        self.ax4.fill_between(self.stockData.index, self.stockData['ATRS'], 0, where=self.stockData['ATRS'] < 0, color='red', alpha=0.3)
-        self.ax4.fill_between(self.stockData.index, self.stockData['ATRS'], 0, where=self.stockData['ATRS'] >= 0, color='green', alpha=0.3)
+        self.ax4.fill_between(self.stockData.index, self.stockData['ATRS_Exp'], 0, where=self.stockData['ATRS_Exp'] < 0, color='red', alpha=0.3)
+        self.ax4.fill_between(self.stockData.index, self.stockData['ATRS_Exp'], 0, where=self.stockData['ATRS_Exp'] >= 0, color='green', alpha=0.3)
         self.ax4.axhline(y=0, color='black', linestyle='--')
 
 
@@ -334,6 +335,9 @@ class StockDataManager:
             atrs = trs.rolling(n).mean()
             new_data['ATRS'] = atrs
 
+            atrs_exp = trs.ewm(span=14, adjust=False).mean()
+            new_data['ATRS_Exp'] = atrs_exp
+
             # ATRS150 (150 days Average True Relative Strength)
             atrs150 = trs.rolling(150).mean()
             new_data['ATRS150'] = atrs150
@@ -345,7 +349,7 @@ class StockDataManager:
                                                  'Open', 'High', 'Low', 'Close', 'Adj Close',
                                                  'Volume', 'RS','50MA', '150MA', '200MA',
                                                  'MA150_Slope', 'MA200_Slope', 
-                                                 'ATR', 'TC', 'ATC', 'TRS', 'ATRS', 'ATRS150', 'ATRS150_Exp',
+                                                 'ATR', 'TC', 'ATC', 'TRS', 'ATRS', 'ATRS_Exp', 'ATRS150', 'ATRS150_Exp',
                                                  'IsOriginData_NaN'])
 
 
@@ -581,14 +585,20 @@ class StockDataManager:
 
         return daily_changes_nyse_df, daily_changes_nasdaq_df, daily_changes_sp500_df
 
-    def downloadStockDatasFromWeb(self, daysNum = 365 * 5):
+    def downloadStockDatasFromWeb(self, daysNum = 365 * 5, bExcludeNotInLocalCsv = True):
         print("-------------------_downloadStockDatasFromWeb-----------------\n ")
 
         inputRes = get_yes_no_input('It will override all your local .csv files. \n Are you sure to execute this? (y/n)')
         if inputRes == False:
             return
+        
 
-        all_list = self.getStockListFromLocalCsv()
+        if bExcludeNotInLocalCsv == False:
+            nyse_list = fdr.StockListing('NYSE')
+            nasdaq_list = fdr.StockListing('NASDAQ')
+            all_list = pd.concat([nyse_list, nasdaq_list])
+        else:
+            all_list = self.getStockListFromLocalCsv()
         
         sync_data_dic = {}
 
@@ -773,6 +783,9 @@ class StockDataManager:
         stock_datas_fromCsv = {}
         self.getStockDatasFromCsv(all_list, tickers, stock_datas_fromCsv)
 
+        date_list = None  # 변수 초기화
+
+
         atrs_dict = {}
         for ticker in tickers:
             data = stock_datas_fromCsv[ticker]
@@ -782,9 +795,10 @@ class StockDataManager:
                 atrs_list.insert(0, -1) # 리스트앞에 -1을 추가하여 과거 NaN 데이터를 -1로 치환
             if pd.notna(atrs_list).all() and len(atrs_list) == N: # ATRS150 값이 모두 유효한 경우에만 추가
                 atrs_dict[ticker] = atrs_list
+                if date_list is None:  # 처음으로 유효한 atrs_list를 발견하면 날짜 정보를 가져옴
+                    date_list = data.index[-N:].strftime('%Y-%m-%d').tolist()
 
-        date_list = [(dt.date.today() - dt.timedelta(days=i)).strftime('%Y-%m-%d') for i in range(N)]
-        date_list.reverse()
+        
         atrs_df = pd.DataFrame.from_dict(atrs_dict)
         atrs_df['Date'] = date_list
         atrs_df = atrs_df.set_index('Date')
@@ -810,7 +824,7 @@ class StockDataManager:
         save_path = os.path.join('StockData', f'{propertyName}_Ranking.csv')
         rank_df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
 
-    def get_ATRS_Ranks(self, Symbol):
+    def get_ATRS_Ranks_Normalized(self, Symbol):
 
         propertyName = 'ATRS150_Exp'
 
@@ -833,13 +847,45 @@ class StockDataManager:
         except Exception as e:
             return pd.Series()
         
+    def get_ATRS_Ranks(self, Symbol):
+
+        propertyName = 'ATRS150_Exp'
+
+        try:
+            csv_path = os.path.join('StockData', f'{propertyName}_Ranking.csv')
+            rank_df = pd.read_csv(csv_path)
+            rank_df = rank_df.set_index('Symbol')
+            serise_rankChanges = rank_df.loc[Symbol]
+            
+            serise_rankChanges.name = f'Rank_{propertyName}'
+
+            return serise_rankChanges
+        
+        except Exception as e:
+            return pd.Series()
+        
+
+    def get_ATRS_Ranking_df(self):
+
+        propertyName = 'ATRS150_Exp'
+
+        try:
+            csv_path = os.path.join('StockData', f'{propertyName}_Ranking.csv')
+            rank_df = pd.read_csv(csv_path)
+            rank_df = rank_df.set_index('Symbol')
+            return rank_df
+        
+        except Exception as e:
+            return pd.DataFrame()
+        
 
 
 def DrawStockDatas(stock_datas_dic, tickers, maxCnt = -1):
     stock_data = stock_datas_dic[tickers[0]]
     chart = Chart(stock_data)
-    ranksATRS = sd.get_ATRS_Ranks(tickers[0])
-    chart.Show(tickers[0], ranksATRS)
+    ranksATRS = sd.get_ATRS_Ranks_Normalized(tickers[0])
+    currRank = sd.get_ATRS_Ranks(tickers[0]).iloc[-1]
+    chart.Show(tickers[0], ranksATRS, currRank)
     if maxCnt > 0:
         num = maxCnt
     else:
@@ -853,8 +899,10 @@ def DrawStockDatas(stock_datas_dic, tickers, maxCnt = -1):
 
         stock_data = stock_datas_dic[ticker]
         chart.reset(stock_data)
-        ranksATRS = sd.get_ATRS_Ranks(ticker)
-        chart.Show(ticker, ranksATRS)
+        ranksATRS = sd.get_ATRS_Ranks_Normalized(ticker)
+        currRank = sd.get_ATRS_Ranks(ticker).iloc[-1]
+
+        chart.Show(ticker, ranksATRS, currRank)
         index = index + chart.retVal
 
         if index < 0:
@@ -871,7 +919,7 @@ def DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500):
     chart.draw_updown_chart()
 
 def remove_outdated_tickers():
-    with open("exception.json", "r") as outfile:
+    with open("DataReader_exception.json", "r") as outfile:
         data = json.load(outfile)
         keys = data.keys()
 
@@ -879,6 +927,7 @@ def remove_outdated_tickers():
             file_path = os.path.join(data_folder, key + '.csv')
             if os.path.exists(file_path):
                 os.remove(file_path)
+                print(file_path, 'is removed!')
 
 
 
@@ -945,6 +994,8 @@ if index == 1:
         match_four = []
         match_five = []
 
+        atrs_ranking_df = sd.get_ATRS_Ranking_df()
+
         # 각 종목들의 'RS'와 'MA150_Slope' 값을 추출하여 DataFrame으로 저장합니다.
         for ticker, stock_data in out_stock_datas_dic.items():
             rs = stock_data['RS'].iloc[-1]
@@ -955,12 +1006,23 @@ if index == 1:
             ma200 = stock_data['200MA'].iloc[-1]
             ma50 = stock_data['50MA'].iloc[-1]
 
+            
 
             bIsUpperMA = close > ma150 and close > ma200 and close > ma50
             b_150ma_upper_than_200ma = ma150 > ma200
             bMA_Slope_Plus = ma150_slope > 0 and ma200_slope > 0
             b_50ma_biggerThan_150ma_200ma = ma50 > ma150 and ma50 > ma200
             bIsRSGood = rs > 0
+
+            bIsATRS_Ranking_Good = False
+            try:
+                atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
+                bIsATRS_Ranking_Good = atrsRank < 300
+            except Exception as e:
+                print(e)
+                bIsATRS_Ranking_Good = False
+
+            
 
             filterMatchNum = 0
 
@@ -972,23 +1034,14 @@ if index == 1:
                 filterMatchNum = filterMatchNum + 1
             if b_50ma_biggerThan_150ma_200ma:
                 filterMatchNum = filterMatchNum + 1
-            if bIsRSGood:
+            # if bIsRSGood:
+            #     filterMatchNum = filterMatchNum + 1
+            if bIsATRS_Ranking_Good:
                 filterMatchNum = filterMatchNum + 1
 
-
-            if filterMatchNum == 3:
-                match_three.append(ticker)
-            if filterMatchNum == 4:
-                match_four.append(ticker)
-            if filterMatchNum == 5:
-                match_five.append(ticker)
-
-            if filterMatchNum >= 0:
+            if filterMatchNum >= 5:
                 selected_tickers.append(ticker)
    
-
-
-
         # # HTS ScreenerList와의 교집합 티커 수집
         # data = pd.read_csv('ScreenerList.csv')
         # quantTickers = data['종목코드'].tolist()
@@ -1022,19 +1075,21 @@ if index == 1:
 
 
 
-    data = pd.read_csv('auto.csv', encoding='euc-kr')
-    quantTickers = data['종목코드'].tolist()
-    #quantTickers = ['NVDA', 'TSLA', 'ADI', 'ALGM', 'CLH', 'KTB', 'LSCC', 'NEU', 'NSIT', 'NVEC', 'OLK', 'STM', 'TMHC']
+    #data = pd.read_csv('auto.csv', encoding='euc-kr')
+    #quantTickers = data['종목코드'].tolist()
+    # quantTickers = ['ETNB', 'SCPH', 'DSGX', 'RDNT', 'RRGB', 'REGN', 'RETA', 'VERX', 'BRBR', 'VMD', 'CBAY', 'RCEL', 'IAG', 'ARCT', 'ASRT', 'ASUR', 'OCUP', 'OSPN', 'UNCY', 
+    #      'NSIT', 'INTA', 'CDNS', 'CRVL', 'CPRT', 'FIVE', 'RACE', 'HROW']
+    # quantTickers = ['RRGB', 'FIVE']
 
-    selected_tickers = list(set(selected_tickers) & set(quantTickers))
+
+    # selected_tickers = list(set(selected_tickers) & set(quantTickers))
     selected_tickers.sort()
 
-
+   
 
     print('filtered by quant data: \n', selected_tickers)
     print('selected tickers num: ', len(selected_tickers))
     DrawStockDatas(out_stock_datas_dic, selected_tickers)
-    
     # -----------------------------------------------------------------------------------------------------
 
 
@@ -1051,9 +1106,15 @@ elif index == 4:
 elif index == 5:
     sd.cookLocalStockData()
 elif index == 6:
-    sd.downloadStockDatasFromWeb()
+    sd.downloadStockDatasFromWeb(365*6, False)
 elif index == 7:
     sd.cook_Nday_ATRS150_exp(365*2)
     sd.cook_ATRS150_exp_Rank(365*2)
+elif index == 8:
+    remove_outdated_tickers()
+
+ 
+
+
 
 
