@@ -7,7 +7,9 @@ import sys
 import time
 
 import FinanceDataReader as fdr
+
 import yahooquery as yq 
+from yahooquery import Ticker
 
 
 import matplotlib.pyplot as plt
@@ -22,6 +24,10 @@ import pandas_market_calendars as mcal
 
 import pickle
 import math
+
+import requests
+from bs4 import BeautifulSoup
+import re
 
 plt.switch_backend('Qt5Agg')
 
@@ -53,26 +59,39 @@ class Chart:
         self.stockData = stockData
         self.retVal = 0
         self.annotateObj = None
-        self.text_box = None
+        self.text_box_coordinate = None
+        self.text_box_info = None
 
         self.updown_nyse = updown_nyse
         self.updown_nasdaq = updown_nasdaq
         self.updown_sp500 = updown_sp500
 
+        csv_path = os.path.join(data_folder, "Stock_GICS.csv")
+        self.stock_GICS_df = pd.read_csv(csv_path)
+        self.stock_GICS_df = self.stock_GICS_df.set_index('Symbol')
+
         if stockData is not None:
             self.fig, (self.ax1, self.ax2, self.ax3, self.ax4) = plt.subplots(
             4, 1, gridspec_kw={'height_ratios': [3, 1, 1, 1]}, figsize=(20, 10))
+            #self.fig.subplots_adjust(left=0.2, right=0.8)
+
         else:
             self.fig, (self.ax1) = plt.subplots(figsize=(20, 10))
 
 
         plt.ion()
 
+
+    def get_sector(self, ticker):
+        return self.stock_GICS_df.loc[ticker]['sector']
+    def get_industry(self, ticker):
+        return self.stock_GICS_df.loc[ticker]['industry']
+
     def reset(self, stockData):
         self.stockData = stockData
         self.retVal = 0
         self.annotateObj = None
-        self.text_box = None
+        self.text_box_coordinate = None
 
 
     def on_close(self, event):
@@ -91,13 +110,13 @@ class Chart:
         if drawAxis is None:
             return
 
-        if self.text_box is None:
-            self.text_box = drawAxis.text(0.5, 0.95,
+        if self.text_box_coordinate is None:
+            self.text_box_coordinate = drawAxis.text(0.5, 0.95,
                                         f'x = {num2date(x).strftime("%Y-%m-%d")}, y = {y:.2f}',
                                         transform=drawAxis.transAxes,
                                         ha='center', va='top')
         else:
-            self.text_box.set_text(
+            self.text_box_coordinate.set_text(
                 f'x = {num2date(x).strftime("%Y-%m-%d")}, y = {y:.2f}')
 
         self.fig.canvas.draw()
@@ -124,27 +143,45 @@ class Chart:
 
     def Show(self, titleName, ranks_atrs, curr_rank):
         # 차트 그리기
-        self.text_box = None
 
         self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
         self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)
         self.fig.canvas.mpl_connect('close_event', self.on_close)
 
         name = self.stockData['Name'][0]
-        industry = self.stockData['Industry'][0]
         ticker = titleName
         font_path = 'NanumGothic.ttf'
         fontprop = fm.FontProperties(fname=font_path, size=30)
-        titleStr = f"{ticker} ({name}) \n {industry},  ATRS Rank: {int(curr_rank)}th"
-
+        industryKor = self.stockData['Industry'][0]
+        sectorText = self.get_sector(ticker)
+        industryText =  self.get_industry(ticker)
+        titleStr = f"{ticker} ({name}) \n {industryKor},  ATRS Rank: {int(curr_rank)}th"
+        trs = self.stockData['TRS'].iloc[-1]
+        tc = self.stockData['TC'].iloc[-1]
+        
         self.ax1.cla()
 
+
+        # 좌측 info text box 설정
+        if self.text_box_info != None:
+            self.text_box_info.remove()
+
+        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+        self.text_box_info = self.fig.text(0.02, 0.99,
+                                    f"{ticker}\nSector: {sectorText}\nIndustry: {industryText}\nTRS: {trs}\nTC: {tc}",
+                                    transform=self.fig.transFigure, fontsize=14,
+                                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
+                                    verticalalignment='top', horizontalalignment='left')
+
+
+
+        # 그래프 설정
         self.ax1.plot(self.stockData['Close'], label='Close')
         self.ax1.plot(self.stockData['200MA'], label='MA200', color='green')
         self.ax1.plot(self.stockData['150MA'], label='MA150', color='blue')
         self.ax1.plot(self.stockData['50MA'], label='MA50', color='orange')
 
-        self.ax1.legend(loc='best')
+        self.ax1.legend(loc='lower left')
         self.ax1.grid()
         self.ax1.set_title(titleStr, fontproperties=fontprop)
 
@@ -172,14 +209,6 @@ class Chart:
         self.ax3.legend(loc='lower right')
         self.ax3.axhline(y=0.5, color='black', linestyle='--')
  
-
-        # self.ax3.cla()
-        # self.ax3.plot(self.stockData['RS'], label='RS')
-        # self.ax3.legend(loc='lower right')
-        # self.ax3.fill_between(self.stockData.index, self.stockData['RS'], 0, where=self.stockData['RS'] < 0, color='red', alpha=0.3)
-        # self.ax3.fill_between(self.stockData.index, self.stockData['RS'], 0, where=self.stockData['RS'] >= 0, color='green', alpha=0.3)
-        # self.ax3.axhline(y=0, color='black', linestyle='--')
-
         self.ax4.cla()
         self.ax4.set_ylim([-0.5, 0.5])
         self.ax4.plot(self.stockData['ATRS_Exp'], label='ATRS_Exp')
@@ -310,6 +339,8 @@ class StockDataManager:
             tr = np.maximum(d1, d2)
             tr = np.maximum(tr, d3)
 
+            new_data['TR'] = tr
+
             # ATR 계산
             n = 14
             atr = tr.rolling(n).mean()
@@ -349,8 +380,11 @@ class StockDataManager:
                                                  'Open', 'High', 'Low', 'Close', 'Adj Close',
                                                  'Volume', 'RS','50MA', '150MA', '200MA',
                                                  'MA150_Slope', 'MA200_Slope', 
-                                                 'ATR', 'TC', 'ATC', 'TRS', 'ATRS', 'ATRS_Exp', 'ATRS150', 'ATRS150_Exp',
+                                                 'TR', 'ATR', 'TC', 'ATC', 'TRS', 'ATRS', 'ATRS_Exp', 'ATRS150', 'ATRS150_Exp',
                                                  'IsOriginData_NaN'])
+            
+
+            new_data = new_data.round(5)
 
 
         except Exception as e:
@@ -435,12 +469,22 @@ class StockDataManager:
                 print(f"An error occurred: {e}")
 
     def getStockListFromLocalCsv(self):
-        nyse_list = fdr.StockListing('NYSE')
-        nasdaq_list = fdr.StockListing('NASDAQ')
-        all_list = pd.concat([nyse_list, nasdaq_list])
+        try:
+            with open('cache_StockListFromLocalCsv', "rb") as f:
+                all_list = pickle.load(f)
+                return all_list
 
-        # all_list에서 Symbol이 csv_names에 있는 경우만 추려냄
-        all_list = all_list[all_list['Symbol'].isin(self.csv_names)]
+        except FileNotFoundError:
+            nyse_list = fdr.StockListing('NYSE')
+            nasdaq_list = fdr.StockListing('NASDAQ')
+            all_list = pd.concat([nyse_list, nasdaq_list])
+
+            # all_list에서 Symbol이 csv_names에 있는 경우만 추려냄
+            all_list = all_list[all_list['Symbol'].isin(self.csv_names)]
+
+            # 결과 로컬에 캐싱.(가끔 전체 주식 리스트 업데이트할때 캐시 지울 필요가 있따.)
+            with open('cache_StockListFromLocalCsv', "wb") as f:
+                pickle.dump(all_list, f)
 
         return all_list
 
@@ -716,7 +760,25 @@ class StockDataManager:
 
         return updown_nyse, updown_nasdaq, updown_sp500
 
-    def getStockDatasFromCsv(self, stock_list, out_tickers, out_stock_datas_dic, daysNum = 365*5):
+    def getStockDatasFromCsv(self, stock_list, out_tickers : list[str], out_stock_datas_dic : dict[str, pd.DataFrame], daysNum = 365*5, bUseCacheData = False):
+
+        if bUseCacheData:
+            try:
+                with open('cache_getStockDatasFromCsv_out_tickers', "rb") as f:
+                    cache_data = pickle.load(f)
+                    out_tickers.extend(cache_data)
+
+                    
+                with open('cache_getStockDatasFromCsv_out_stock_datas_dic', "rb") as f:
+                    cache_data = pickle.load(f)
+                    out_stock_datas_dic.update(cache_data)
+
+                return
+
+            except FileNotFoundError as e:
+                print('Fail to get local cache data in getStockDatasFromCsv(). Normal loading process will be excuted \n', e)
+
+
         print("--- getStockDatasFromCsv ---")
         i = 0
         stockNums = len(stock_list)
@@ -745,6 +807,13 @@ class StockDataManager:
                 print(f"An error occurred: {e}")
                 name = stock_list.loc[stock_list['Symbol'] == ticker, 'Name'].values[0]
                 exception_ticker_list[ticker] = name
+
+
+        # cache the result
+        with open('cache_getStockDatasFromCsv_out_tickers', "wb") as f:
+            pickle.dump(out_tickers, f)
+        with open('cache_getStockDatasFromCsv_out_stock_datas_dic', "wb") as f:
+            pickle.dump(out_stock_datas_dic, f)
 
     def remove_acquisition_tickers(self):
         all_list = self.getStockListFromLocalCsv()
@@ -809,7 +878,7 @@ class StockDataManager:
 
         return atrs_df
 
-    def cook_ATRS150_exp_Rank(self, N = 150):
+    def cook_ATRS150_exp_Ranks(self, N = 150):
 
         propertyName = 'ATRS150_Exp'
 
@@ -824,7 +893,7 @@ class StockDataManager:
         save_path = os.path.join('StockData', f'{propertyName}_Ranking.csv')
         rank_df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
 
-    def get_ATRS_Ranks_Normalized(self, Symbol):
+    def get_ATRS150_exp_Ranks_Normalized(self, Symbol):
 
         propertyName = 'ATRS150_Exp'
 
@@ -847,7 +916,7 @@ class StockDataManager:
         except Exception as e:
             return pd.Series()
         
-    def get_ATRS_Ranks(self, Symbol):
+    def get_ATRS150_exp_Ranks(self, Symbol):
 
         propertyName = 'ATRS150_Exp'
 
@@ -878,13 +947,204 @@ class StockDataManager:
         except Exception as e:
             return pd.DataFrame()
         
+    def cook_Stock_GICS_df(self):
+        all_list = self.getStockListFromLocalCsv()
+        symbols = all_list['Symbol'].tolist()
+        df_list = []
+        requestQueue = []
+        symbolsNum = len(symbols)
+        errorTickers = []
+        for i in range(0, symbolsNum):
+            requestQueue.append(symbols[i])
+            if len(requestQueue) >= 10:
+                try:
+                    tickers = Ticker(requestQueue)
+                    profiles = tickers.get_modules("summaryProfile")
+                    df = pd.DataFrame.from_dict(profiles).T
+                    sector =  df['sector']
+                    industry = df['industry']
+                    df = pd.concat([sector, industry], axis=1)
+                    df.index.name = 'Symbol'
+                    df_list.append(df)
+                    requestQueue.clear()
+                    print(f"{i/symbolsNum*100:.2f}% Done")
+                except Exception as e:
+                    print(e)
+                    print(requestQueue)
+                    errorTickers.extend(requestQueue)
+                    
 
+
+        if len(requestQueue) > 0:
+            try:
+                tickers = Ticker(requestQueue)
+                profiles = tickers.get_modules("summaryProfile")
+                df = pd.DataFrame.from_dict(profiles).T
+                sector =  df['sector']
+                industry = df['industry']
+                df = pd.concat([sector, industry], axis=1)
+                df.index.name = 'Symbol'
+                df_list.append(df)
+                requestQueue.clear()
+            except Exception as e:
+                print(e)
+                print(requestQueue)
+                errorTickers.extend(requestQueue)
+
+        print("Complete!")      
+        result_df = pd.concat(df_list)
+        result_df.index.name = 'Symbol'
+        result_df.to_csv(os.path.join(data_folder, 'Stock_GICS.csv'), encoding='utf-8-sig')
+
+        print('Error Tickers: ', errorTickers)
+
+
+        return result_df
+
+    
+    # method: industry or sector
+    # N_day_before: rank will be calculated at the [:, -N_day_before].
+    def get_industry_atrs150_ranks_mean(self, ATRS_Ranks_df, stock_GICS_df, N_day_before = 1, method : str = 'industry'):
+        category = method
+
+        tickers_by_category = stock_GICS_df.groupby(category)['Symbol'].apply(list).to_dict()
+
+        # ex) -1, -5, -20, -60, -120, -240 (오늘, 일주전, 한달전, 3개월전, 6개월전, 1년전)
+        last_ranks = ATRS_Ranks_df.iloc[:, -N_day_before]
+        sectorTotalScoreMap = {}
+        for category, tickers in tickers_by_category.items():
+            scores = []
+            # collect each sector's scores and dump lower 50%
+            for ticker in tickers:          
+                score = last_ranks.get(ticker) 
+                if score is not None:
+                    scores.append(score)
+            scores = sorted(scores)
+            half_index = len(scores) // 2 # to dump half of scores
+            half_dump_sector_scores = scores[:half_index] # dump half of scores. use 0 to halt_index (bigger numbers, bad ranks)
+            length = len(half_dump_sector_scores)
+            if length != 0:
+                sectorTotalScoreMap[category] = sum(half_dump_sector_scores) / length
+
+        # sort sector scores. the lower, the better
+        sorted_sector_scores = dict(sorted(sectorTotalScoreMap.items(), key=lambda x: x[1]))
+        return sorted_sector_scores  
+
+    # cook industry ranks according to the ATRS150_Exp ranks.
+    def cook_industry_ATRS150_rank_histroy(self):
+        ATRS_Ranks_df = sd.get_ATRS_Ranking_df()
+        csv_path = os.path.join(data_folder, "Stock_GICS.csv")
+        stock_GICS_df = pd.read_csv(csv_path)
+
+        d1 = self.get_industry_atrs150_ranks_mean(ATRS_Ranks_df, stock_GICS_df, 1)
+        d5 = self.get_industry_atrs150_ranks_mean(ATRS_Ranks_df, stock_GICS_df, 5)
+        d20 = self.get_industry_atrs150_ranks_mean(ATRS_Ranks_df, stock_GICS_df, 20)
+        d60 = self.get_industry_atrs150_ranks_mean(ATRS_Ranks_df, stock_GICS_df, 60)
+        d120 = self.get_industry_atrs150_ranks_mean(ATRS_Ranks_df, stock_GICS_df, 120)
+        d240 = self.get_industry_atrs150_ranks_mean(ATRS_Ranks_df, stock_GICS_df, 240)
+
+        industryNames = list(d1.keys())
+        industry_rank_history_dic = {}
+
+        # generate industryName-list dictionary.
+        for name in industryNames:
+            industry_rank_history_dic[name] = []
+
+        for key, value in d1.items():
+            industry_rank_history_dic[key].append(value)
+        for key, value in d5.items():
+            industry_rank_history_dic[key].append(value)
+        for key, value in d20.items():
+            industry_rank_history_dic[key].append(value)
+        for key, value in d60.items():
+            industry_rank_history_dic[key].append(value)
+        for key, value in d120.items():
+            industry_rank_history_dic[key].append(value)
+        for key, value in d240.items():
+            industry_rank_history_dic[key].append(value)
+
+        rank_history_df = pd.DataFrame.from_dict(industry_rank_history_dic).transpose()
+        rank_history_df.columns = ['1d ago', '1w ago', '1m ago', '3m ago', '6m ago', '1y ago']
+        rank_history_df = rank_history_df.rank(axis=0, ascending=True, method='dense')
+
+        save_path = os.path.join('StockData', "industry_rank_history.csv")
+        rank_history_df.to_csv(save_path, encoding='utf-8-sig')
+        print('industry_rank_history.csv cooked!')
+
+
+    def get_industry_atrs14_mean(self, stock_data_dic, stock_GICS_df, N_day_before = 1, method : str = 'industry'):
+            category = method
+
+            tickers_by_category = stock_GICS_df.groupby(category)['Symbol'].apply(list).to_dict()
+
+            # ex) -1, -5, -20, -60, -120, -240 (오늘, 일주전, 한달전, 3개월전, 6개월전, 1년전)    
+            sectorTotalScoreMap = {}
+            for category, tickers in tickers_by_category.items():
+                scores = []
+                # collect each sector's atrs and dump lower 50%
+                for ticker in tickers:     
+                    df = stock_data_dic.get(ticker)           
+                    if df is not None:
+                        scores.append(df['ATRS_Exp'].iloc[-N_day_before])
+                # ascending order sort
+                scores = sorted(scores)
+                half_index = len(scores) // 2 # to dump half of scores get the index of middle
+                half_dump_sector_scores = scores[half_index:] #  dump half of scores. Use from half_index to last (lower numbers)
+                length = len(half_dump_sector_scores)
+                if length != 0:
+                    sectorTotalScoreMap[category] = sum(half_dump_sector_scores) / length
+
+            # sort sector scores. The bigger atrs14, the better 
+            sorted_sector_scores = dict(sorted(sectorTotalScoreMap.items(), key=lambda x: x[1], reverse=True))
+            return sorted_sector_scores
+
+    # cook industry ranks according to the atrs14_exp.
+    def cook_industry_ATRS_rank_short_term(self):
+        all_list = sd.getStockListFromLocalCsv()
+        out_tickers = [] 
+        out_stock_data_dic = {}
+        sd.getStockDatasFromCsv(all_list, out_tickers, out_stock_data_dic, 365, True)
+
+        csv_path = os.path.join(data_folder, "Stock_GICS.csv")
+        stock_GICS_df = pd.read_csv(csv_path)
+
+        d1 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 1, 'industry')
+        d2 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 2, 'industry')
+        d3 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 3, 'industry')
+        d4 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 4, 'industry')
+        d5 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 5, 'industry')
+
+        industryNames = list(d1.keys())
+        industry_atrs14_rank_history_dic = {}
+
+        # generate industryName-list dictionary.
+        for name in industryNames:
+            industry_atrs14_rank_history_dic[name] = []
+
+        for key, value in d1.items():
+            industry_atrs14_rank_history_dic[key].append(value)
+        for key, value in d2.items():
+            industry_atrs14_rank_history_dic[key].append(value)
+        for key, value in d3.items():
+            industry_atrs14_rank_history_dic[key].append(value)
+        for key, value in d4.items():
+            industry_atrs14_rank_history_dic[key].append(value)
+        for key, value in d5.items():
+            industry_atrs14_rank_history_dic[key].append(value)
+
+        rank_history_df = pd.DataFrame.from_dict(industry_atrs14_rank_history_dic).transpose()
+        rank_history_df.columns = ['1d ago', '2d ago', '3d ago', '4d ago', '5d ago']
+        rank_history_df = rank_history_df.rank(axis=0, ascending=False, method='dense')
+
+        save_path = os.path.join('StockData', "industry_atrs14_rank_history.csv")
+        rank_history_df.to_csv(save_path, encoding='utf-8-sig')
+        print('industry_atrs14_rank_history.csv cooked!')
 
 def DrawStockDatas(stock_datas_dic, tickers, maxCnt = -1):
     stock_data = stock_datas_dic[tickers[0]]
     chart = Chart(stock_data)
-    ranksATRS = sd.get_ATRS_Ranks_Normalized(tickers[0])
-    currRank = sd.get_ATRS_Ranks(tickers[0]).iloc[-1]
+    ranksATRS = sd.get_ATRS150_exp_Ranks_Normalized(tickers[0])
+    currRank = sd.get_ATRS150_exp_Ranks(tickers[0]).iloc[-1]
     chart.Show(tickers[0], ranksATRS, currRank)
     if maxCnt > 0:
         num = maxCnt
@@ -899,8 +1159,8 @@ def DrawStockDatas(stock_datas_dic, tickers, maxCnt = -1):
 
         stock_data = stock_datas_dic[ticker]
         chart.reset(stock_data)
-        ranksATRS = sd.get_ATRS_Ranks_Normalized(ticker)
-        currRank = sd.get_ATRS_Ranks(ticker).iloc[-1]
+        ranksATRS = sd.get_ATRS150_exp_Ranks_Normalized(ticker)
+        currRank = sd.get_ATRS150_exp_Ranks(ticker).iloc[-1]
 
         chart.Show(ticker, ranksATRS, currRank)
         index = index + chart.retVal
@@ -950,7 +1210,8 @@ print("Select the chart type. \n \
       4: cook up-down datas using local csv files. \n \
       5: cook local stock data. \n \
       6: Download stock data from web and overwrite local files. (It will takes so long...) \n \
-      7: cook ATRS Ranking \n")
+      7: cook ATRS Ranking \n \
+      8: cook industry Ranking \n")
 
 index = int(input())
 
@@ -965,10 +1226,10 @@ if index == 1:
 
     if bUseLocalCache:
         try:
-            with open('temp_tickers', "rb") as f:
+            with open('cache_tickers', "rb") as f:
                 out_tickers = pickle.load(f)
 
-            with open('temp_stock_datas_dic', 'rb') as f:
+            with open('cache_stock_datas_dic', 'rb') as f:
                 out_stock_datas_dic = pickle.load(f)
             
         except FileNotFoundError:
@@ -987,7 +1248,7 @@ if index == 1:
 
     # Collect Technical data for screening.
     if not bUseLocalCache:
-        filtered_data = pd.DataFrame(columns=['RS', 'MA150_Slope','MA200_Slope', 'Close', '150MA', '200MA', '50MA'])
+        filtered_data = pd.DataFrame(columns=['RS', 'TR', 'ATR', 'MA150_Slope','MA200_Slope', 'Close', '150MA', '200MA', '50MA', 'Volume'])
 
         selected_tickers = []
         match_three= []
@@ -1005,8 +1266,10 @@ if index == 1:
             ma150 = stock_data['150MA'].iloc[-1]
             ma200 = stock_data['200MA'].iloc[-1]
             ma50 = stock_data['50MA'].iloc[-1]
-
-            
+            tr = stock_data['TR'].iloc[-1]
+            atr = stock_data['ATR'].iloc[-1]
+            volume_ma50 = stock_data['Volume'].rolling(window=50).mean().iloc[-1]
+            bIsVolumeEnough = (volume_ma50 >= 100000 and close >= 10) or volume_ma50*close > 10000000
 
             bIsUpperMA = close > ma150 and close > ma200 and close > ma50
             b_150ma_upper_than_200ma = ma150 > ma200
@@ -1014,15 +1277,16 @@ if index == 1:
             b_50ma_biggerThan_150ma_200ma = ma50 > ma150 and ma50 > ma200
             bIsRSGood = rs > 0
 
+            # Do not always use this filter to catch other opportunity
+            bIsVolatilityLow = tr < atr
+
             bIsATRS_Ranking_Good = False
             try:
                 atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
-                bIsATRS_Ranking_Good = atrsRank < 300
+                bIsATRS_Ranking_Good = atrsRank < 600
             except Exception as e:
                 print(e)
                 bIsATRS_Ranking_Good = False
-
-            
 
             filterMatchNum = 0
 
@@ -1034,12 +1298,13 @@ if index == 1:
                 filterMatchNum = filterMatchNum + 1
             if b_50ma_biggerThan_150ma_200ma:
                 filterMatchNum = filterMatchNum + 1
-            # if bIsRSGood:
-            #     filterMatchNum = filterMatchNum + 1
             if bIsATRS_Ranking_Good:
                 filterMatchNum = filterMatchNum + 1
 
-            if filterMatchNum >= 5:
+            # 변동성 조건이 없는 편이 시장 추세를 파악하기 좋다. 어떤 섹터에 돌파가 나오고, 어떤 섹터에 과도한 하락이 있는지 파악할 수 있기 때문
+            #if filterMatchNum >= 5 and bIsVolumeEnough and bIsVolatilityLow:
+ 
+            if filterMatchNum >= 5 and bIsVolumeEnough:
                 selected_tickers.append(ticker)
    
         # # HTS ScreenerList와의 교집합 티커 수집
@@ -1066,26 +1331,23 @@ if index == 1:
 
     if not bUseLocalCache:
         # 데이터를 파일에 저장
-        with open('temp_tickers', "wb") as f:
+        with open('cache_tickers', "wb") as f:
             pickle.dump(selected_tickers, f)
 
         # 파일에서 데이터를 불러옴
-        with open('temp_stock_datas_dic', "wb") as f:
+        with open('cache_stock_datas_dic', "wb") as f:
             pickle.dump(out_stock_datas_dic, f)
 
 
 
     #data = pd.read_csv('auto.csv', encoding='euc-kr')
     #quantTickers = data['종목코드'].tolist()
-    # quantTickers = ['ETNB', 'SCPH', 'DSGX', 'RDNT', 'RRGB', 'REGN', 'RETA', 'VERX', 'BRBR', 'VMD', 'CBAY', 'RCEL', 'IAG', 'ARCT', 'ASRT', 'ASUR', 'OCUP', 'OSPN', 'UNCY', 
-    #      'NSIT', 'INTA', 'CDNS', 'CRVL', 'CPRT', 'FIVE', 'RACE', 'HROW']
-    # quantTickers = ['RRGB', 'FIVE']
+    #quantTickers = ['ACVA','COCO','WYNN','PLYA','NVDA','TXRH','TWNK','META','PBPB','WING','CBAY','ANET','MSGS','QSR']
 
-
-    # selected_tickers = list(set(selected_tickers) & set(quantTickers))
+    #quantTickers = ['ETNB']
+    #selected_tickers = list(set(selected_tickers) & set(quantTickers))
     selected_tickers.sort()
 
-   
 
     print('filtered by quant data: \n', selected_tickers)
     print('selected tickers num: ', len(selected_tickers))
@@ -1097,10 +1359,10 @@ elif index == 2:
     updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*3)
     DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500)
 elif index == 3:
-    sd.syncCsvFromWeb(2)
+    sd.syncCsvFromWeb(3)
     sd.cookUpDownDatas()
     sd.cook_Nday_ATRS150_exp(365*2)
-    sd.cook_ATRS150_exp_Rank(365*2)
+    sd.cook_ATRS150_exp_Ranks(365*2)
 elif index == 4:
     sd.cookUpDownDatas()
 elif index == 5:
@@ -1109,12 +1371,13 @@ elif index == 6:
     sd.downloadStockDatasFromWeb(365*6, False)
 elif index == 7:
     sd.cook_Nday_ATRS150_exp(365*2)
-    sd.cook_ATRS150_exp_Rank(365*2)
+    sd.cook_ATRS150_exp_Ranks(365*2)
 elif index == 8:
-    remove_outdated_tickers()
+    sd.cook_industry_ATRS_rank_short_term()
+    sd.cook_industry_ATRS150_rank_histroy()
 
- 
 
+# --------------------------------------------------------------------
 
 
 
