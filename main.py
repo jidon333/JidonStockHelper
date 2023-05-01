@@ -69,11 +69,21 @@ class Chart:
         csv_path = os.path.join(data_folder, "Stock_GICS.csv")
         self.stock_GICS_df = pd.read_csv(csv_path)
         self.stock_GICS_df = self.stock_GICS_df.set_index('Symbol')
+        self.industryNum = self.stock_GICS_df['industry'].nunique()
+
+
+        csv_path = os.path.join(data_folder, "industry_rank_history.csv")
+        self.long_term_industry_rank_df = pd.read_csv(csv_path)
+        self.long_term_industry_rank_df = self.long_term_industry_rank_df.set_index('industry')
+
+        csv_path = os.path.join(data_folder, "industry_atrs14_rank_history.csv")
+        self.short_term_industry_rank_df = pd.read_csv(csv_path)
+        self.short_term_industry_rank_df = self.short_term_industry_rank_df.set_index('industry')
 
         if stockData is not None:
             self.fig, (self.ax1, self.ax2, self.ax3, self.ax4) = plt.subplots(
             4, 1, gridspec_kw={'height_ratios': [3, 1, 1, 1]}, figsize=(20, 10))
-            #self.fig.subplots_adjust(left=0.2, right=0.8)
+            self.fig.subplots_adjust(left=0.24, right=0.9)
 
         else:
             self.fig, (self.ax1) = plt.subplots(figsize=(20, 10))
@@ -86,7 +96,13 @@ class Chart:
         return self.stock_GICS_df.loc[ticker]['sector']
     def get_industry(self, ticker):
         return self.stock_GICS_df.loc[ticker]['industry']
-
+    
+    def get_long_term_industry_ranks(self, industryName):
+        return self.long_term_industry_rank_df.loc[industryName]
+    
+    def get_short_term_industry_ranks(self, industryName):
+        return self.short_term_industry_rank_df.loc[industryName]
+    
     def reset(self, stockData):
         self.stockData = stockData
         self.retVal = 0
@@ -158,7 +174,15 @@ class Chart:
         titleStr = f"{ticker} ({name}) \n {industryKor},  ATRS Rank: {int(curr_rank)}th"
         trs = self.stockData['TRS'].iloc[-1]
         tc = self.stockData['TC'].iloc[-1]
-        
+
+        industryRanks_long = self.get_long_term_industry_ranks(industryText)
+        industryRanks_short = self.get_short_term_industry_ranks(industryText)
+
+        # Normalize and set score from 0 to 100.
+        industryRanks_long = (1 - industryRanks_long.div(self.industryNum))*100
+        industryRanks_short = (1 - industryRanks_short.div(self.industryNum))*100
+
+
         self.ax1.cla()
 
 
@@ -166,9 +190,33 @@ class Chart:
         if self.text_box_info != None:
             self.text_box_info.remove()
 
+
+        msg = (
+        f"========================\n"
+        f"Ticker: {ticker}\n"
+        f"Sector: {sectorText}\n"
+        f"Industry: {industryText}\n"
+        f"TRS: {trs}\n"
+        f"TC: {tc}\n\n"
+        f"Industry long term RS Score\n"
+        f"1d ago : {int(industryRanks_long['1d ago'])}\n"
+        f"1w ago : {int(industryRanks_long['1w ago'])}\n"
+        f"3m ago : {int(industryRanks_long['3m ago'])}\n"
+        f"6m ago : {int(industryRanks_long['6m ago'])}\n"
+        f"1y ago : {int(industryRanks_long['1y ago'])}\n\n"
+        f"Industry short term RS Score\n"
+        f"1d ago : {int(industryRanks_short['1d ago'])}\n"
+        f"2d ago : {int(industryRanks_short['2d ago'])}\n"
+        f"3d ago : {int(industryRanks_short['3d ago'])}\n"
+        f"4d ago : {int(industryRanks_short['4d ago'])}\n"
+        f"5d ago : {int(industryRanks_short['5d ago'])}\n"
+        f"========================\n"
+        )
+
+
         props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-        self.text_box_info = self.fig.text(0.02, 0.99,
-                                    f"{ticker}\nSector: {sectorText}\nIndustry: {industryText}\nTRS: {trs}\nTC: {tc}",
+        self.text_box_info = self.fig.text(0.01, 0.9,
+                                    msg,
                                     transform=self.fig.transFigure, fontsize=14,
                                     bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
                                     verticalalignment='top', horizontalalignment='left')
@@ -1068,6 +1116,7 @@ class StockDataManager:
         rank_history_df = rank_history_df.rank(axis=0, ascending=True, method='dense')
 
         save_path = os.path.join('StockData', "industry_rank_history.csv")
+        rank_history_df.index.name = 'industry'
         rank_history_df.to_csv(save_path, encoding='utf-8-sig')
         print('industry_rank_history.csv cooked!')
 
@@ -1135,6 +1184,7 @@ class StockDataManager:
         rank_history_df = pd.DataFrame.from_dict(industry_atrs14_rank_history_dic).transpose()
         rank_history_df.columns = ['1d ago', '2d ago', '3d ago', '4d ago', '5d ago']
         rank_history_df = rank_history_df.rank(axis=0, ascending=False, method='dense')
+        rank_history_df.index.name = 'industry'
 
         save_path = os.path.join('StockData', "industry_atrs14_rank_history.csv")
         rank_history_df.to_csv(save_path, encoding='utf-8-sig')
