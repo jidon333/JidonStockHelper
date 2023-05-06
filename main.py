@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from matplotlib.dates import num2date
 import matplotlib.font_manager as fm
 from matplotlib.colors import LinearSegmentedColormap
-
+from matplotlib.widgets import TextBox, Button
 
 import numpy as np
 import pandas as pd
@@ -143,18 +143,15 @@ class Chart:
             sys.exit()
         if event.key == 'left':
             print('left')
-            #plt.close()
             self.retVal = -1
         if event.key == 'right':
             print('right')
-            #plt.close()
             self.retVal = 1
         if event.key == 'enter':
             ticker = self.stockData['Symbol'].iloc[-1]
             if ticker not in markedTickerList:
                 markedTickerList.append(ticker)
             print(ticker, 'is marked!')
-            #plt.close()
             
 
     def Show(self, titleName, ranks_atrs, curr_rank):
@@ -175,54 +172,54 @@ class Chart:
         trs = self.stockData['TRS'].iloc[-1]
         tc = self.stockData['TC'].iloc[-1]
 
-        industryRanks_long = self.get_long_term_industry_ranks(industryText)
-        industryRanks_short = self.get_short_term_industry_ranks(industryText)
-
-        # Normalize and set score from 0 to 100.
-        industryRanks_long = (1 - industryRanks_long.div(self.industryNum))*100
-        industryRanks_short = (1 - industryRanks_short.div(self.industryNum))*100
-
-
-        self.ax1.cla()
-
-
         # 좌측 info text box 설정
         if self.text_box_info != None:
             self.text_box_info.remove()
+            self.text_box_info = None
+
+        if not pd.isna(industryText):
 
 
-        msg = (
-        f"========================\n"
-        f"Ticker: {ticker}\n"
-        f"Sector: {sectorText}\n"
-        f"Industry: {industryText}\n"
-        f"TRS: {trs}\n"
-        f"TC: {tc}\n\n"
-        f"Industry long term RS Score\n"
-        f"1d ago : {int(industryRanks_long['1d ago'])}\n"
-        f"1w ago : {int(industryRanks_long['1w ago'])}\n"
-        f"3m ago : {int(industryRanks_long['3m ago'])}\n"
-        f"6m ago : {int(industryRanks_long['6m ago'])}\n"
-        f"1y ago : {int(industryRanks_long['1y ago'])}\n\n"
-        f"Industry short term RS Score\n"
-        f"1d ago : {int(industryRanks_short['1d ago'])}\n"
-        f"2d ago : {int(industryRanks_short['2d ago'])}\n"
-        f"3d ago : {int(industryRanks_short['3d ago'])}\n"
-        f"4d ago : {int(industryRanks_short['4d ago'])}\n"
-        f"5d ago : {int(industryRanks_short['5d ago'])}\n"
-        f"========================\n"
-        )
+            industryRanks_long = self.get_long_term_industry_ranks(industryText)
+            industryRanks_short = self.get_short_term_industry_ranks(industryText)
+
+            # Normalize and set score from 0 to 100.
+            industryRanks_long = (1 - industryRanks_long.div(self.industryNum))*100
+            industryRanks_short = (1 - industryRanks_short.div(self.industryNum))*100
+
+            msg = (
+            f"========================\n"
+            f"Ticker: {ticker}\n"
+            f"Sector: {sectorText}\n"
+            f"Industry: {industryText}\n"
+            f"TRS: {trs}\n"
+            f"TC: {tc}\n\n"
+            f"Industry long term RS Score\n"
+            f"1d ago : {int(industryRanks_long['1d ago'])}\n"
+            f"1w ago : {int(industryRanks_long['1w ago'])}\n"
+            f"1m ago : {int(industryRanks_long['1m ago'])}\n"
+            f"3m ago : {int(industryRanks_long['3m ago'])}\n"
+            f"6m ago : {int(industryRanks_long['6m ago'])}\n"
+            f"1y ago : {int(industryRanks_long['1y ago'])}\n\n"
+            f"Industry short term RS Score\n"
+            f"1d ago : {int(industryRanks_short['1d ago'])}\n"
+            f"3d ago : {int(industryRanks_short['3d ago'])}\n"
+            f"5d ago : {int(industryRanks_short['5d ago'])}\n"
+            f"10d ago : {int(industryRanks_short['10d ago'])}\n"
+            f"15d ago : {int(industryRanks_short['15d ago'])}\n"
+            f"20d ago : {int(industryRanks_short['20d ago'])}\n"
+            f"========================\n"
+            )
+
+            props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+            self.text_box_info = self.fig.text(0.01, 0.9,
+                                        msg,
+                                        transform=self.fig.transFigure, fontsize=14,
+                                        bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
+                                        verticalalignment='top', horizontalalignment='left')
 
 
-        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-        self.text_box_info = self.fig.text(0.01, 0.9,
-                                    msg,
-                                    transform=self.fig.transFigure, fontsize=14,
-                                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
-                                    verticalalignment='top', horizontalalignment='left')
-
-
-
+        self.ax1.cla()
         # 그래프 설정
         self.ax1.plot(self.stockData['Close'], label='Close')
         self.ax1.plot(self.stockData['200MA'], label='MA200', color='green')
@@ -1067,6 +1064,8 @@ class StockDataManager:
                 score = last_ranks.get(ticker) 
                 if score is not None:
                     scores.append(score)
+
+            scores = [score for score in scores if not np.isnan(score)]
             scores = sorted(scores)
             half_index = len(scores) // 2 # to dump half of scores
             half_dump_sector_scores = scores[:half_index] # dump half of scores. use 0 to halt_index (bigger numbers, bad ranks)
@@ -1136,6 +1135,7 @@ class StockDataManager:
                     if df is not None:
                         scores.append(df['ATRS_Exp'].iloc[-N_day_before])
                 # ascending order sort
+                scores = [score for score in scores if not np.isnan(score)]
                 scores = sorted(scores)
                 half_index = len(scores) // 2 # to dump half of scores get the index of middle
                 half_dump_sector_scores = scores[half_index:] #  dump half of scores. Use from half_index to last (lower numbers)
@@ -1158,10 +1158,12 @@ class StockDataManager:
         stock_GICS_df = pd.read_csv(csv_path)
 
         d1 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 1, 'industry')
-        d2 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 2, 'industry')
         d3 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 3, 'industry')
-        d4 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 4, 'industry')
         d5 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 5, 'industry')
+        d10 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 10, 'industry')
+        d15 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 15, 'industry')
+        d20 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 20, 'industry')
+
 
         industryNames = list(d1.keys())
         industry_atrs14_rank_history_dic = {}
@@ -1172,17 +1174,19 @@ class StockDataManager:
 
         for key, value in d1.items():
             industry_atrs14_rank_history_dic[key].append(value)
-        for key, value in d2.items():
-            industry_atrs14_rank_history_dic[key].append(value)
         for key, value in d3.items():
-            industry_atrs14_rank_history_dic[key].append(value)
-        for key, value in d4.items():
             industry_atrs14_rank_history_dic[key].append(value)
         for key, value in d5.items():
             industry_atrs14_rank_history_dic[key].append(value)
+        for key, value in d10.items():
+            industry_atrs14_rank_history_dic[key].append(value)
+        for key, value in d15.items():
+            industry_atrs14_rank_history_dic[key].append(value)
+        for key, value in d20.items():
+            industry_atrs14_rank_history_dic[key].append(value)
 
         rank_history_df = pd.DataFrame.from_dict(industry_atrs14_rank_history_dic).transpose()
-        rank_history_df.columns = ['1d ago', '2d ago', '3d ago', '4d ago', '5d ago']
+        rank_history_df.columns = ['1d ago', '3d ago', '5d ago', '10d ago', '15d ago', '20d ago']
         rank_history_df = rank_history_df.rank(axis=0, ascending=False, method='dense')
         rank_history_df.index.name = 'industry'
 
@@ -1240,6 +1244,12 @@ def remove_outdated_tickers():
                 print(file_path, 'is removed!')
 
 
+def remove_local_caches():
+    local_dir = os.path.join(os.getcwd())
+    for filename in os.listdir(local_dir):
+        if filename.startswith('cache_'):
+            os.remove(os.path.join(local_dir, filename))
+
 
 def get_yes_no_input(qustionString):
     while(True):
@@ -1272,7 +1282,7 @@ out_stock_datas_dic = {}
 if index == 1:
 
     bUseLocalCache = get_yes_no_input('Do you want to see last chart data? \n It will use cached local data and it will save loading time. \n (y/n)')
-    daysNum = 365*3
+    daysNum = int(365*1.5)
 
     if bUseLocalCache:
         try:
@@ -1289,7 +1299,7 @@ if index == 1:
             sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum)
     else:
         stock_list = sd.getStockListFromLocalCsv()
-        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum)
+        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, False)
 
 
     ##---------------- 조건식 -----------------------------------------------------
@@ -1298,7 +1308,7 @@ if index == 1:
 
     # Collect Technical data for screening.
     if not bUseLocalCache:
-        filtered_data = pd.DataFrame(columns=['RS', 'TR', 'ATR', 'MA150_Slope','MA200_Slope', 'Close', '150MA', '200MA', '50MA', 'Volume'])
+        filtered_data = pd.DataFrame(columns=['RS', 'TR', 'TC', 'ATR', 'MA150_Slope','MA200_Slope', 'Close', '150MA', '200MA', '50MA', 'Volume'])
 
         selected_tickers = []
         match_three= []
@@ -1317,6 +1327,7 @@ if index == 1:
             ma200 = stock_data['200MA'].iloc[-1]
             ma50 = stock_data['50MA'].iloc[-1]
             tr = stock_data['TR'].iloc[-1]
+            tc = stock_data['TC'].iloc[-1]
             atr = stock_data['ATR'].iloc[-1]
             volume_ma50 = stock_data['Volume'].rolling(window=50).mean().iloc[-1]
             bIsVolumeEnough = (volume_ma50 >= 100000 and close >= 10) or volume_ma50*close > 10000000
@@ -1328,7 +1339,7 @@ if index == 1:
             bIsRSGood = rs > 0
 
             # Do not always use this filter to catch other opportunity
-            bIsVolatilityLow = tr < atr
+            bIsVolatilityLow = tc < 1 and tr < atr
 
             bIsATRS_Ranking_Good = False
             try:
@@ -1392,9 +1403,12 @@ if index == 1:
 
     #data = pd.read_csv('auto.csv', encoding='euc-kr')
     #quantTickers = data['종목코드'].tolist()
-    #quantTickers = ['ACVA','COCO','WYNN','PLYA','NVDA','TXRH','TWNK','META','PBPB','WING','CBAY','ANET','MSGS','QSR']
+    #quantTickers = ['ACVA','TWNK','COCO','WYNN','PLYA','NVDA','HOLX','ETNB','TXRH','META','PBPB','WING','CBAY','SPOK','CCS','MSGS','CLX','CLH','QSR','EHC']
+    #quantTickers = ['ACVA','WYNN','PLYA','NVDA','ETNB','COCO','WING','TXRH','META','RCEL','PBPB','SPOK','TWNK','SKY','AZEK','QSR','HIMS','MSGS']
 
-    #quantTickers = ['ETNB']
+
+
+
     #selected_tickers = list(set(selected_tickers) & set(quantTickers))
     selected_tickers.sort()
 
@@ -1409,10 +1423,13 @@ elif index == 2:
     updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*3)
     DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500)
 elif index == 3:
+    remove_local_caches()
     sd.syncCsvFromWeb(3)
     sd.cookUpDownDatas()
     sd.cook_Nday_ATRS150_exp(365*2)
     sd.cook_ATRS150_exp_Ranks(365*2)
+    sd.cook_industry_ATRS_rank_short_term()
+    sd.cook_industry_ATRS150_rank_histroy()
 elif index == 4:
     sd.cookUpDownDatas()
 elif index == 5:
@@ -1423,8 +1440,8 @@ elif index == 7:
     sd.cook_Nday_ATRS150_exp(365*2)
     sd.cook_ATRS150_exp_Ranks(365*2)
 elif index == 8:
-    sd.cook_industry_ATRS_rank_short_term()
     sd.cook_industry_ATRS150_rank_histroy()
+    sd.cook_industry_ATRS_rank_short_term()
 
 
 # --------------------------------------------------------------------
