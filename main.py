@@ -72,11 +72,11 @@ class Chart:
         self.industryNum = self.stock_GICS_df['industry'].nunique()
 
 
-        csv_path = os.path.join(data_folder, "industry_rank_history.csv")
+        csv_path = os.path.join(data_folder, "industry_long_rank_score_history.csv")
         self.long_term_industry_rank_df = pd.read_csv(csv_path)
         self.long_term_industry_rank_df = self.long_term_industry_rank_df.set_index('industry')
 
-        csv_path = os.path.join(data_folder, "industry_atrs14_rank_history.csv")
+        csv_path = os.path.join(data_folder, "industry_short_rank_score_history.csv")
         self.short_term_industry_rank_df = pd.read_csv(csv_path)
         self.short_term_industry_rank_df = self.short_term_industry_rank_df.set_index('industry')
 
@@ -183,10 +183,6 @@ class Chart:
             industryRanks_long = self.get_long_term_industry_ranks(industryText)
             industryRanks_short = self.get_short_term_industry_ranks(industryText)
 
-            # Normalize and set score from 0 to 100.
-            industryRanks_long = (1 - industryRanks_long.div(self.industryNum))*100
-            industryRanks_short = (1 - industryRanks_short.div(self.industryNum))*100
-
             msg = (
             f"========================\n"
             f"Ticker: {ticker}\n"
@@ -196,11 +192,11 @@ class Chart:
             f"TC: {tc}\n\n"
             f"Industry long term RS Score\n"
             f"1d ago : {int(industryRanks_long['1d ago'])}\n"
-            f"1w ago : {int(industryRanks_long['1w ago'])}\n"
-            f"1m ago : {int(industryRanks_long['1m ago'])}\n"
-            f"3m ago : {int(industryRanks_long['3m ago'])}\n"
-            f"6m ago : {int(industryRanks_long['6m ago'])}\n"
-            f"1y ago : {int(industryRanks_long['1y ago'])}\n\n"
+            f"1w ago : {int(industryRanks_long['5d ago'])}\n"
+            f"1m ago : {int(industryRanks_long['20d ago'])}\n"
+            f"3m ago : {int(industryRanks_long['60d ago'])}\n"
+            f"6m ago : {int(industryRanks_long['120d ago'])}\n"
+            f"1y ago : {int(industryRanks_long['240d ago'])}\n\n"
             f"Industry short term RS Score\n"
             f"1d ago : {int(industryRanks_short['1d ago'])}\n"
             f"3d ago : {int(industryRanks_short['3d ago'])}\n"
@@ -1078,46 +1074,55 @@ class StockDataManager:
         return sorted_sector_scores  
 
     # cook industry ranks according to the ATRS150_Exp ranks.
-    def cook_industry_ATRS150_rank_histroy(self):
+    def cook_industry_long_rank_score_history(self):
+        print('cook_industry_long_rank_score_history')
         ATRS_Ranks_df = sd.get_ATRS_Ranking_df()
         csv_path = os.path.join(data_folder, "Stock_GICS.csv")
         stock_GICS_df = pd.read_csv(csv_path)
 
-        d1 = self.get_industry_atrs150_ranks_mean(ATRS_Ranks_df, stock_GICS_df, 1)
-        d5 = self.get_industry_atrs150_ranks_mean(ATRS_Ranks_df, stock_GICS_df, 5)
-        d20 = self.get_industry_atrs150_ranks_mean(ATRS_Ranks_df, stock_GICS_df, 20)
-        d60 = self.get_industry_atrs150_ranks_mean(ATRS_Ranks_df, stock_GICS_df, 60)
-        d120 = self.get_industry_atrs150_ranks_mean(ATRS_Ranks_df, stock_GICS_df, 120)
-        d240 = self.get_industry_atrs150_ranks_mean(ATRS_Ranks_df, stock_GICS_df, 240)
 
+        dn_list = []
+        columnNames = []
+        nDay = 365
+        for i in range(1, nDay+1):
+            dn = self.get_industry_atrs150_ranks_mean(ATRS_Ranks_df, stock_GICS_df, i)
+            dn_list.append(dn)
+            columnNames.append(f'{i}d ago')
+
+        # reverse the list so that lastest day can be located at the last column in dataframe.
+        dn_list.reverse()
+        columnNames.reverse()
+
+        d1 = dn_list[0]
         industryNames = list(d1.keys())
+        industryNum = len(industryNames)
         industry_rank_history_dic = {}
 
         # generate industryName-list dictionary.
         for name in industryNames:
             industry_rank_history_dic[name] = []
 
-        for key, value in d1.items():
-            industry_rank_history_dic[key].append(value)
-        for key, value in d5.items():
-            industry_rank_history_dic[key].append(value)
-        for key, value in d20.items():
-            industry_rank_history_dic[key].append(value)
-        for key, value in d60.items():
-            industry_rank_history_dic[key].append(value)
-        for key, value in d120.items():
-            industry_rank_history_dic[key].append(value)
-        for key, value in d240.items():
-            industry_rank_history_dic[key].append(value)
+        for i in range(1, nDay+1):
+            for key, value in dn_list[i-1].items():
+                industry_rank_history_dic[key].append(value)
 
         rank_history_df = pd.DataFrame.from_dict(industry_rank_history_dic).transpose()
-        rank_history_df.columns = ['1d ago', '1w ago', '1m ago', '3m ago', '6m ago', '1y ago']
         rank_history_df = rank_history_df.rank(axis=0, ascending=True, method='dense')
+        rank_history_df = (1 - rank_history_df.div(industryNum))*100
+        rank_history_df = rank_history_df.round(2)
+        rank_history_df.columns = columnNames
+        rank_history_df.index.name = 'industry'
 
-        save_path = os.path.join('StockData', "industry_rank_history.csv")
+
+        # sort ranks by lastest score.
+        last_col_name = rank_history_df.columns[-1]
+        rank_history_df = rank_history_df.sort_values(by=last_col_name, ascending=False)
+
+
+        save_path = os.path.join('StockData', "industry_long_rank_score_history.csv")
         rank_history_df.index.name = 'industry'
         rank_history_df.to_csv(save_path, encoding='utf-8-sig')
-        print('industry_rank_history.csv cooked!')
+        print('industry_long_rank_score_history.csv cooked!')
 
 
     def get_industry_atrs14_mean(self, stock_data_dic, stock_GICS_df, N_day_before = 1, method : str = 'industry'):
@@ -1132,7 +1137,7 @@ class StockDataManager:
                 # collect each sector's atrs and dump lower 50%
                 for ticker in tickers:     
                     df = stock_data_dic.get(ticker)           
-                    if df is not None:
+                    if df is not None and (len(df) > N_day_before):
                         scores.append(df['ATRS_Exp'].iloc[-N_day_before])
                 # ascending order sort
                 scores = [score for score in scores if not np.isnan(score)]
@@ -1148,7 +1153,9 @@ class StockDataManager:
             return sorted_sector_scores
 
     # cook industry ranks according to the atrs14_exp.
-    def cook_industry_ATRS_rank_short_term(self):
+    def cook_industry_short_rank_score_history(self):
+        print('cook_industry_short_rank_score_history')
+
         all_list = sd.getStockListFromLocalCsv()
         out_tickers = [] 
         out_stock_data_dic = {}
@@ -1157,42 +1164,47 @@ class StockDataManager:
         csv_path = os.path.join(data_folder, "Stock_GICS.csv")
         stock_GICS_df = pd.read_csv(csv_path)
 
-        d1 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 1, 'industry')
-        d3 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 3, 'industry')
-        d5 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 5, 'industry')
-        d10 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 10, 'industry')
-        d15 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 15, 'industry')
-        d20 = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, 20, 'industry')
+
+        dn_list = []
+        columnNames = []
+        nDay = 30
+        for i in range(1, nDay+1):
+            dn = self.get_industry_atrs14_mean(out_stock_data_dic, stock_GICS_df, i, 'industry')
+            dn_list.append(dn)
+            columnNames.append(f'{i}d ago')
 
 
+        # reverse the list so that lastest day can be located at the last column in dataframe.
+        dn_list.reverse()
+        columnNames.reverse()
+
+        d1 = dn_list[0]
         industryNames = list(d1.keys())
+        industryNum = len(industryNames)
         industry_atrs14_rank_history_dic = {}
 
         # generate industryName-list dictionary.
         for name in industryNames:
             industry_atrs14_rank_history_dic[name] = []
 
-        for key, value in d1.items():
-            industry_atrs14_rank_history_dic[key].append(value)
-        for key, value in d3.items():
-            industry_atrs14_rank_history_dic[key].append(value)
-        for key, value in d5.items():
-            industry_atrs14_rank_history_dic[key].append(value)
-        for key, value in d10.items():
-            industry_atrs14_rank_history_dic[key].append(value)
-        for key, value in d15.items():
-            industry_atrs14_rank_history_dic[key].append(value)
-        for key, value in d20.items():
-            industry_atrs14_rank_history_dic[key].append(value)
+        for i in range(1, nDay+1):
+            for key, value in dn_list[i-1].items():
+                industry_atrs14_rank_history_dic[key].append(value)
 
         rank_history_df = pd.DataFrame.from_dict(industry_atrs14_rank_history_dic).transpose()
-        rank_history_df.columns = ['1d ago', '3d ago', '5d ago', '10d ago', '15d ago', '20d ago']
         rank_history_df = rank_history_df.rank(axis=0, ascending=False, method='dense')
+        rank_history_df = (1 - rank_history_df.div(industryNum))*100
+        rank_history_df = rank_history_df.round(2)
+        rank_history_df.columns = columnNames
         rank_history_df.index.name = 'industry'
 
-        save_path = os.path.join('StockData', "industry_atrs14_rank_history.csv")
+        # sort ranks by lastest score.
+        last_col_name = rank_history_df.columns[-1]
+        rank_history_df = rank_history_df.sort_values(by=last_col_name, ascending=False)
+
+        save_path = os.path.join('StockData', "industry_short_rank_score_history.csv")
         rank_history_df.to_csv(save_path, encoding='utf-8-sig')
-        print('industry_atrs14_rank_history.csv cooked!')
+        print('industry_short_rank_score_history.csv cooked!')
 
 def DrawStockDatas(stock_datas_dic, tickers, maxCnt = -1):
     stock_data = stock_datas_dic[tickers[0]]
@@ -1282,7 +1294,7 @@ out_stock_datas_dic = {}
 if index == 1:
 
     bUseLocalCache = get_yes_no_input('Do you want to see last chart data? \n It will use cached local data and it will save loading time. \n (y/n)')
-    daysNum = int(365*1.5)
+    daysNum = int(365)
 
     if bUseLocalCache:
         try:
@@ -1404,7 +1416,6 @@ if index == 1:
     #data = pd.read_csv('auto.csv', encoding='euc-kr')
     #quantTickers = data['종목코드'].tolist()
     #quantTickers = ['ACVA','TWNK','COCO','WYNN','PLYA','NVDA','HOLX','ETNB','TXRH','META','PBPB','WING','CBAY','SPOK','CCS','MSGS','CLX','CLH','QSR','EHC']
-    #quantTickers = ['ACVA','WYNN','PLYA','NVDA','ETNB','COCO','WING','TXRH','META','RCEL','PBPB','SPOK','TWNK','SKY','AZEK','QSR','HIMS','MSGS']
 
 
 
@@ -1428,8 +1439,8 @@ elif index == 3:
     sd.cookUpDownDatas()
     sd.cook_Nday_ATRS150_exp(365*2)
     sd.cook_ATRS150_exp_Ranks(365*2)
-    sd.cook_industry_ATRS_rank_short_term()
-    sd.cook_industry_ATRS150_rank_histroy()
+    sd.cook_industry_short_rank_score_history()
+    sd.cook_industry_long_rank_score_history()
 elif index == 4:
     sd.cookUpDownDatas()
 elif index == 5:
@@ -1440,11 +1451,7 @@ elif index == 7:
     sd.cook_Nday_ATRS150_exp(365*2)
     sd.cook_ATRS150_exp_Ranks(365*2)
 elif index == 8:
-    sd.cook_industry_ATRS150_rank_histroy()
-    sd.cook_industry_ATRS_rank_short_term()
-
+    sd.cook_industry_long_rank_score_history()
+    sd.cook_industry_short_rank_score_history()
 
 # --------------------------------------------------------------------
-
-
-
