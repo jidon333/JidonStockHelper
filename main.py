@@ -226,14 +226,31 @@ class Chart:
         self.ax1.grid()
         self.ax1.set_title(titleStr, fontproperties=fontprop)
 
-        self.ax2.cla()
-        self.ax2.bar(self.stockData.index,
-                     self.stockData['Volume'], alpha=0.3, color='blue', width=0.7)
-        self.ax2.set_ylabel('Volume')
+
+
+        # Draw industry ranks to the ax2 instead of volumes
+        stockDataLen = len(self.stockData['Close'].index)
+        # Can not draw chart if the stock data len is longer than industry rank data.
+        if stockDataLen < len(industryRanks_long):
+            long_industry_rank_datas = industryRanks_long.values[-stockDataLen:]
+            long_industry_rank_reindexed = pd.Series(long_industry_rank_datas, index=self.stockData['Close'].index)
+
+            self.ax2.cla()
+            self.ax2.plot(long_industry_rank_reindexed, label ='Industry RS score', color='black')
+            self.ax2.set_ylim([0, 100])
+            self.ax2.legend(loc='lower left')
+            self.ax2.axhline(y=50, color='black', linestyle='--')
+        else:
+            # Draw volume chart to the ax2
+            self.ax2.cla()
+            self.ax2.bar(self.stockData.index,
+                        self.stockData['Volume'], alpha=0.3, color='blue', width=0.7)
+            self.ax2.set_ylabel('Volume')
 
         ############### Rank data를 그래프에 추가하기 ###############
         ranks_atrs_exp_df = ranks_atrs.to_frame()
         ranks_atrs_exp_df.index = pd.to_datetime(ranks_atrs_exp_df.index) # 문자열을 datetime 객체로 변경
+
 
         # self.stockData와 rank_df를 합치기 위해 index 기준으로 join
         self.stockData = self.stockData.join(ranks_atrs_exp_df, how='left')
@@ -247,13 +264,13 @@ class Chart:
         self.ax3.set_ylim([0, 1])
         if len(ranks_atrs_exp_df) != 0:
             self.ax3.plot(self.stockData['Rank_ATRS150_Exp'], label='Rank_ATRS150_Exp', color='red', alpha=0.5)
-        self.ax3.legend(loc='lower right')
+        self.ax3.legend(loc='lower left')
         self.ax3.axhline(y=0.5, color='black', linestyle='--')
  
         self.ax4.cla()
         self.ax4.set_ylim([-0.5, 0.5])
         self.ax4.plot(self.stockData['ATRS_Exp'], label='ATRS_Exp')
-        self.ax4.legend(loc='lower right')
+        self.ax4.legend(loc='lower left')
         self.ax4.fill_between(self.stockData.index, self.stockData['ATRS_Exp'], 0, where=self.stockData['ATRS_Exp'] < 0, color='red', alpha=0.3)
         self.ax4.fill_between(self.stockData.index, self.stockData['ATRS_Exp'], 0, where=self.stockData['ATRS_Exp'] >= 0, color='green', alpha=0.3)
         self.ax4.axhline(y=0, color='black', linestyle='--')
@@ -1342,21 +1359,22 @@ if index == 1:
             tc = stock_data['TC'].iloc[-1]
             atr = stock_data['ATR'].iloc[-1]
             volume_ma50 = stock_data['Volume'].rolling(window=50).mean().iloc[-1]
-            bIsVolumeEnough = (volume_ma50 >= 100000 and close >= 10) or volume_ma50*close > 10000000
+            bIsVolumeEnough = (volume_ma50 >= 200000 and close >= 10) or volume_ma50*close > 10000000
 
             bIsUpperMA = close > ma150 and close > ma200 and close > ma50
             b_150ma_upper_than_200ma = ma150 > ma200
             bMA_Slope_Plus = ma150_slope > 0 and ma200_slope > 0
             b_50ma_biggerThan_150ma_200ma = ma50 > ma150 and ma50 > ma200
-            bIsRSGood = rs > 0
 
-            # Do not always use this filter to catch other opportunity
+            bIsRSGood = rs > 0
+            gap_from_50ma =  abs((close - ma50)/close)
+            gap_from_200ma =  abs((close - ma200)/close)
             bIsVolatilityLow = tc < 1 and tr < atr
 
             bIsATRS_Ranking_Good = False
             try:
                 atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
-                bIsATRS_Ranking_Good = atrsRank < 600
+                bIsATRS_Ranking_Good = atrsRank < 500
             except Exception as e:
                 print(e)
                 bIsATRS_Ranking_Good = False
@@ -1365,7 +1383,7 @@ if index == 1:
 
             if bIsUpperMA:
                 filterMatchNum = filterMatchNum + 1
-            if b_150ma_upper_than_200ma:
+            if b_150ma_upper_than_200ma or True:
                 filterMatchNum = filterMatchNum + 1
             if bMA_Slope_Plus:
                 filterMatchNum = filterMatchNum + 1
@@ -1374,11 +1392,12 @@ if index == 1:
             if bIsATRS_Ranking_Good:
                 filterMatchNum = filterMatchNum + 1
 
-            # 변동성 조건이 없는 편이 시장 추세를 파악하기 좋다. 어떤 섹터에 돌파가 나오고, 어떤 섹터에 과도한 하락이 있는지 파악할 수 있기 때문
-            #if filterMatchNum >= 5 and bIsVolumeEnough and bIsVolatilityLow:
- 
+            # 거래량, VCP, RS는 포기 못함
             if filterMatchNum >= 5 and bIsVolumeEnough:
                 selected_tickers.append(ticker)
+ 
+            #if filterMatchNum >= 5 and bIsVolumeEnough and bIsVolatilityLow:
+                #selected_tickers.append(ticker)
    
         # # HTS ScreenerList와의 교집합 티커 수집
         # data = pd.read_csv('ScreenerList.csv')
@@ -1415,12 +1434,11 @@ if index == 1:
 
     #data = pd.read_csv('auto.csv', encoding='euc-kr')
     #quantTickers = data['종목코드'].tolist()
-    #quantTickers = ['ACVA','TWNK','COCO','WYNN','PLYA','NVDA','HOLX','ETNB','TXRH','META','PBPB','WING','CBAY','SPOK','CCS','MSGS','CLX','CLH','QSR','EHC']
+    quantTickers =['MSFT','MANH','ETNB','COCO','TWNK','SPOK','WING','ACVA','META','BMEA','NVDA','SYK','QSR','VNT']
+                        
+    
 
-
-
-
-    #selected_tickers = list(set(selected_tickers) & set(quantTickers))
+    selected_tickers = list(set(selected_tickers) & set(quantTickers))
     selected_tickers.sort()
 
 
@@ -1451,7 +1469,6 @@ elif index == 7:
     sd.cook_Nday_ATRS150_exp(365*2)
     sd.cook_ATRS150_exp_Ranks(365*2)
 elif index == 8:
-    sd.cook_industry_long_rank_score_history()
-    sd.cook_industry_short_rank_score_history()
+    remove_outdated_tickers()
 
 # --------------------------------------------------------------------
