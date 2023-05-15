@@ -48,6 +48,7 @@ nyse = mcal.get_calendar('NYSE')
 exception_ticker_list = {}
 sync_fail_ticker_list = []
 data_folder = os.path.join(os.getcwd(), 'StockData')
+metadata_folder = os.path.join(data_folder, 'MetaData')
 
 stockIterateLimit = 99999
 
@@ -56,6 +57,9 @@ markedTickerList = []
 
 class Chart:
     def __init__(self, stockData = None, updown_nyse = None, updown_nasdaq = None, updown_sp500 = None):
+        
+        self.stockManager : StockDataManager = None
+
         self.stockData = stockData
         self.retVal = 0
         self.annotateObj = None
@@ -66,17 +70,17 @@ class Chart:
         self.updown_nasdaq = updown_nasdaq
         self.updown_sp500 = updown_sp500
 
-        csv_path = os.path.join(data_folder, "Stock_GICS.csv")
+        csv_path = os.path.join(metadata_folder, "Stock_GICS.csv")
         self.stock_GICS_df = pd.read_csv(csv_path)
         self.stock_GICS_df = self.stock_GICS_df.set_index('Symbol')
         self.industryNum = self.stock_GICS_df['industry'].nunique()
 
 
-        csv_path = os.path.join(data_folder, "industry_long_rank_score_history.csv")
+        csv_path = os.path.join(metadata_folder, "industry_long_rank_score_history.csv")
         self.long_term_industry_rank_df = pd.read_csv(csv_path)
         self.long_term_industry_rank_df = self.long_term_industry_rank_df.set_index('industry')
 
-        csv_path = os.path.join(data_folder, "industry_short_rank_score_history.csv")
+        csv_path = os.path.join(metadata_folder, "industry_short_rank_score_history.csv")
         self.short_term_industry_rank_df = pd.read_csv(csv_path)
         self.short_term_industry_rank_df = self.short_term_industry_rank_df.set_index('industry')
 
@@ -91,6 +95,8 @@ class Chart:
 
         plt.ion()
 
+    def set_stock_manager(self, inStockManager):
+        self.stockManager = inStockManager
 
     def get_sector(self, ticker):
         return self.stock_GICS_df.loc[ticker]['sector']
@@ -172,14 +178,18 @@ class Chart:
         trs = self.stockData['TRS'].iloc[-1]
         tc = self.stockData['TC'].iloc[-1]
 
+
+
+        trueRange_NR_x = self.stockManager.check_NR_with_TrueRange(self.stockData)
+        bIsInsideBar = self.stockManager.check_insideBar(self.stockData)
+        bIsPocketPivot = self.stockManager.check_pocket_pivot(self.stockData)
+      
         # 좌측 info text box 설정
         if self.text_box_info != None:
             self.text_box_info.remove()
             self.text_box_info = None
 
         if not pd.isna(industryText):
-
-
             industryRanks_long = self.get_long_term_industry_ranks(industryText)
             industryRanks_short = self.get_short_term_industry_ranks(industryText)
 
@@ -189,22 +199,22 @@ class Chart:
             f"Sector: {sectorText}\n"
             f"Industry: {industryText}\n"
             f"TRS: {trs}\n"
-            f"TC: {tc}\n\n"
-            f"Industry long term RS Score\n"
-            f"1d ago : {int(industryRanks_long['1d ago'])}\n"
-            f"1w ago : {int(industryRanks_long['5d ago'])}\n"
-            f"1m ago : {int(industryRanks_long['20d ago'])}\n"
-            f"3m ago : {int(industryRanks_long['60d ago'])}\n"
-            f"6m ago : {int(industryRanks_long['120d ago'])}\n"
-            f"1y ago : {int(industryRanks_long['240d ago'])}\n\n"
-            f"Industry short term RS Score\n"
-            f"1d ago : {int(industryRanks_short['1d ago'])}\n"
-            f"3d ago : {int(industryRanks_short['3d ago'])}\n"
-            f"5d ago : {int(industryRanks_short['5d ago'])}\n"
-            f"10d ago : {int(industryRanks_short['10d ago'])}\n"
-            f"15d ago : {int(industryRanks_short['15d ago'])}\n"
-            f"20d ago : {int(industryRanks_short['20d ago'])}\n"
-            f"========================\n"
+            f"TC: {tc}\n"
+            f"NR(x): {trueRange_NR_x}\n"
+            f"Inside bar: {bIsInsideBar}\n"
+            f"Pocket Pivot: {bIsPocketPivot}\n\n"
+
+            f"Industry RS Score : {int(industryRanks_long['1d ago'])} \n"
+            
+
+            #f"Industry short term RS Scores\n"
+            # f"1d ago : {int(industryRanks_short['1d ago'])}\n"
+            # f"3d ago : {int(industryRanks_short['3d ago'])}\n"
+            # f"5d ago : {int(industryRanks_short['5d ago'])}\n"
+            # f"10d ago : {int(industryRanks_short['10d ago'])}\n"
+            # f"15d ago : {int(industryRanks_short['15d ago'])}\n"
+            # f"20d ago : {int(industryRanks_short['20d ago'])}\n"
+            #f"========================\n"
             )
 
             props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
@@ -216,6 +226,7 @@ class Chart:
 
 
         self.ax1.cla()
+
         # 그래프 설정
         self.ax1.plot(self.stockData['Close'], label='Close')
         self.ax1.plot(self.stockData['200MA'], label='MA200', color='green')
@@ -236,7 +247,7 @@ class Chart:
             long_industry_rank_reindexed = pd.Series(long_industry_rank_datas, index=self.stockData['Close'].index)
 
             self.ax2.cla()
-            self.ax2.plot(long_industry_rank_reindexed, label ='Industry RS score', color='black')
+            self.ax2.plot(long_industry_rank_reindexed, label ='Industry RS score', color='green')
             self.ax2.set_ylim([0, 100])
             self.ax2.legend(loc='lower left')
             self.ax2.axhline(y=50, color='black', linestyle='--')
@@ -674,13 +685,13 @@ class StockDataManager:
         valid_end_date = trading_days[-1]
 
         daily_changes_nyse_df = self._getUpDownChanges_df(nyse_list, valid_start_date, valid_end_date)
-        daily_changes_nyse_df.to_csv(os.path.join(data_folder, 'up_down_nyse.csv'))
+        daily_changes_nyse_df.to_csv(os.path.join(metadata_folder, 'up_down_nyse.csv'))
 
         daily_changes_nasdaq_df = self._getUpDownChanges_df(nasdaq_list, valid_start_date, valid_end_date)
-        daily_changes_nasdaq_df.to_csv(os.path.join(data_folder, 'up_down_nasdaq.csv'))
+        daily_changes_nasdaq_df.to_csv(os.path.join(metadata_folder, 'up_down_nasdaq.csv'))
 
         daily_changes_sp500_df = self._getUpDownChanges_df(sp500_list, valid_start_date, valid_end_date)
-        daily_changes_sp500_df.to_csv(os.path.join(data_folder, 'up_down_sp500.csv'))
+        daily_changes_sp500_df.to_csv(os.path.join(metadata_folder, 'up_down_sp500.csv'))
 
         with open("up_down_exception.json", "w") as outfile:
                 json.dump(exception_ticker_list, outfile, indent = 4)
@@ -770,7 +781,7 @@ class StockDataManager:
         updown_sp500 = pd.DataFrame()
 
         # ------------ nyse -------------------
-        nyse_file_path = os.path.join(data_folder, "up_down_nyse.csv")
+        nyse_file_path = os.path.join(metadata_folder, "up_down_nyse.csv")
         data = pd.read_csv(nyse_file_path)
 
         # 문자열을 datetime 객체로 변경
@@ -791,7 +802,7 @@ class StockDataManager:
 
 
         # ------------ nasdaq -------------------
-        nasdaq_file_path = os.path.join(data_folder, "up_down_nasdaq.csv")
+        nasdaq_file_path = os.path.join(metadata_folder, "up_down_nasdaq.csv")
         data = pd.read_csv(nasdaq_file_path)
 
         # 문자열을 datetime 객체로 변경
@@ -804,7 +815,7 @@ class StockDataManager:
         updown_nasdaq = data
 
         # ------------ sp500 -------------------
-        sp500_file_path = os.path.join(data_folder, "up_down_sp500.csv")
+        sp500_file_path = os.path.join(metadata_folder, "up_down_sp500.csv")
         data = pd.read_csv(sp500_file_path)
 
         # 문자열을 datetime 객체로 변경
@@ -900,7 +911,6 @@ class StockDataManager:
                 os.remove(file_path)
                 print(file_path, 'is removed from local directory!')
 
- 
     def cook_Nday_ATRS150_exp(self, N=150):
         all_list = self.getStockListFromLocalCsv()
 
@@ -931,7 +941,7 @@ class StockDataManager:
         atrs_df = atrs_df.set_index('Date')
         atrs_df = atrs_df.T # transpose
 
-        save_path = os.path.join('StockData', f'{N}day_{propertyName}.csv')
+        save_path = os.path.join(metadata_folder, f'{N}day_{propertyName}.csv')
         atrs_df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
 
         return atrs_df
@@ -940,7 +950,7 @@ class StockDataManager:
 
         propertyName = 'ATRS150_Exp'
 
-        csv_path = os.path.join('StockData', f'{N}day_{propertyName}.csv')
+        csv_path = os.path.join(metadata_folder, f'{N}day_{propertyName}.csv')
         data = pd.read_csv(csv_path)
         data = data.set_index('Symbol')
 
@@ -948,7 +958,7 @@ class StockDataManager:
 
         rank_df = rank_df
 
-        save_path = os.path.join('StockData', f'{propertyName}_Ranking.csv')
+        save_path = os.path.join(metadata_folder, f'{propertyName}_Ranking.csv')
         rank_df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
 
     def get_ATRS150_exp_Ranks_Normalized(self, Symbol):
@@ -956,7 +966,7 @@ class StockDataManager:
         propertyName = 'ATRS150_Exp'
 
         try:
-            csv_path = os.path.join('StockData', f'{propertyName}_Ranking.csv')
+            csv_path = os.path.join(metadata_folder, f'{propertyName}_Ranking.csv')
             rank_df = pd.read_csv(csv_path)
             rank_df = rank_df.set_index('Symbol')
             serise_rankChanges = rank_df.loc[Symbol]
@@ -979,7 +989,7 @@ class StockDataManager:
         propertyName = 'ATRS150_Exp'
 
         try:
-            csv_path = os.path.join('StockData', f'{propertyName}_Ranking.csv')
+            csv_path = os.path.join(metadata_folder, f'{propertyName}_Ranking.csv')
             rank_df = pd.read_csv(csv_path)
             rank_df = rank_df.set_index('Symbol')
             serise_rankChanges = rank_df.loc[Symbol]
@@ -991,13 +1001,12 @@ class StockDataManager:
         except Exception as e:
             return pd.Series()
         
-
     def get_ATRS_Ranking_df(self):
 
         propertyName = 'ATRS150_Exp'
 
         try:
-            csv_path = os.path.join('StockData', f'{propertyName}_Ranking.csv')
+            csv_path = os.path.join(metadata_folder, f'{propertyName}_Ranking.csv')
             rank_df = pd.read_csv(csv_path)
             rank_df = rank_df.set_index('Symbol')
             return rank_df
@@ -1052,14 +1061,13 @@ class StockDataManager:
         print("Complete!")      
         result_df = pd.concat(df_list)
         result_df.index.name = 'Symbol'
-        result_df.to_csv(os.path.join(data_folder, 'Stock_GICS.csv'), encoding='utf-8-sig')
+        result_df.to_csv(os.path.join(metadata_folder, 'Stock_GICS.csv'), encoding='utf-8-sig')
 
         print('Error Tickers: ', errorTickers)
 
 
         return result_df
-
-    
+   
     # method: industry or sector
     # N_day_before: rank will be calculated at the [:, -N_day_before].
     def get_industry_atrs150_ranks_mean(self, ATRS_Ranks_df, stock_GICS_df, N_day_before = 1, method : str = 'industry'):
@@ -1094,7 +1102,7 @@ class StockDataManager:
     def cook_industry_long_rank_score_history(self):
         print('cook_industry_long_rank_score_history')
         ATRS_Ranks_df = sd.get_ATRS_Ranking_df()
-        csv_path = os.path.join(data_folder, "Stock_GICS.csv")
+        csv_path = os.path.join(metadata_folder, "Stock_GICS.csv")
         stock_GICS_df = pd.read_csv(csv_path)
 
 
@@ -1136,11 +1144,10 @@ class StockDataManager:
         rank_history_df = rank_history_df.sort_values(by=last_col_name, ascending=False)
 
 
-        save_path = os.path.join('StockData', "industry_long_rank_score_history.csv")
+        save_path = os.path.join(metadata_folder, "industry_long_rank_score_history.csv")
         rank_history_df.index.name = 'industry'
         rank_history_df.to_csv(save_path, encoding='utf-8-sig')
         print('industry_long_rank_score_history.csv cooked!')
-
 
     def get_industry_atrs14_mean(self, stock_data_dic, stock_GICS_df, N_day_before = 1, method : str = 'industry'):
             category = method
@@ -1178,7 +1185,7 @@ class StockDataManager:
         out_stock_data_dic = {}
         sd.getStockDatasFromCsv(all_list, out_tickers, out_stock_data_dic, 365, True)
 
-        csv_path = os.path.join(data_folder, "Stock_GICS.csv")
+        csv_path = os.path.join(metadata_folder, "Stock_GICS.csv")
         stock_GICS_df = pd.read_csv(csv_path)
 
 
@@ -1219,15 +1226,55 @@ class StockDataManager:
         last_col_name = rank_history_df.columns[-1]
         rank_history_df = rank_history_df.sort_values(by=last_col_name, ascending=False)
 
-        save_path = os.path.join('StockData', "industry_short_rank_score_history.csv")
+        save_path = os.path.join(metadata_folder, "industry_short_rank_score_history.csv")
         rank_history_df.to_csv(save_path, encoding='utf-8-sig')
         print('industry_short_rank_score_history.csv cooked!')
 
-def DrawStockDatas(stock_datas_dic, tickers, maxCnt = -1):
+    def check_NR_with_TrueRange(self, inStockData : pd.DataFrame , maxDepth = 20):
+        # Calcaute NR(x) using True Range.
+        last_tr = inStockData['TR'].iloc[-1]
+        trueRange_NR_x = 0
+        for i in range(2, maxDepth):
+            tr_rangeN = inStockData['TR'][-i:]
+            min_value = tr_rangeN.min()
+            if min_value == last_tr:
+                trueRange_NR_x = i
+        return trueRange_NR_x
+    
+    def check_insideBar(self, inStockData: pd.DataFrame):
+        d2_ago_high, d2_ago_low = inStockData['High'].iloc[-2], inStockData['Low'].iloc[-2]
+        d1_ago_high, d1_ago_low = inStockData['High'].iloc[-1], inStockData['Low'].iloc[-1]
+        bIsInsideBar = False
+        if d2_ago_high > d1_ago_high and d2_ago_low < d1_ago_low:
+            bIsInsideBar = True
+        
+        return bIsInsideBar
+    
+    def check_pocket_pivot(self, inStockData: pd.DataFrame):
+        # Check Pocket pivot
+        # get the last 10 days from the last day.
+        bIsPocketPivot = False
+
+        # if last day close is plus, check the pocket pivot.
+        bIsLastDayCloseUp = inStockData['Close'].iloc[-1] > inStockData['Close'].iloc[-2]
+        if bIsLastDayCloseUp:
+            recent_10_days_volumes = inStockData[-11:-1]
+            last_day_volume = inStockData['Volume'].iloc[-1]
+            # select if 
+            price_drop_condition = recent_10_days_volumes['Close'] < recent_10_days_volumes['Close'].shift(1)
+            volume_on_price_drop_days = recent_10_days_volumes.loc[price_drop_condition, 'Volume']
+            if volume_on_price_drop_days.max() < last_day_volume:
+                bIsPocketPivot = True
+
+        return bIsPocketPivot
+
+
+def DrawStockDatas(stock_datas_dic, tickers, inStockManager, maxCnt = -1):
     stock_data = stock_datas_dic[tickers[0]]
     chart = Chart(stock_data)
-    ranksATRS = sd.get_ATRS150_exp_Ranks_Normalized(tickers[0])
-    currRank = sd.get_ATRS150_exp_Ranks(tickers[0]).iloc[-1]
+    chart.set_stock_manager(inStockManager)
+    ranksATRS = inStockManager.get_ATRS150_exp_Ranks_Normalized(tickers[0])
+    currRank = inStockManager.get_ATRS150_exp_Ranks(tickers[0]).iloc[-1]
     chart.Show(tickers[0], ranksATRS, currRank)
     if maxCnt > 0:
         num = maxCnt
@@ -1242,8 +1289,8 @@ def DrawStockDatas(stock_datas_dic, tickers, maxCnt = -1):
 
         stock_data = stock_datas_dic[ticker]
         chart.reset(stock_data)
-        ranksATRS = sd.get_ATRS150_exp_Ranks_Normalized(ticker)
-        currRank = sd.get_ATRS150_exp_Ranks(ticker).iloc[-1]
+        ranksATRS = inStockManager.get_ATRS150_exp_Ranks_Normalized(ticker)
+        currRank = inStockManager.get_ATRS150_exp_Ranks(ticker).iloc[-1]
 
         chart.Show(ticker, ranksATRS, currRank)
         index = index + chart.retVal
@@ -1328,7 +1375,7 @@ if index == 1:
             sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum)
     else:
         stock_list = sd.getStockListFromLocalCsv()
-        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, False)
+        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, True)
 
 
     ##---------------- 조건식 -----------------------------------------------------
@@ -1371,10 +1418,15 @@ if index == 1:
             gap_from_200ma =  abs((close - ma200)/close)
             bIsVolatilityLow = tc < 1 and tr < atr
 
+            bPocketPivot = sd.check_pocket_pivot(stock_data)
+            bInsideBar = sd.check_insideBar(stock_data)
+            NR_x = sd.check_NR_with_TrueRange(stock_data)
+
+
             bIsATRS_Ranking_Good = False
             try:
                 atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
-                bIsATRS_Ranking_Good = atrsRank < 500
+                bIsATRS_Ranking_Good = atrsRank < 1000
             except Exception as e:
                 print(e)
                 bIsATRS_Ranking_Good = False
@@ -1383,7 +1435,7 @@ if index == 1:
 
             if bIsUpperMA:
                 filterMatchNum = filterMatchNum + 1
-            if b_150ma_upper_than_200ma or True:
+            if b_150ma_upper_than_200ma:
                 filterMatchNum = filterMatchNum + 1
             if bMA_Slope_Plus:
                 filterMatchNum = filterMatchNum + 1
@@ -1395,7 +1447,6 @@ if index == 1:
             # 거래량, VCP, RS는 포기 못함
             if filterMatchNum >= 5 and bIsVolumeEnough:
                 selected_tickers.append(ticker)
- 
             #if filterMatchNum >= 5 and bIsVolumeEnough and bIsVolatilityLow:
                 #selected_tickers.append(ticker)
    
@@ -1434,17 +1485,15 @@ if index == 1:
 
     #data = pd.read_csv('auto.csv', encoding='euc-kr')
     #quantTickers = data['종목코드'].tolist()
-    quantTickers =['MSFT','MANH','ETNB','COCO','TWNK','SPOK','WING','ACVA','META','BMEA','NVDA','SYK','QSR','VNT']
-                        
+    #quantTickers =['COCO','ETNB','MSFT','NVDA','ACVA','SPOK','BMEA','WING','MANH','META','SYK','VNT','QSR']
     
-
-    selected_tickers = list(set(selected_tickers) & set(quantTickers))
+    #selected_tickers = list(set(selected_tickers) & set(quantTickers))
     selected_tickers.sort()
 
 
     print('filtered by quant data: \n', selected_tickers)
     print('selected tickers num: ', len(selected_tickers))
-    DrawStockDatas(out_stock_datas_dic, selected_tickers)
+    DrawStockDatas(out_stock_datas_dic, selected_tickers, sd)
     # -----------------------------------------------------------------------------------------------------
 
 
@@ -1469,6 +1518,8 @@ elif index == 7:
     sd.cook_Nday_ATRS150_exp(365*2)
     sd.cook_ATRS150_exp_Ranks(365*2)
 elif index == 8:
-    remove_outdated_tickers()
+    sd.cookUpDownDatas()
+    sd.cook_Nday_ATRS150_exp(365*2)
+    sd.cook_ATRS150_exp_Ranks(365*2)
 
 # --------------------------------------------------------------------
