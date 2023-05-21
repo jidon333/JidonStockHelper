@@ -54,6 +54,23 @@ stockIterateLimit = 99999
 
 markedTickerList = []
 
+# 딕셔너리를 JSON 파일로 저장
+def save_to_json(data, filename):
+    full_path = os.path.join(metadata_folder, f'{filename}.json')
+    with open(full_path, 'w', encoding='utf-8') as file:
+        json.dump(data, file, indent=4, ensure_ascii=False)
+    print(f"dictionary data is saved as {full_path} ")
+
+# JSON 파일을 딕셔너리로 로드
+def load_from_json(filename):
+    full_path = os.path.join(metadata_folder, f'{filename}.json')
+
+    with open(full_path, 'r', encoding='utf-8') as file:
+        loaded_data = json.load(file)
+    return loaded_data
+
+
+
 
 class Chart:
     def __init__(self, stockData = None, updown_nyse = None, updown_nasdaq = None, updown_sp500 = None):
@@ -83,6 +100,8 @@ class Chart:
         csv_path = os.path.join(metadata_folder, "industry_short_rank_score_history.csv")
         self.short_term_industry_rank_df = pd.read_csv(csv_path)
         self.short_term_industry_rank_df = self.short_term_industry_rank_df.set_index('industry')
+
+        self.top10_in_industries : dict = sd.get_top10_in_industries()
 
         if stockData is not None:
             self.fig, (self.ax1, self.ax2, self.ax3, self.ax4) = plt.subplots(
@@ -178,11 +197,16 @@ class Chart:
         trs = self.stockData['TRS'].iloc[-1]
         tc = self.stockData['TC'].iloc[-1]
 
+        top10 = self.top10_in_industries.get(industryText)
+        top10_len = 0
+        if top10 != None:
+            top10_len = len(top10)
 
 
         trueRange_NR_x = self.stockManager.check_NR_with_TrueRange(self.stockData)
         bIsInsideBar = self.stockManager.check_insideBar(self.stockData)
         bIsPocketPivot = self.stockManager.check_pocket_pivot(self.stockData)
+        bIsMaConverging, bIsPower3 = self.stockManager.check_ma_converging(self.stockData)
       
         # 좌측 info text box 설정
         if self.text_box_info != None:
@@ -202,20 +226,21 @@ class Chart:
             f"TC: {tc}\n"
             f"NR(x): {trueRange_NR_x}\n"
             f"Inside bar: {bIsInsideBar}\n"
-            f"Pocket Pivot: {bIsPocketPivot}\n\n"
-
-            f"Industry RS Score : {int(industryRanks_long['1d ago'])} \n"
+            f"Pocket Pivot: {bIsPocketPivot}\n"
+            f"MA Converging: {bIsMaConverging}\n"
+            f"Power of 3: {bIsPower3}\n"
+            f"Industry RS Score : {int(industryRanks_long['1d ago'])} \n\n"
             
-
-            #f"Industry short term RS Scores\n"
-            # f"1d ago : {int(industryRanks_short['1d ago'])}\n"
-            # f"3d ago : {int(industryRanks_short['3d ago'])}\n"
-            # f"5d ago : {int(industryRanks_short['5d ago'])}\n"
-            # f"10d ago : {int(industryRanks_short['10d ago'])}\n"
-            # f"15d ago : {int(industryRanks_short['15d ago'])}\n"
-            # f"20d ago : {int(industryRanks_short['20d ago'])}\n"
-            #f"========================\n"
             )
+
+            msg += f"Top10 in \n'{industryText}' group \n"
+            for i in range(0, top10_len):
+                top10_ticker = top10[i][0]
+                top10_rank = top10[i][1]
+                msg += f"{i+1}st: {top10_ticker}, {int(top10_rank)}\n"
+            
+            msg += f"\n========================"
+
 
             props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
             self.text_box_info = self.fig.text(0.01, 0.9,
@@ -1096,7 +1121,22 @@ class StockDataManager:
 
         # sort sector scores. the lower, the better
         sorted_sector_scores = dict(sorted(sectorTotalScoreMap.items(), key=lambda x: x[1]))
-        return sorted_sector_scores  
+        return sorted_sector_scores
+    
+
+    def get_ranks_in_industries(self, ATRS_Ranks_df, stock_GICS_df):
+        tickers_by_category = stock_GICS_df.groupby('industry')['Symbol'].apply(list).to_dict()
+
+        # get last ranks
+        last_ranks = ATRS_Ranks_df.iloc[:, -1]
+        sorted_industries_ranks_dic = {}
+        for category, tickers in tickers_by_category.items():
+            # generate sorted ticker-rank dictionary
+            industry_ranks = {ticker: last_ranks.get(ticker) for ticker in tickers if not pd.isna(last_ranks.get(ticker))}
+            sorted_ranks = sorted(industry_ranks.items(), key=lambda x: x[1])
+            sorted_industries_ranks_dic[category] = sorted_ranks
+
+        return sorted_industries_ranks_dic
 
     # cook industry ranks according to the ATRS150_Exp ranks.
     def cook_industry_long_rank_score_history(self):
@@ -1258,7 +1298,7 @@ class StockDataManager:
         # if last day close is plus, check the pocket pivot.
         bIsLastDayCloseUp = inStockData['Close'].iloc[-1] > inStockData['Close'].iloc[-2]
         if bIsLastDayCloseUp:
-            recent_10_days_volumes = inStockData[-11:-1]
+            recent_10_days_volumes = inStockData[-12:-1]
             last_day_volume = inStockData['Volume'].iloc[-1]
             # select if 
             price_drop_condition = recent_10_days_volumes['Close'] < recent_10_days_volumes['Close'].shift(1)
@@ -1268,6 +1308,124 @@ class StockDataManager:
 
         return bIsPocketPivot
 
+    # return boolean tuple (bIsConverging, bIsPower3)
+    def check_ma_converging(self, inStockData: pd.DataFrame):
+
+        bIsConverging = False
+        bIsPower3 = False
+
+        ma10_datas = inStockData['Close'].rolling(window=10).mean()
+        ma20_datas = inStockData['Close'].rolling(window=20).mean()
+        ma50_datas = inStockData['Close'].rolling(window=50).mean()
+
+        ma10 = ma10_datas.iloc[-1]
+        ma20 = ma20_datas.iloc[-1]
+        ma50 = ma50_datas.iloc[-1]
+
+        gap_10_20 =  abs((ma10 - ma20)/ma20) * 100
+        gap_10_50 =  abs((ma10 - ma50)/ma50) * 100
+        gap_20_50 =  abs((ma50 - ma20)/ma20) * 100
+
+        if gap_10_20 < 1.5 and gap_10_50 < 1.5 and gap_20_50 < 1.5:
+            bIsConverging = True
+
+        if bIsConverging:
+            low = inStockData['Low'].iloc[-1]
+            close = inStockData['Close'].iloc[-1]
+            
+            ma_list = [ma10, ma20, ma50]
+            ma_min = min(ma_list)
+            ma_max = max(ma_list)
+
+            if low < ma_min and close > ma_max:
+                bIsPower3 = True
+
+        return (bIsConverging, bIsPower3)
+
+
+        # 현 주가가 150MA 및 200MA 위에 있는가?
+        # 주가가 50일 MA위에 있는가?
+        # 200MA, 150MA 기울기가 0보다 큰가?
+        # 50MA가 150MA, 200MA 위로 상승하였는가?
+        # 거래량이 거래하기 충분한가?
+
+
+    # basically It's like a MMT. But ease the MA alignment condition.
+    # + exclude low volume stocks
+    def check_stage2(self, inStockData: pd.DataFrame):
+            close = inStockData['Close'].iloc[-1]
+            ma150 = inStockData['150MA'].iloc[-1]
+            ma200 = inStockData['200MA'].iloc[-1]
+            bIsUpperMA_150_200 = close > ma150 and close > ma200
+
+            # early rejection for optimization
+            if bIsUpperMA_150_200 == False:
+                return False
+            
+            ma150_slope = inStockData['MA150_Slope'].iloc[-1]
+            ma200_slope = inStockData['MA200_Slope'].iloc[-1]
+            ma50 = inStockData['50MA'].iloc[-1]
+            last_volume = inStockData['Volume'].iloc[-1]
+            volume_ma50 = inStockData['Volume'].rolling(window=50).mean().iloc[-1]
+            # (거래량평균 20만이상 + 10불이상 or 하루거래량 100억 이상) AND 마지막 거래량 10만주 이상
+            bIsVolumeEnough = (volume_ma50 >= 200000 and close >= 10 ) or volume_ma50*close > 10000000
+            bIsVolumeEnough = bIsVolumeEnough and last_volume >= 100000
+
+            if bIsVolumeEnough == False:
+                return False
+
+            bIsUpperMA = close > bIsUpperMA_150_200 and close > ma50
+            b_150ma_upper_than_200ma = ma150 > ma200
+            b_50ma_biggerThan_150ma_200ma = ma50 > ma150 and ma50 > ma200
+            bMA_Slope_Plus = ma150_slope > 0 and ma200_slope > 0
+
+
+            filterMatchNum = 0
+
+            if bIsUpperMA:
+                filterMatchNum = filterMatchNum + 1
+            if b_150ma_upper_than_200ma or True:
+                filterMatchNum = filterMatchNum + 1
+            if bMA_Slope_Plus:
+                filterMatchNum = filterMatchNum + 1
+            if b_50ma_biggerThan_150ma_200ma:
+                filterMatchNum = filterMatchNum + 1
+
+            return filterMatchNum >= 4
+
+
+    def cook_top10_in_industries(self):
+        ATRS_Ranks_df = sd.get_ATRS_Ranking_df()
+        csv_path = os.path.join(metadata_folder, "Stock_GICS.csv")
+        stock_GICS_df = pd.read_csv(csv_path)
+        ranks_in_industries = sd.get_ranks_in_industries(ATRS_Ranks_df, stock_GICS_df)
+        out_tickers = []
+        out_stock_datas_dic = {}
+        daysNum = 365
+        stock_list = sd.getStockListFromLocalCsv()
+        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, False)
+
+        top10_in_industries = {}
+        for industry, datas in ranks_in_industries.items():
+            top10_in_industry = []
+            for data in datas:
+                ticker, rank = data
+                stock_data = out_stock_datas_dic.get(ticker, pd.DataFrame())
+                if not stock_data.empty:
+                    bIsStage2 = sd.check_stage2(stock_data)
+                    if bIsStage2:
+                        top10_in_industry.append(data)
+
+                    if len(top10_in_industry) == 10:
+                        break
+
+            top10_in_industries[industry] = top10_in_industry
+
+        save_to_json(top10_in_industries, 'top10_in_industries')
+        
+    def get_top10_in_industries(self):
+        dic = load_from_json('top10_in_industries')
+        return dic
 
 def DrawStockDatas(stock_datas_dic, tickers, inStockManager, maxCnt = -1):
     stock_data = stock_datas_dic[tickers[0]]
@@ -1384,49 +1542,59 @@ if index == 1:
 
     # Collect Technical data for screening.
     if not bUseLocalCache:
-        filtered_data = pd.DataFrame(columns=['RS', 'TR', 'TC', 'ATR', 'MA150_Slope','MA200_Slope', 'Close', '150MA', '200MA', '50MA', 'Volume'])
+
+        search_start_time = time.time()
 
         selected_tickers = []
-        match_three= []
-        match_four = []
-        match_five = []
-
+    
         atrs_ranking_df = sd.get_ATRS_Ranking_df()
 
-        # 각 종목들의 'RS'와 'MA150_Slope' 값을 추출하여 DataFrame으로 저장합니다.
-        for ticker, stock_data in out_stock_datas_dic.items():
-            rs = stock_data['RS'].iloc[-1]
-            ma150_slope = stock_data['MA150_Slope'].iloc[-1]
-            ma200_slope = stock_data['MA200_Slope'].iloc[-1]
-            close = stock_data['Close'].iloc[-1]
-            ma150 = stock_data['150MA'].iloc[-1]
-            ma200 = stock_data['200MA'].iloc[-1]
-            ma50 = stock_data['50MA'].iloc[-1]
-            tr = stock_data['TR'].iloc[-1]
-            tc = stock_data['TC'].iloc[-1]
-            atr = stock_data['ATR'].iloc[-1]
-            volume_ma50 = stock_data['Volume'].rolling(window=50).mean().iloc[-1]
-            bIsVolumeEnough = (volume_ma50 >= 200000 and close >= 10) or volume_ma50*close > 10000000
+        for ticker, inStockData in out_stock_datas_dic.items():
 
-            bIsUpperMA = close > ma150 and close > ma200 and close > ma50
+            close = inStockData['Close'].iloc[-1]
+            ma150 = inStockData['150MA'].iloc[-1]
+            ma200 = inStockData['200MA'].iloc[-1]
+            bIsUpperMA_150_200 = close > ma150 and close > ma200
+
+            # early rejection for optimization
+            if bIsUpperMA_150_200 == False:
+                continue
+            
+
+            rs = inStockData['RS'].iloc[-1]
+            ma150_slope = inStockData['MA150_Slope'].iloc[-1]
+            ma200_slope = inStockData['MA200_Slope'].iloc[-1]
+       
+            ma50 = inStockData['50MA'].iloc[-1]
+            ma20 = inStockData['Close'].rolling(window=20).mean().iloc[-1]
+            ma10 = inStockData['Close'].rolling(window=10).mean().iloc[-1]
+            tr = inStockData['TR'].iloc[-1]
+            tc = inStockData['TC'].iloc[-1]
+            atr = inStockData['ATR'].iloc[-1]
+            last_volume = inStockData['Volume'].iloc[-1]
+            volume_ma50 = inStockData['Volume'].rolling(window=50).mean().iloc[-1]
+            # (거래량평균 20만이상 + 10불이상 or 하루거래량 100억 이상) AND 마지막 거래량 10만주 이상
+            bIsVolumeEnough = (volume_ma50 >= 200000 and close >= 10 ) or volume_ma50*close > 10000000
+            bIsVolumeEnough = bIsVolumeEnough and last_volume >= 100000
+            bIsUpperMA = close > bIsUpperMA_150_200 and close > ma50
             b_150ma_upper_than_200ma = ma150 > ma200
             bMA_Slope_Plus = ma150_slope > 0 and ma200_slope > 0
             b_50ma_biggerThan_150ma_200ma = ma50 > ma150 and ma50 > ma200
 
             bIsRSGood = rs > 0
-            gap_from_50ma =  abs((close - ma50)/close)
-            gap_from_200ma =  abs((close - ma200)/close)
+
+            gap_from_10ma =  abs((ma10 - close)/close) * 100
+            gap_from_20ma =  abs((ma20 - close)/close) * 100
+            gap_from_50ma =  abs((ma50 - close)/close) * 100
+            gap_from_200ma =  abs((ma200 - close)/close) * 100
+            bIsPriceNearMA = (gap_from_10ma < 5) or (gap_from_20ma < 5)
+
             bIsVolatilityLow = tc < 1 and tr < atr
-
-            bPocketPivot = sd.check_pocket_pivot(stock_data)
-            bInsideBar = sd.check_insideBar(stock_data)
-            NR_x = sd.check_NR_with_TrueRange(stock_data)
-
 
             bIsATRS_Ranking_Good = False
             try:
                 atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
-                bIsATRS_Ranking_Good = atrsRank < 1000
+                bIsATRS_Ranking_Good = atrsRank < 700
             except Exception as e:
                 print(e)
                 bIsATRS_Ranking_Good = False
@@ -1444,29 +1612,26 @@ if index == 1:
             if bIsATRS_Ranking_Good:
                 filterMatchNum = filterMatchNum + 1
 
+            # # 기본 MMT 만족 종목에 대해서만 계산하도록 하자.
+            # bPocketPivot = sd.check_pocket_pivot(inStockData)
+            # bInsideBar = sd.check_insideBar(inStockData)
+            # NR_x = sd.check_NR_with_TrueRange(inStockData)
+            # bConverging, bPower3 = sd.check_ma_converging(inStockData)
+
+
             # 거래량, VCP, RS는 포기 못함
             if filterMatchNum >= 5 and bIsVolumeEnough:
-                selected_tickers.append(ticker)
-            #if filterMatchNum >= 5 and bIsVolumeEnough and bIsVolatilityLow:
-                #selected_tickers.append(ticker)
+                bConverging, bPower3 = sd.check_ma_converging(inStockData)
+                if bConverging:
+                    selected_tickers.append(ticker)
    
-        # # HTS ScreenerList와의 교집합 티커 수집
-        # data = pd.read_csv('ScreenerList.csv')
-        # quantTickers = data['종목코드'].tolist()
-        # quantTickers = [s.split(':')[1] for s in quantTickers]
+    
+        search_end_time = time.time()
+        execution_time = search_end_time - search_start_time
+        print(f"Search tiem elapsed: {execution_time}sec")
 
-        # selected_tickers = list(set(selected_tickers) & set(quantTickers))
-        # selected_tickers.sort()
 
-        # # '종목명'에 '애퀴지션'이 들어가는 종목 제외
-        # new_selected_tickers = []
-        # for ticker in selected_tickers:
-        #     name = data.loc[data['종목코드'].str.contains(f":{ticker}"), '종목명'].values[0]
-        #     if '애퀴지션' not in name and '트러스트' not in name:
-        #         new_selected_tickers.append(ticker)
-        # selected_tickers = new_selected_tickers
 
-        
 
     elif bUseLocalCache:
         selected_tickers = out_tickers
@@ -1482,11 +1647,11 @@ if index == 1:
             pickle.dump(out_stock_datas_dic, f)
 
 
+    # 0516 list
+    #quantTickers = ['DLB', 'CCJ', 'ELF', 'DXCM', 'APPF', 'BSY', 'CBAY', 'CCS', 'LLY', 'LRCX', 'MELI', 'PHM', 'PTGX', 'RMBS', 'SHAK', 'SHOP', 'DECK', 'DT', 'EXP', 'FLYW', 'GOOS', 'ONON']
+    #quantTickers = ['BSY']
 
-    #data = pd.read_csv('auto.csv', encoding='euc-kr')
-    #quantTickers = data['종목코드'].tolist()
-    #quantTickers =['COCO','ETNB','MSFT','NVDA','ACVA','SPOK','BMEA','WING','MANH','META','SYK','VNT','QSR']
-    
+
     #selected_tickers = list(set(selected_tickers) & set(quantTickers))
     selected_tickers.sort()
 
@@ -1508,6 +1673,7 @@ elif index == 3:
     sd.cook_ATRS150_exp_Ranks(365*2)
     sd.cook_industry_short_rank_score_history()
     sd.cook_industry_long_rank_score_history()
+    sd.cook_top10_in_industries()
 elif index == 4:
     sd.cookUpDownDatas()
 elif index == 5:
@@ -1518,8 +1684,7 @@ elif index == 7:
     sd.cook_Nday_ATRS150_exp(365*2)
     sd.cook_ATRS150_exp_Ranks(365*2)
 elif index == 8:
-    sd.cookUpDownDatas()
-    sd.cook_Nday_ATRS150_exp(365*2)
-    sd.cook_ATRS150_exp_Ranks(365*2)
-
+    sd.cook_industry_short_rank_score_history()
+    sd.cook_industry_long_rank_score_history()
+    sd.cook_top10_in_industries()
 # --------------------------------------------------------------------
