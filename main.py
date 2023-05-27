@@ -87,20 +87,6 @@ class Chart:
         self.updown_nasdaq = updown_nasdaq
         self.updown_sp500 = updown_sp500
 
-        csv_path = os.path.join(metadata_folder, "Stock_GICS.csv")
-        self.stock_GICS_df = pd.read_csv(csv_path)
-        self.stock_GICS_df = self.stock_GICS_df.set_index('Symbol')
-        self.industryNum = self.stock_GICS_df['industry'].nunique()
-
-
-        csv_path = os.path.join(metadata_folder, "industry_long_rank_score_history.csv")
-        self.long_term_industry_rank_df = pd.read_csv(csv_path)
-        self.long_term_industry_rank_df = self.long_term_industry_rank_df.set_index('industry')
-
-        csv_path = os.path.join(metadata_folder, "industry_short_rank_score_history.csv")
-        self.short_term_industry_rank_df = pd.read_csv(csv_path)
-        self.short_term_industry_rank_df = self.short_term_industry_rank_df.set_index('industry')
-
         self.top10_in_industries : dict = sd.get_top10_in_industries()
 
         if stockData is not None:
@@ -118,15 +104,14 @@ class Chart:
         self.stockManager = inStockManager
 
     def get_sector(self, ticker):
-        return self.stock_GICS_df.loc[ticker]['sector']
+        GICS_df = self.stockManager.get_GICS_df()
+        return GICS_df.loc[ticker]['sector']
     def get_industry(self, ticker):
-        return self.stock_GICS_df.loc[ticker]['industry']
+        GICS_df = self.stockManager.get_GICS_df()
+        return GICS_df.loc[ticker]['industry']
     
-    def get_long_term_industry_ranks(self, industryName):
-        return self.long_term_industry_rank_df.loc[industryName]
-    
-    def get_short_term_industry_ranks(self, industryName):
-        return self.short_term_industry_rank_df.loc[industryName]
+    def get_long_term_industry_rank_scores(self, industryName):
+        return sd.get_long_term_industry_rank_scores(industryName)
     
     def reset(self, stockData):
         self.stockData = stockData
@@ -214,8 +199,7 @@ class Chart:
             self.text_box_info = None
 
         if not pd.isna(industryText):
-            industryRanks_long = self.get_long_term_industry_ranks(industryText)
-            industryRanks_short = self.get_short_term_industry_ranks(industryText)
+            industryRanks_long = self.get_long_term_industry_rank_scores(industryText)
 
             msg = (
             f"========================\n"
@@ -283,7 +267,7 @@ class Chart:
                         self.stockData['Volume'], alpha=0.3, color='blue', width=0.7)
             self.ax2.set_ylabel('Volume')
 
-        ############### Rank data를 그래프에 추가하기 ###############
+        ############## Rank data를 그래프에 추가하기 ###############
         ranks_atrs_exp_df = ranks_atrs.to_frame()
         ranks_atrs_exp_df.index = pd.to_datetime(ranks_atrs_exp_df.index) # 문자열을 datetime 객체로 변경
 
@@ -356,6 +340,11 @@ class StockDataManager:
         self.index_data = fdr.DataReader('US500')
 
         self.csv_names = [os.path.splitext(f)[0] for f in os.listdir(data_folder) if f.endswith('.csv')]
+
+        self.stock_GICS_df = pd.DataFrame()
+
+        self.long_term_industry_rank_df = pd.DataFrame()
+        self.short_term_industry_rank_df = pd.DataFrame()
 
 # ------------------- private -----------------------------------------------
     def _CookIndexData(self, index_data, n = 14):
@@ -1092,6 +1081,17 @@ class StockDataManager:
 
 
         return result_df
+    
+
+    def get_GICS_df(self):
+        if self.stock_GICS_df.empty:
+            # TODO: 예외처리 추가
+            csv_path = os.path.join(metadata_folder, "Stock_GICS.csv")
+            self.stock_GICS_df = pd.read_csv(csv_path)
+            self.stock_GICS_df = self.stock_GICS_df.set_index('Symbol')
+        
+        return self.stock_GICS_df
+
    
     # method: industry or sector
     # N_day_before: rank will be calculated at the [:, -N_day_before].
@@ -1139,8 +1139,8 @@ class StockDataManager:
         return sorted_industries_ranks_dic
 
     # cook industry ranks according to the ATRS150_Exp ranks.
-    def cook_industry_long_rank_score_history(self):
-        print('cook_industry_long_rank_score_history')
+    def cook_long_term_industry_rank_scores(self):
+        print('cook_long_term_industry_rank_scores')
         ATRS_Ranks_df = sd.get_ATRS_Ranking_df()
         csv_path = os.path.join(metadata_folder, "Stock_GICS.csv")
         stock_GICS_df = pd.read_csv(csv_path)
@@ -1184,10 +1184,10 @@ class StockDataManager:
         rank_history_df = rank_history_df.sort_values(by=last_col_name, ascending=False)
 
 
-        save_path = os.path.join(metadata_folder, "industry_long_rank_score_history.csv")
+        save_path = os.path.join(metadata_folder, "long_term_industry_rank_scores.csv")
         rank_history_df.index.name = 'industry'
         rank_history_df.to_csv(save_path, encoding='utf-8-sig')
-        print('industry_long_rank_score_history.csv cooked!')
+        print('long_term_industry_rank_scores.csv cooked!')
 
     def get_industry_atrs14_mean(self, stock_data_dic, stock_GICS_df, N_day_before = 1, method : str = 'industry'):
             category = method
@@ -1217,8 +1217,8 @@ class StockDataManager:
             return sorted_sector_scores
 
     # cook industry ranks according to the atrs14_exp.
-    def cook_industry_short_rank_score_history(self):
-        print('cook_industry_short_rank_score_history')
+    def cook_short_term_industry_rank_scores(self):
+        print('cook_short_term_industry_rank_scores')
 
         all_list = sd.getStockListFromLocalCsv()
         out_tickers = [] 
@@ -1266,9 +1266,9 @@ class StockDataManager:
         last_col_name = rank_history_df.columns[-1]
         rank_history_df = rank_history_df.sort_values(by=last_col_name, ascending=False)
 
-        save_path = os.path.join(metadata_folder, "industry_short_rank_score_history.csv")
+        save_path = os.path.join(metadata_folder, "short_term_industry_rank_scores.csv")
         rank_history_df.to_csv(save_path, encoding='utf-8-sig')
-        print('industry_short_rank_score_history.csv cooked!')
+        print('short_term_industry_rank_scores.csv cooked!')
 
     def check_NR_with_TrueRange(self, inStockData : pd.DataFrame , maxDepth = 20):
         # Calcaute NR(x) using True Range.
@@ -1342,13 +1342,75 @@ class StockDataManager:
 
         return (bIsConverging, bIsPower3)
 
+    
+    # check the low and close gap from the ma
+    def check_near_ma(self, inStockData: pd.DataFrame, MA_Num = 10, max_gap_pct = 1.5):
+        ma_datas = inStockData['Close'].rolling(window=MA_Num).mean()
 
-        # 현 주가가 150MA 및 200MA 위에 있는가?
-        # 주가가 50일 MA위에 있는가?
-        # 200MA, 150MA 기울기가 0보다 큰가?
-        # 50MA가 150MA, 200MA 위로 상승하였는가?
-        # 거래량이 거래하기 충분한가?
+        low = inStockData['Low'].iloc[-1]
+        close = inStockData['Close'].iloc[-1]
+        ma = ma_datas.iloc[-1]
 
+        gap_from_close = abs((ma - close)/close) * 100
+        gap_from_low = abs((ma - low)/low) * 100
+
+        return gap_from_close < max_gap_pct or gap_from_low < max_gap_pct
+   
+
+    def check_supported_by_ma(self, inStockData: pd.DataFrame, MA_Num = 10, max_gap_pct = 1.5):
+        print('low > ma and low and ma gap < max_gap_pct')
+        # OR
+        print('low < ma and close > ma')
+
+
+    def cook_stock_info_from_tickers(self, inTickers : list, fileName : str, bUseDataCache = True):
+        stock_list = self.getStockListFromLocalCsv()
+        out_tickers = []
+        out_stock_datas_dic = {}
+        daysNum = 365
+        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, bUseDataCache)
+        atrs_ranking_df = sd.get_ATRS_Ranking_df()
+
+        stock_info_dic = {}
+
+        for ticker in inTickers:
+            gisc_df = sd.get_GICS_df()
+            industry = gisc_df.loc[ticker]['industry']
+            scores = sd.get_long_term_industry_rank_scores(industry)
+            if not scores.empty:
+                industry_score = sd.get_long_term_industry_rank_scores(industry).iloc[-1]
+            else:
+                print(f'can not find industry rank score from ticker: {ticker}, industry: {industry}')
+
+            stockData = out_stock_datas_dic.get(ticker)
+            atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
+            
+            bPocketPivot = sd.check_pocket_pivot(stockData)
+            bInsideBar = sd.check_insideBar(stockData)
+            NR_x = sd.check_NR_with_TrueRange(stockData)
+            bConverging, bPower3 = sd.check_ma_converging(stockData)
+            bNearMA = sd.check_near_ma(stockData)
+
+            stock_info_dic[ticker] = [industry, industry_score, int(atrsRank), bConverging, bPocketPivot, bInsideBar, NR_x]
+
+
+        df = pd.DataFrame.from_dict(stock_info_dic).transpose()
+        columns = ['Industry', 'Industry Score', 'RS Rank', 'MA Converging', 'Pocket Pivot', 'Inside bar', 'NR(x)']
+        df.columns = columns
+        df.index.name = 'Industry'
+
+        save_path = os.path.join(metadata_folder, f'{fileName}.csv')
+        df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
+        print(f'{fileName}.csv', 'is saved!')
+
+           
+        
+
+    # 현 주가가 150MA 및 200MA 위에 있는가?
+    # 주가가 50일 MA위에 있는가?
+    # 200MA, 150MA 기울기가 0보다 큰가?
+    # 50MA가 150MA, 200MA 위로 상승하였는가?
+    # 거래량이 거래하기 충분한가?
 
     # basically It's like a MMT. But ease the MA alignment condition.
     # + exclude low volume stocks
@@ -1422,6 +1484,37 @@ class StockDataManager:
             top10_in_industries[industry] = top10_in_industry
 
         save_to_json(top10_in_industries, 'top10_in_industries')
+
+
+    def get_long_term_industry_rank_scores_df(self):
+        if self.long_term_industry_rank_df.empty:
+            csv_path = os.path.join(metadata_folder, "long_term_industry_rank_scores.csv")
+            self.long_term_industry_rank_df = pd.read_csv(csv_path)
+            self.long_term_industry_rank_df = self.long_term_industry_rank_df.set_index('industry')
+
+        return self.long_term_industry_rank_df
+    
+    def get_long_term_industry_rank_scores(self, industryName):
+        df = self.get_long_term_industry_rank_scores_df()
+        try:
+            result = df.loc[industryName]
+        except Exception as e:
+            result = pd.Series()
+            print(e)
+            print(f"{industryName} does not exist in the DataFrame. Returning pd.Series().")
+
+        return result
+
+    def get_short_term_industry_rank_scores_df(self):
+        if self.short_term_industry_rank_df.empty:
+            csv_path = os.path.join(metadata_folder, "short_term_industry_rank_scores.csv")
+            self.short_term_industry_rank_df = pd.read_csv(csv_path)
+            self.short_term_industry_rank_df = self.short_term_industry_rank_df.set_index('industry')
+
+        return self.short_term_industry_rank_df
+
+
+        
         
     def get_top10_in_industries(self):
         dic = load_from_json('top10_in_industries')
@@ -1497,6 +1590,20 @@ def get_yes_no_input(qustionString):
             print('input \'y\' or \'n\' to continue...')
 
 
+def cook_infos_from_last_searched_tickers(inStockManager : StockDataManager, inFileName):
+    tickers = []
+    try:
+        with open('cache_tickers', "rb") as f:
+            tickers = pickle.load(f)
+        
+    except FileNotFoundError:
+        print(f'Can not find your last searched ticker list file \'cache_tickers\' ')
+
+    if len(tickers) != 0:
+        sd.cook_stock_info_from_tickers(tickers, inFileName)
+
+
+
 print("Select the chart type. \n \
       1: Stock Data Chart \n \
       2: Momentum Index Chart \n \
@@ -1505,7 +1612,8 @@ print("Select the chart type. \n \
       5: cook local stock data. \n \
       6: Download stock data from web and overwrite local files. (It will takes so long...) \n \
       7: cook ATRS Ranking \n \
-      8: cook industry Ranking \n")
+      8: cook industry Ranking \n \
+      9: cook stock infos from the last searched tickers \n")
 
 index = int(input())
 
@@ -1537,8 +1645,6 @@ if index == 1:
 
 
     ##---------------- 조건식 -----------------------------------------------------
-
-
 
     # Collect Technical data for screening.
     if not bUseLocalCache:
@@ -1594,7 +1700,7 @@ if index == 1:
             bIsATRS_Ranking_Good = False
             try:
                 atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
-                bIsATRS_Ranking_Good = atrsRank < 700
+                bIsATRS_Ranking_Good = atrsRank < 1000
             except Exception as e:
                 print(e)
                 bIsATRS_Ranking_Good = False
@@ -1617,13 +1723,13 @@ if index == 1:
             # bInsideBar = sd.check_insideBar(inStockData)
             # NR_x = sd.check_NR_with_TrueRange(inStockData)
             # bConverging, bPower3 = sd.check_ma_converging(inStockData)
+            #bNearMA = sd.check_near_ma(inStockData)
 
 
             # 거래량, VCP, RS는 포기 못함
             if filterMatchNum >= 5 and bIsVolumeEnough:
-                bConverging, bPower3 = sd.check_ma_converging(inStockData)
-                if bConverging:
-                    selected_tickers.append(ticker)
+                selected_tickers.append(ticker)
+
    
     
         search_end_time = time.time()
@@ -1637,21 +1743,17 @@ if index == 1:
         selected_tickers = out_tickers
 
 
+    # 데이터를 파일에 저장
     if not bUseLocalCache:
-        # 데이터를 파일에 저장
         with open('cache_tickers', "wb") as f:
             pickle.dump(selected_tickers, f)
 
-        # 파일에서 데이터를 불러옴
         with open('cache_stock_datas_dic', "wb") as f:
             pickle.dump(out_stock_datas_dic, f)
 
 
-    # 0516 list
-    #quantTickers = ['DLB', 'CCJ', 'ELF', 'DXCM', 'APPF', 'BSY', 'CBAY', 'CCS', 'LLY', 'LRCX', 'MELI', 'PHM', 'PTGX', 'RMBS', 'SHAK', 'SHOP', 'DECK', 'DT', 'EXP', 'FLYW', 'GOOS', 'ONON']
-    #quantTickers = ['BSY']
-
-
+    # pocket pivot
+    #quantTickers = ['LTH']
     #selected_tickers = list(set(selected_tickers) & set(quantTickers))
     selected_tickers.sort()
 
@@ -1671,8 +1773,8 @@ elif index == 3:
     sd.cookUpDownDatas()
     sd.cook_Nday_ATRS150_exp(365*2)
     sd.cook_ATRS150_exp_Ranks(365*2)
-    sd.cook_industry_short_rank_score_history()
-    sd.cook_industry_long_rank_score_history()
+    sd.cook_short_term_industry_rank_scores()
+    sd.cook_long_term_industry_rank_scores()
     sd.cook_top10_in_industries()
 elif index == 4:
     sd.cookUpDownDatas()
@@ -1684,7 +1786,10 @@ elif index == 7:
     sd.cook_Nday_ATRS150_exp(365*2)
     sd.cook_ATRS150_exp_Ranks(365*2)
 elif index == 8:
-    sd.cook_industry_short_rank_score_history()
-    sd.cook_industry_long_rank_score_history()
+    sd.cook_short_term_industry_rank_scores()
+    sd.cook_long_term_industry_rank_scores()
     sd.cook_top10_in_industries()
+elif index == 9:
+    cook_infos_from_last_searched_tickers(sd, 'US_MMT_0528')
+
 # --------------------------------------------------------------------
