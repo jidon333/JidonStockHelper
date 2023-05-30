@@ -50,6 +50,12 @@ sync_fail_ticker_list = []
 data_folder = os.path.join(os.getcwd(), 'StockData')
 metadata_folder = os.path.join(data_folder, 'MetaData')
 
+if not os.path.exists(data_folder):
+    os.makedirs(data_folder)
+
+if not os.path.exists(metadata_folder):
+    os.makedirs(metadata_folder)
+
 stockIterateLimit = 99999
 
 markedTickerList = []
@@ -198,6 +204,7 @@ class Chart:
             self.text_box_info.remove()
             self.text_box_info = None
 
+        industryRanks_long = pd.Series(dtype='float64')
         if not pd.isna(industryText):
             industryRanks_long = self.get_long_term_industry_rank_scores(industryText)
 
@@ -251,7 +258,7 @@ class Chart:
         # Draw industry ranks to the ax2 instead of volumes
         stockDataLen = len(self.stockData['Close'].index)
         # Can not draw chart if the stock data len is longer than industry rank data.
-        if stockDataLen < len(industryRanks_long):
+        if not industryRanks_long.empty and stockDataLen < len(industryRanks_long):
             long_industry_rank_datas = industryRanks_long.values[-stockDataLen:]
             long_industry_rank_reindexed = pd.Series(long_industry_rank_datas, index=self.stockData['Close'].index)
 
@@ -338,7 +345,6 @@ class Chart:
 class StockDataManager:
     def __init__(self):
         self.index_data = fdr.DataReader('US500')
-
         self.csv_names = [os.path.splitext(f)[0] for f in os.listdir(data_folder) if f.endswith('.csv')]
 
         self.stock_GICS_df = pd.DataFrame()
@@ -752,7 +758,7 @@ class StockDataManager:
 
         self._ExportDatasToCsv(sync_data_dic)
 
-        with open('download_fail_list.txt', 'wb') as f:
+        with open('download_fail_list.txt', 'w') as f:
             outputTexts = str()
             for ticker in sync_fail_ticker_list:
                 outputTexts += str(ticker) + '\n'
@@ -1622,7 +1628,6 @@ out_tickers = []
 out_stock_datas_dic = {}
 
 if index == 1:
-
     bUseLocalCache = get_yes_no_input('Do you want to see last chart data? \n It will use cached local data and it will save loading time. \n (y/n)')
     daysNum = int(365)
 
@@ -1641,7 +1646,7 @@ if index == 1:
             sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum)
     else:
         stock_list = sd.getStockListFromLocalCsv()
-        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, True)
+        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, False)
 
 
     ##---------------- 조건식 -----------------------------------------------------
@@ -1753,7 +1758,7 @@ if index == 1:
 
 
     # pocket pivot
-    #quantTickers = ['LTH']
+    #quantTickers = ['ALSN', 'PLTR', 'APG', 'CCJ', 'IDCC', 'RCL', 'SKYW', 'SMAR', 'SPSC', 'VRSN', 'XPO', 'KEX', 'ALSN']
     #selected_tickers = list(set(selected_tickers) & set(quantTickers))
     selected_tickers.sort()
 
@@ -1781,7 +1786,12 @@ elif index == 4:
 elif index == 5:
     sd.cookLocalStockData()
 elif index == 6:
+    remove_local_caches()
     sd.downloadStockDatasFromWeb(365*6, False)
+    remove_outdated_tickers()
+    sd.remove_acquisition_tickers()
+    sd.cook_Stock_GICS_df()
+
 elif index == 7:
     sd.cook_Nday_ATRS150_exp(365*2)
     sd.cook_ATRS150_exp_Ranks(365*2)
