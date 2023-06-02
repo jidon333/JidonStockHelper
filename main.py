@@ -198,6 +198,31 @@ class Chart:
         bIsInsideBar = self.stockManager.check_insideBar(self.stockData)
         bIsPocketPivot = self.stockManager.check_pocket_pivot(self.stockData)
         bIsMaConverging, bIsPower3 = self.stockManager.check_ma_converging(self.stockData)
+        
+        bNearMa10 = self.stockManager.check_near_ma(self.stockData, 10, 1.5)
+        bNearMa20 = self.stockManager.check_near_ma(self.stockData, 20, 1.5)
+        bNearMa50 = self.stockManager.check_near_ma(self.stockData, 50, 1.5)
+
+        bSupported_by_ma10 = self.stockManager.check_supported_by_ma(self.stockData, 10, 1.5)
+        bSupported_by_ma20 = self.stockManager.check_supported_by_ma(self.stockData, 20, 1.5)
+        bSupported_by_ma50 = self.stockManager.check_supported_by_ma(self.stockData, 50, 1.5)
+
+        near_ma_list = []
+        if bNearMa10:
+            near_ma_list.append(10)
+        if bNearMa20:
+            near_ma_list.append(20)
+        if bNearMa50:
+            near_ma_list.append(50)
+
+        supported_by_ma_list = []
+        if bSupported_by_ma10:
+            supported_by_ma_list.append(10)
+        if bSupported_by_ma20:
+            supported_by_ma_list.append(20)
+        if bSupported_by_ma50:
+            supported_by_ma_list.append(50)
+
       
         # 좌측 info text box 설정
         if self.text_box_info != None:
@@ -219,8 +244,12 @@ class Chart:
             f"Inside bar: {bIsInsideBar}\n"
             f"Pocket Pivot: {bIsPocketPivot}\n"
             f"MA Converging: {bIsMaConverging}\n"
+            f"Near MA : {near_ma_list}\n"
+            f"MA Supported by: {supported_by_ma_list}\n"
+            f"MA Converging: {bIsMaConverging}\n"
+
             f"Power of 3: {bIsPower3}\n"
-            f"Industry RS Score : {int(industryRanks_long['1d ago'])} \n\n"
+            f"Industry RS Score : {int(industryRanks_long.get('1d ago', 0))} \n\n"
             
             )
 
@@ -1357,16 +1386,31 @@ class StockDataManager:
         close = inStockData['Close'].iloc[-1]
         ma = ma_datas.iloc[-1]
 
-        gap_from_close = abs((ma - close)/close) * 100
-        gap_from_low = abs((ma - low)/low) * 100
+        ma_gap_from_close = abs((ma - close)/close) * 100
+        ma_gap_from_low = abs((ma - low)/low) * 100
 
-        return gap_from_close < max_gap_pct or gap_from_low < max_gap_pct
+        return ma_gap_from_close < max_gap_pct or ma_gap_from_low < max_gap_pct
    
 
     def check_supported_by_ma(self, inStockData: pd.DataFrame, MA_Num = 10, max_gap_pct = 1.5):
-        print('low > ma and low and ma gap < max_gap_pct')
-        # OR
-        print('low < ma and close > ma')
+        # print('low > ma and low and ma gap < max_gap_pct')
+        # print('low < ma and close > ma')
+
+        ma_datas = inStockData['Close'].rolling(window=MA_Num).mean()
+        low = inStockData['Low'].iloc[-1]
+        close = inStockData['Close'].iloc[-1]
+        ma = ma_datas.iloc[-1]
+
+        gap_from_close = abs((ma - close)/close) * 100
+        gap_from_low = abs((ma - low)/low) * 100
+
+
+        if low > ma and gap_from_low < max_gap_pct:
+            return True
+        if low < ma and close > ma:
+            return True
+
+        return False
 
 
     def cook_stock_info_from_tickers(self, inTickers : list, fileName : str, bUseDataCache = True):
@@ -1724,7 +1768,7 @@ if index == 1:
                 filterMatchNum = filterMatchNum + 1
 
             # # 기본 MMT 만족 종목에 대해서만 계산하도록 하자.
-            # bPocketPivot = sd.check_pocket_pivot(inStockData)
+            #bPocketPivot = sd.check_pocket_pivot(inStockData)
             # bInsideBar = sd.check_insideBar(inStockData)
             # NR_x = sd.check_NR_with_TrueRange(inStockData)
             # bConverging, bPower3 = sd.check_ma_converging(inStockData)
@@ -1758,7 +1802,7 @@ if index == 1:
 
 
     # pocket pivot
-    #quantTickers = ['ALSN', 'PLTR', 'APG', 'CCJ', 'IDCC', 'RCL', 'SKYW', 'SMAR', 'SPSC', 'VRSN', 'XPO', 'KEX', 'ALSN']
+    #quantTickers = ['SYM']
     #selected_tickers = list(set(selected_tickers) & set(quantTickers))
     selected_tickers.sort()
 
@@ -1800,6 +1844,6 @@ elif index == 8:
     sd.cook_long_term_industry_rank_scores()
     sd.cook_top10_in_industries()
 elif index == 9:
-    cook_infos_from_last_searched_tickers(sd, 'US_MMT_0528')
+    cook_infos_from_last_searched_tickers(sd, 'US_MMT_0602')
 
 # --------------------------------------------------------------------
