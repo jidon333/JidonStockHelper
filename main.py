@@ -17,6 +17,7 @@ from matplotlib.dates import num2date
 import matplotlib.font_manager as fm
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.widgets import TextBox, Button
+import matplotlib.dates as mdates
 
 import numpy as np
 import pandas as pd
@@ -80,6 +81,9 @@ def load_from_json(filename):
 
 class Chart:
     def __init__(self, stockData = None, updown_nyse = None, updown_nasdaq = None, updown_sp500 = None):
+
+        self.bDrawBarChart = True
+        self.bDrawingUpDownChart = False
         
         self.stockManager : StockDataManager = None
 
@@ -148,8 +152,17 @@ class Chart:
                                         transform=drawAxis.transAxes,
                                         ha='center', va='top')
         else:
-            self.text_box_coordinate.set_text(
-                f'x = {num2date(x).strftime("%Y-%m-%d")}, y = {y:.2f}')
+                if self.bDrawBarChart and not self.bDrawingUpDownChart:
+                    x = int(x)
+                    if x < 0 : x=0
+                    if x > len(self.stockData): x = len(self.stockData) - 1
+                    index = self.stockData.index[x]
+                    x_axis_str = pd.to_datetime(index).strftime('%Y-%m-%d')
+                    self.text_box_coordinate.set_text(
+                    f'x = {x_axis_str}, y = {y:.2f}')
+                else:
+                    self.text_box_coordinate.set_text(
+                    f'x = {num2date(x).strftime("%Y-%m-%d")}, y = {y:.2f}')
 
         self.fig.canvas.draw()
 
@@ -169,6 +182,37 @@ class Chart:
                 markedTickerList.append(ticker)
             print(ticker, 'is marked!')
             
+    def _draw_bar_chart_ax1(self, in_stock_date):
+        ### 바 차트 ###
+        # 선을 그리기위해 기존의 yy-mm-dd 형식의 Date 인덱스를 0~N 사이의 정수로 변경
+        temp_df = in_stock_date
+        temp_df = temp_df.reset_index()
+        horizontal_OHLC_length = 0.2
+        x = np.arange(0,len(temp_df))
+        for idx, val in temp_df.iterrows():
+            color = 'green'
+            if val['Open'] > val['Close']:
+                color = 'red'
+
+            # 바 차트를 위한 선 그리기
+            self.ax1.plot([x[idx], x[idx]], [val['Low'], val['High']], color = color)
+            self.ax1.plot([x[idx], x[idx]+horizontal_OHLC_length], 
+                    [val['Close'], val['Close']], 
+                    color=color)
+
+        # 그래프 설정
+        self.ax1.plot(temp_df['200MA'], label='MA200', color='green')
+        self.ax1.plot(temp_df['150MA'], label='MA150', color='blue')
+        self.ax1.plot(temp_df['50MA'], label='MA50', color='orange')
+
+        self.ax1.set_xticks(x[::40])
+        self.ax1.set_xticklabels(self.stockData.index[::40].date)
+
+    def _draw_line_chart_ax1(self, in_stock_date):
+        self.ax1.plot(in_stock_date['Close'], label='Close')
+        self.ax1.plot(in_stock_date['200MA'], label='MA200', color='green')
+        self.ax1.plot(in_stock_date['150MA'], label='MA150', color='blue')
+        self.ax1.plot(in_stock_date['50MA'], label='MA50', color='orange')
 
     def Show(self, titleName, ranks_atrs, curr_rank):
         # 차트 그리기
@@ -272,16 +316,15 @@ class Chart:
 
         self.ax1.cla()
 
-        # 그래프 설정
-        self.ax1.plot(self.stockData['Close'], label='Close')
-        self.ax1.plot(self.stockData['200MA'], label='MA200', color='green')
-        self.ax1.plot(self.stockData['150MA'], label='MA150', color='blue')
-        self.ax1.plot(self.stockData['50MA'], label='MA50', color='orange')
+
+        if self.bDrawBarChart:
+            self._draw_bar_chart_ax1(self.stockData)
+        else:
+            self._draw_line_chart_ax1(self.stockData)
 
         self.ax1.legend(loc='lower left')
         self.ax1.grid()
         self.ax1.set_title(titleStr, fontproperties=fontprop)
-
 
 
         # Draw industry ranks to the ax2 instead of volumes
@@ -331,7 +374,6 @@ class Chart:
         self.ax4.fill_between(self.stockData.index, self.stockData['ATRS_Exp'], 0, where=self.stockData['ATRS_Exp'] >= 0, color='green', alpha=0.3)
         self.ax4.axhline(y=0, color='black', linestyle='--')
 
-
         plt.draw()
 
         while True:
@@ -342,6 +384,9 @@ class Chart:
                 break
 
     def draw_updown_chart(self):
+
+        self.bDrawingUpDownChart = True
+
 
         self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
         self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)
@@ -1666,6 +1711,7 @@ print("Select the chart type. \n \
       9: cook stock infos from the last searched tickers \n")
 
 index = int(input())
+#index = 0
 
 sd = StockDataManager()
 out_tickers = []
@@ -1844,6 +1890,8 @@ elif index == 8:
     sd.cook_long_term_industry_rank_scores()
     sd.cook_top10_in_industries()
 elif index == 9:
-    cook_infos_from_last_searched_tickers(sd, 'US_MMT_0602')
+    cook_infos_from_last_searched_tickers(sd, 'US_MMT_0603')
+
+
 
 # --------------------------------------------------------------------
