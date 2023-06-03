@@ -532,12 +532,22 @@ class StockDataManager:
             atrs_exp = trs.ewm(span=14, adjust=False).mean()
             new_data['ATRS_Exp'] = atrs_exp
 
+            n = 150  # 이동평균 윈도우 크기
             # ATRS150 (150 days Average True Relative Strength)
-            atrs150 = trs.rolling(150).mean()
-            new_data['ATRS150'] = atrs150
 
-            atrs150_exp = trs.ewm(span=150, adjust=False).mean()
-            new_data['ATRS150_Exp'] = atrs150_exp
+            if len(new_data) < n:
+                atrs150 = trs.rolling(len(new_data)).mean()
+                new_data['ATRS150'] = atrs150
+            else:
+                atrs150 = trs.rolling(n).mean()
+                new_data['ATRS150'] = atrs150
+
+            # EMA 
+            if len(new_data) < n:
+                new_data['ATRS150_Exp'] = trs.ewm(span=len(new_data), adjust=False).mean()
+            else:
+                new_data['ATRS150_Exp'] = trs.ewm(span=n, adjust=False).mean()
+
 
             new_data = new_data.reindex(columns=['Symbol', 'Name', 'Industry',
                                                  'Open', 'High', 'Low', 'Close', 'Adj Close',
@@ -840,7 +850,7 @@ class StockDataManager:
 
 
     # cooking 공식이 변하는 경우 로컬 데이터를 업데이트하기 위해 호출
-    def cookLocalStockData(self):
+    def cookLocalStockData(self, bUseLocalCache = False):
         print("-------------------cookLocalStockData-----------------\n ") 
 
         all_list = self.getStockListFromLocalCsv()
@@ -848,7 +858,7 @@ class StockDataManager:
 
         tickers = []
         stock_datas_fromCsv = {}
-        self.getStockDatasFromCsv(all_list, tickers, stock_datas_fromCsv)
+        self.getStockDatasFromCsv(all_list, tickers, stock_datas_fromCsv, 365*6, bUseLocalCache)
 
         cooked_data_dic = {}
 
@@ -1015,7 +1025,6 @@ class StockDataManager:
         self.getStockDatasFromCsv(all_list, tickers, stock_datas_fromCsv)
 
         date_list = None  # 변수 초기화
-
 
         atrs_dict = {}
         for ticker in tickers:
@@ -1890,7 +1899,7 @@ elif index == 8:
     sd.cook_long_term_industry_rank_scores()
     sd.cook_top10_in_industries()
 elif index == 9:
-    cook_infos_from_last_searched_tickers(sd, 'US_MMT_0603')
+    cook_infos_from_last_searched_tickers(sd, 'US_MMT_0603_2')
 
 
 
