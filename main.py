@@ -155,7 +155,7 @@ class Chart:
                 if self.bDrawBarChart and not self.bDrawingUpDownChart:
                     x = int(x)
                     if x < 0 : x=0
-                    if x > len(self.stockData): x = len(self.stockData) - 1
+                    if x >= len(self.stockData): x = len(self.stockData) - 1
                     index = self.stockData.index[x]
                     x_axis_str = pd.to_datetime(index).strftime('%Y-%m-%d')
                     self.text_box_coordinate.set_text(
