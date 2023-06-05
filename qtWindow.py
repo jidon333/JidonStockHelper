@@ -32,7 +32,7 @@ class JdWindowClass(QMainWindow, form_class):
         self.resize(window_width, window_height)
 
         self.label : QLabel
-        self.setWindowTitle("Matplotlib in QWidget Example")
+        self.setWindowTitle("Jidon stock helper")
 
         self.lineEdit_search : QLineEdit
         self.lineEdit_search.returnPressed.connect(self.on_lienEdit_search_returnPressed)
