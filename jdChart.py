@@ -28,6 +28,9 @@ class JdChart:
 
         self.bDrawBarChart = True
         self.bDrawingUpDownChart = False
+
+        self.bShowMa10 = False
+        self.bShowMa20 = False
         
         self.stockManager : JdStockDataManager = inStockManager
 
@@ -68,7 +71,7 @@ class JdChart:
         self.ax2 = self.fig.axes[1]
         self.ax3 = self.fig.axes[2]
         self.ax4 = self.fig.axes[3]
-        self.fig.subplots_adjust(left=0.24, right=0.9)
+        self.fig.subplots_adjust(left=0.24, right=0.95)
 
 
         self.stock_datas_dic = in_stock_datas_dic
@@ -131,6 +134,9 @@ class JdChart:
             print('can not find ticker ', inTicker)
             return False
       
+    def set_ma_visibility(self, bShowMa10, bShowMa20):
+        self.bShowMa10 = bShowMa10
+        self.bShowMa20 = bShowMa20
 
 
     def on_close(self, event):
@@ -181,6 +187,20 @@ class JdChart:
         # 선을 그리기위해 기존의 yy-mm-dd 형식의 Date 인덱스를 0~N 사이의 정수로 변경
         temp_df = in_stock_date
         temp_df = temp_df.reset_index()
+
+        # Draw ma first for the drawing order
+        self.ax1.plot(temp_df['200MA'], label='MA200', color='green')
+        self.ax1.plot(temp_df['150MA'], label='MA150', color='blue')
+        self.ax1.plot(temp_df['50MA'], label='MA50', color='orange')
+        if self.bShowMa20:
+            temp_df['20MA'] = temp_df['Close'].rolling(window=20).mean()
+            self.ax1.plot(temp_df['20MA'], label='MA20', color='red', alpha=0.5)
+
+        if self.bShowMa10:
+                temp_df['10MA'] = temp_df['Close'].rolling(window=10).mean()
+                self.ax1.plot(temp_df['10MA'], label='MA10', color='black', alpha=0.5)
+
+        # Draw bar chart
         horizontal_OHLC_length = 0.2
         x = np.arange(0,len(temp_df))
         for idx, val in temp_df.iterrows():
@@ -188,32 +208,47 @@ class JdChart:
             if val['Open'] > val['Close']:
                 color = 'red'
 
-            # 바 차트를 위한 선 그리기
             self.ax1.plot([x[idx], x[idx]], [val['Low'], val['High']], color = color)
             self.ax1.plot([x[idx], x[idx]+horizontal_OHLC_length], 
                     [val['Close'], val['Close']], 
                     color=color)
 
-        # 그래프 설정
-        self.ax1.plot(temp_df['200MA'], label='MA200', color='green')
-        self.ax1.plot(temp_df['150MA'], label='MA150', color='blue')
-        self.ax1.plot(temp_df['50MA'], label='MA50', color='orange')
+
 
         self.ax1.set_xticks(x[::40])
         self.ax1.set_xticklabels(in_stock_date.index[::40].date)
 
     def _draw_line_chart_ax1(self, in_stock_date):
-        self.ax1.plot(in_stock_date['Close'], label='Close')
+        # Draw ma first for the drawing order
         self.ax1.plot(in_stock_date['200MA'], label='MA200', color='green')
         self.ax1.plot(in_stock_date['150MA'], label='MA150', color='blue')
         self.ax1.plot(in_stock_date['50MA'], label='MA50', color='orange')
 
+        if self.bShowMa20:
+            in_stock_date['20MA'] = in_stock_date['Close'].rolling(window=20).mean()
+            self.ax1.plot(in_stock_date['20MA'], label='MA20', color='red', alpha=0.5)
+
+        if self.bShowMa10:
+            in_stock_date['10MA'] = in_stock_date['Close'].rolling(window=10).mean()
+            self.ax1.plot(in_stock_date['10MA'], label='MA10', color='black', alpha=0.5)
+
+        self.ax1.plot(in_stock_date['Close'], label='Close')
+
+   
+
+
+
+
+
     def draw_stock_chart(self):
+
         # 차트 그리기
         ticker = self.get_curr_ticker()
         currStockData = self.get_curr_stock_data()
         currStockData = currStockData[['Name', 'Industry', 'TRS', 'TC', 'TR', 'High', 'Low', 'Open', 'Close', 'Volume',
                                         'ATRS_Exp', 'ATRS150_Exp', '50MA', '150MA', '200MA']]
+        
+        print('ticker: ', ticker)
 
 
         ranks_atrs = self.stockManager.get_ATRS150_exp_Ranks_Normalized(ticker)
@@ -266,10 +301,6 @@ class JdChart:
 
       
         # 좌측 info text box 설정
-        # if self.text_box_info != None:
-        #     self.text_box_info.remove()
-        #     self.text_box_info = None
-
         if self.text_box_info is None:
             props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
             self.text_box_info = self.fig.text(0.01, 0.9, "", transform=self.fig.transFigure, fontsize=14, bbox=props, verticalalignment='top', horizontalalignment='left')
@@ -308,14 +339,6 @@ class JdChart:
 
 
             self.text_box_info.set_text(msg)
-
-            # props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-            # self.text_box_info = self.fig.text(0.01, 0.9,
-            #                             msg,
-            #                             transform=self.fig.transFigure, fontsize=14,
-            #                             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
-            #                             verticalalignment='top', horizontalalignment='left')
-
 
         self.ax1.cla()
 

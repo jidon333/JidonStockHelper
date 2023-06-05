@@ -18,9 +18,9 @@
     <property name="geometry">
      <rect>
       <x>10</x>
-      <y>50</y>
-      <width>2000</width>
-      <height>1000</height>
+      <y>80</y>
+      <width>2211</width>
+      <height>1121</height>
      </rect>
     </property>
     <property name="text">
@@ -30,7 +30,7 @@
    <widget class="QLineEdit" name="lineEdit_search">
     <property name="geometry">
      <rect>
-      <x>80</x>
+      <x>90</x>
       <y>10</y>
       <width>241</width>
       <height>31</height>
@@ -52,6 +52,42 @@
     <property name="text">
      <string>SEARCH</string>
     </property>
+   </widget>
+   <widget class="QGroupBox" name="groupBox">
+    <property name="geometry">
+     <rect>
+      <x>330</x>
+      <y>10</y>
+      <width>311</width>
+      <height>41</height>
+     </rect>
+    </property>
+    <property name="title">
+     <string>Moving Average Visibility</string>
+    </property>
+    <widget class="QSplitter" name="splitter">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>20</y>
+       <width>162</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <widget class="QCheckBox" name="checkbox_ma10">
+      <property name="text">
+       <string>MA10</string>
+      </property>
+     </widget>
+     <widget class="QCheckBox" name="checkbox_ma20">
+      <property name="text">
+       <string>MA20</string>
+      </property>
+     </widget>
+    </widget>
    </widget>
   </widget>
  </widget>

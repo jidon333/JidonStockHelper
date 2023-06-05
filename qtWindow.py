@@ -27,8 +27,8 @@ class JdWindowClass(QMainWindow, form_class):
 
         screen = QGuiApplication.primaryScreen()
         screen_size = screen.availableSize()
-        window_width = screen_size.width() * 0.8  # 전체 화면 폭의 80%
-        window_height = screen_size.height() * 0.8  # 전체 화면 높이의 80%
+        window_width = screen_size.width() * 0.9  # 전체 화면 폭의 80%
+        window_height = screen_size.height() * 0.9  # 전체 화면 높이의 80%
         self.resize(window_width, window_height)
 
         self.label : QLabel
@@ -36,6 +36,13 @@ class JdWindowClass(QMainWindow, form_class):
 
         self.lineEdit_search : QLineEdit
         self.lineEdit_search.returnPressed.connect(self.on_lienEdit_search_returnPressed)
+
+        self.checkbox_ma10 : QCheckBox
+        self.checkbox_ma20 : QCheckBox
+
+        self.checkbox_ma10.stateChanged.connect(self.on_ma_checkbox_changed)
+        self.checkbox_ma20.stateChanged.connect(self.on_ma_checkbox_changed)
+
 
         self.setFocusPolicy(Qt.StrongFocus)
 
@@ -59,6 +66,27 @@ class JdWindowClass(QMainWindow, form_class):
         print('label size: ', self.label.size().width(), self.label.size().height())
         self.canvas.setFixedSize(self.label.size())
         self.refresh_canvas()
+
+
+            
+    def on_lienEdit_search_returnPressed(self):
+        targetTicker = self.lineEdit_search.text()
+        print(targetTicker)
+
+        res = self.chart.move_to_ticker_stock(targetTicker)
+        if res:
+            self.chart.move_to_ticker_stock(targetTicker)
+            self.chart.draw_stock_chart()
+            self.refresh_canvas()
+
+    def on_ma_checkbox_changed(self):
+        bMa10Checked = self.checkbox_ma10.isChecked()
+        bMa20Checked = self.checkbox_ma20.isChecked()
+
+        self.chart.set_ma_visibility(bMa10Checked, bMa20Checked)
+        self.chart.draw_stock_chart()
+        self.refresh_canvas()
+
 
 
     def keyPressEvent(self, event):
@@ -85,17 +113,7 @@ class JdWindowClass(QMainWindow, form_class):
             if not self.lineEdit_search.hasFocus():
                 self.chart.mark_ticker()
         elapsedTime = time.time() - start_time
-       #print('keyPressEvent handling time : ', elapsedTime)
-        
-    def on_lienEdit_search_returnPressed(self):
-        targetTicker = self.lineEdit_search.text()
-        print(targetTicker)
-
-        res = self.chart.move_to_ticker_stock(targetTicker)
-        if res:
-            self.chart.move_to_ticker_stock(targetTicker)
-            self.chart.draw_stock_chart()
-            self.refresh_canvas()
+        #print('keyPressEvent handling time : ', elapsedTime)
 
 
         
