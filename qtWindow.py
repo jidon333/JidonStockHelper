@@ -65,22 +65,25 @@ class JdWindowClass(QMainWindow, form_class):
 
         key = event.key()
         if event.key() == Qt.Key_Escape:
-            print('Qt.Key_Escape')
+            #print('Qt.Key_Escape')
             self.chart.on_close(event)
             self.close()
             sys.exit(1)
         elif event.key() == Qt.Key_Right:
-            print('Qt.Key_Right')
+            #print('Qt.Key_Right')
             self.chart.move_to_next_stock()
             self.chart.draw_stock_chart()
             self.refresh_canvas()
         elif event.key() == Qt.Key_Left:
-            print('Qt.Key_Left')
+            #print('Qt.Key_Left')
             self.chart.move_to_prev_stock()
             self.chart.draw_stock_chart()
             self.refresh_canvas()
+        elif event.key() == Qt.Key_Return:
+            #print('Qt.Key_Return')
+            self.chart.mark_ticker()
         elapsedTime = time.time() - start_time
-        print('keyPressEvent handling time : ', elapsedTime)
+       #print('keyPressEvent handling time : ', elapsedTime)
         
 
         

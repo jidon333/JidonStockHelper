@@ -76,7 +76,6 @@ class JdChart:
         self.curr_ticker_index = 0
 
         self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
-        self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)
         self.fig.canvas.mpl_connect('close_event', self.on_close)
 
 
@@ -88,7 +87,6 @@ class JdChart:
             self.fig, (self.ax1) = plt.subplots(figsize=(20, 10))
 
             self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
-            self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)
             self.fig.canvas.mpl_connect('close_event', self.on_close)
      
     def get_curr_ticker(self):
@@ -158,12 +156,11 @@ class JdChart:
 
         self.fig.canvas.draw()
 
-    def on_key_press(self, event):
-        if event.key == 'enter':
+    def mark_ticker(self):
             ticker = self.get_curr_stock_data()['Symbol'].iloc[-1]
             if ticker not in self.markedTickerList:
                 self.markedTickerList.append(ticker)
-            print(ticker, 'is marked!')
+                print(ticker, ' is marked!')
             
     def _draw_bar_chart_ax1(self, in_stock_date):
         ### 바 차트 ###
@@ -378,7 +375,6 @@ class JdChart:
 
 
         self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
-        self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)
         self.fig.canvas.mpl_connect('close_event', self.on_close)
 
 
