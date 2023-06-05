@@ -118,6 +118,20 @@ class JdChart:
         self.annotateObj = None
         self.text_box_coordinate = None
 
+    def move_to_ticker_stock(self, inTicker : str):
+        try:
+            inTicker = inTicker.lower()
+            lowercase_list = [item.lower() for item in self.selected_tickers]
+            index = lowercase_list.index(inTicker)
+            self.curr_ticker_index = index
+            self.annotateObj = None
+            self.text_box_coordinate = None
+            return True
+        except Exception as e:
+            print('can not find ticker ', inTicker)
+            return False
+      
+
 
     def on_close(self, event):
         print(self.markedTickerList)

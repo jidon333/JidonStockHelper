@@ -35,6 +35,7 @@ class JdWindowClass(QMainWindow, form_class):
         self.setWindowTitle("Matplotlib in QWidget Example")
 
         self.lineEdit_search : QLineEdit
+        self.lineEdit_search.returnPressed.connect(self.on_lienEdit_search_returnPressed)
 
         self.setFocusPolicy(Qt.StrongFocus)
 
@@ -81,10 +82,21 @@ class JdWindowClass(QMainWindow, form_class):
             self.refresh_canvas()
         elif event.key() == Qt.Key_Return:
             #print('Qt.Key_Return')
-            self.chart.mark_ticker()
+            if not self.lineEdit_search.hasFocus():
+                self.chart.mark_ticker()
         elapsedTime = time.time() - start_time
        #print('keyPressEvent handling time : ', elapsedTime)
         
+    def on_lienEdit_search_returnPressed(self):
+        targetTicker = self.lineEdit_search.text()
+        print(targetTicker)
+
+        res = self.chart.move_to_ticker_stock(targetTicker)
+        if res:
+            self.chart.move_to_ticker_stock(targetTicker)
+            self.chart.draw_stock_chart()
+            self.refresh_canvas()
+
 
         
 

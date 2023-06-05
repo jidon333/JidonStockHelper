@@ -56,11 +56,6 @@ def DrawStockDatas(stock_datas_dic, selected_tickers, inStockManager : JdStockDa
         #프로그램을 이벤트루프로 진입시키는(프로그램을 작동시키는) 코드
         app.exec_()
 
-
-        # TODO: 주식 데이터를 윈도우클래스에 넣어서 유저 인터렉션 기반 세우기.
-  
-
-
 def DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500):
     # show first element
     chart = JdChart(sd)
@@ -140,7 +135,7 @@ if index == 1:
             sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum)
     else:
         stock_list = sd.getStockListFromLocalCsv()
-        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, False)
+        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, True)
 
 
     ##---------------- 조건식 -----------------------------------------------------
