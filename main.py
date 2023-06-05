@@ -20,53 +20,51 @@ import pickle
 # dowjones = fdr.DataReader('DJI', '2020-01-01', '2023-02-25')
 
 
-
 from jdStockDataManager import JdStockDataManager 
 from jdChart import JdChart
 from jdGlobal import get_yes_no_input
 from jdGlobal import data_folder
 from jdGlobal import metadata_folder
 
+from qtWindow import JdWindowClass
+
+from PyQt5.QtWidgets import *
+from PyQt5 import uic
+from PyQt5.QtGui import QPixmap
+from PyQt5.QtCore import Qt
+
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+
+def DrawStockDatas(stock_datas_dic, selected_tickers, inStockManager : JdStockDataManager, maxCnt = -1):
+    
+
+    if __name__ == "__main__" :
+        #QApplication : 프로그램을 실행시켜주는 클래스
+        app = QApplication(sys.argv) 
+
+        #WindowClass의 인스턴스 생성
+        myWindow = JdWindowClass() 
+
+        chart = JdChart(inStockManager)
+        chart.init_plots_for_stock(stock_datas_dic, selected_tickers)
+        myWindow.set_chart_class(chart)
+
+        #프로그램 화면을 보여주는 코드
+        myWindow.show()
+
+        #프로그램을 이벤트루프로 진입시키는(프로그램을 작동시키는) 코드
+        app.exec_()
 
 
+        # TODO: 주식 데이터를 윈도우클래스에 넣어서 유저 인터렉션 기반 세우기.
+  
 
-def DrawStockDatas(stock_datas_dic, tickers, inStockManager : JdStockDataManager, maxCnt = -1):
-    stock_data = stock_datas_dic[tickers[0]]
-    chart = JdChart(stock_data)
-    chart.set_stock_manager(inStockManager)
-    ranksATRS = inStockManager.get_ATRS150_exp_Ranks_Normalized(tickers[0])
-    currRank = inStockManager.get_ATRS150_exp_Ranks(tickers[0]).iloc[-1]
-    chart.Show(tickers[0], ranksATRS, currRank)
-    if maxCnt > 0:
-        num = maxCnt
-    else:
-        num = len(tickers)
-
-    index = 1
-
-    while(index < num):
-        ticker = tickers[index]
-        print("print ", ticker)
-
-        stock_data = stock_datas_dic[ticker]
-        chart.reset(stock_data)
-        ranksATRS = inStockManager.get_ATRS150_exp_Ranks_Normalized(ticker)
-        currRank = inStockManager.get_ATRS150_exp_Ranks(ticker).iloc[-1]
-
-        chart.Show(ticker, ranksATRS, currRank)
-        index = index + chart.retVal
-
-        if index < 0:
-            index = 0
-
-        if index >= num:
-            index = num-1
-
-        print("while loop is running")
 
 def DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500):
     # show first element
-    chart = JdChart(None, updown_nyse, updown_nasdaq, updown_sp500)
+    chart = JdChart(sd)
+    chart.init_plots_for_up_down(updown_nyse, updown_nasdaq, updown_sp500)
     chart.draw_updown_chart()
 
 def remove_outdated_tickers():
@@ -117,7 +115,7 @@ print("Select the chart type. \n \
       9: cook stock infos from the last searched tickers \n")
 
 index = int(input())
-#index = 0
+#index = 1
 
 sd = JdStockDataManager()
 out_tickers = []

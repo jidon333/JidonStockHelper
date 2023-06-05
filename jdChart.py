@@ -11,53 +11,93 @@ import json
 
 
 
-import matplotlib.pyplot as plt
 from matplotlib.dates import num2date
 import matplotlib.font_manager as fm
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.widgets import TextBox, Button
 import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 
 from jdStockDataManager import JdStockDataManager 
 
 plt.switch_backend('Qt5Agg')
 
 class JdChart:
-    def __init__(self, stockData = None, updown_nyse = None, updown_nasdaq = None, updown_sp500 = None):
+    def __init__(self, inStockManager = None):
 
         self.bDrawBarChart = True
         self.bDrawingUpDownChart = False
         
-        self.stockManager : JdStockDataManager = None
+        self.stockManager : JdStockDataManager = inStockManager
 
-        self.stockData = stockData
-        self.retVal = 0
         self.annotateObj = None
         self.text_box_coordinate = None
         self.text_box_info = None
 
-        self.updown_nyse = updown_nyse
-        self.updown_nasdaq = updown_nasdaq
-        self.updown_sp500 = updown_sp500
+
+        # for stock dat achart
+        self.stock_datas_dic : dict[str, pd.DataFrame]
+        self.curr_ticker_index = 0
+        self.selected_tickers : list
+
+        # for up-down chart
+        self.updown_nyse : pd.DataFrame
+        self.updown_nasdaq : pd.DataFrame
+        self.updown_sp500 : pd.DataFrame
 
         self.top10_in_industries : dict
+        self.top10_in_industries = self.stockManager.get_top10_in_industries()
 
-        if stockData is not None:
-            self.fig, (self.ax1, self.ax2, self.ax3, self.ax4) = plt.subplots(
-            4, 1, gridspec_kw={'height_ratios': [3, 1, 1, 1]}, figsize=(20, 10))
-            self.fig.subplots_adjust(left=0.24, right=0.9)
-
-        else:
-            self.fig, (self.ax1) = plt.subplots(figsize=(20, 10))
-
+        self.fig = None
+        self.ax1 = None
+        self.ax2 = None
+        self.ax3 = None
+        self.ax4 = None
+ 
         self.markedTickerList = []
 
         plt.ion()
+    
+    # must be called before to show stock chart
+    def init_plots_for_stock(self, in_stock_datas_dic : dict[str, pd.DataFrame], in_selected_tickers):
 
-    def set_stock_manager(self, inStockManager):
-        self.stockManager = inStockManager
-        self.top10_in_industries = self.stockManager.get_top10_in_industries()
+        self.fig = Figure(figsize=(20,10))
+        self.fig.subplots(4, 1, gridspec_kw={'height_ratios': [3, 1, 1, 1]})
+        self.ax1 = self.fig.axes[0]
+        self.ax2 = self.fig.axes[1]
+        self.ax3 = self.fig.axes[2]
+        self.ax4 = self.fig.axes[3]
+        self.fig.subplots_adjust(left=0.24, right=0.9)
 
+
+        self.stock_datas_dic = in_stock_datas_dic
+        self.selected_tickers = in_selected_tickers
+        self.curr_ticker_index = 0
+
+        self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
+        self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)
+        self.fig.canvas.mpl_connect('close_event', self.on_close)
+
+
+    # must be called before to show up-down chart
+    def init_plots_for_up_down(self, updown_nyse : pd.DataFrame , updown_nasdaq : pd.DataFrame, updown_sp500 : pd.DataFrame):
+            self.updown_nyse = updown_nyse
+            self.updown_nasdaq = updown_nasdaq
+            self.updown_sp500 = updown_sp500
+            self.fig, (self.ax1) = plt.subplots(figsize=(20, 10))
+
+            self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
+            self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)
+            self.fig.canvas.mpl_connect('close_event', self.on_close)
+     
+    def get_curr_ticker(self):
+        return self.selected_tickers[self.curr_ticker_index]
+    
+    def get_curr_stock_data(self):
+        ticker = self.get_curr_ticker()
+        return self.stock_datas_dic.get(ticker, pd.DataFrame())
+     
 
     def get_sector(self, ticker):
         GICS_df = self.stockManager.get_GICS_df()
@@ -69,17 +109,22 @@ class JdChart:
     def get_long_term_industry_rank_scores(self, industryName):
         return self.stockManager.get_long_term_industry_rank_scores(industryName)
     
-    def reset(self, stockData):
-        self.stockData = stockData
-        self.retVal = 0
+    
+    def move_to_next_stock(self, stepNum = 1):
+        self.curr_ticker_index = min(self.curr_ticker_index + stepNum, len(self.selected_tickers))
+        self.annotateObj = None
+        self.text_box_coordinate = None
+
+    def move_to_prev_stock(self, stepNum = 1):
+        self.curr_ticker_index = max(self.curr_ticker_index - stepNum, 0)
         self.annotateObj = None
         self.text_box_coordinate = None
 
 
     def on_close(self, event):
         print(self.markedTickerList)
+        plt.close()
         sys.exit()
-        print("on_close")
 
     def on_move(self, event):
         x, y = event.xdata, event.ydata
@@ -99,10 +144,11 @@ class JdChart:
                                         ha='center', va='top')
         else:
                 if self.bDrawBarChart and not self.bDrawingUpDownChart:
+                    currStockData = self.get_curr_stock_data()
                     x = int(x)
                     if x < 0 : x=0
-                    if x >= len(self.stockData): x = len(self.stockData) - 1
-                    index = self.stockData.index[x]
+                    if x >= len(currStockData): x = len(currStockData) - 1
+                    index = currStockData.index[x]
                     x_axis_str = pd.to_datetime(index).strftime('%Y-%m-%d')
                     self.text_box_coordinate.set_text(
                     f'x = {x_axis_str}, y = {y:.2f}')
@@ -113,17 +159,8 @@ class JdChart:
         self.fig.canvas.draw()
 
     def on_key_press(self, event):
-        if event.key == 'escape':
-            plt.close()
-            sys.exit()
-        if event.key == 'left':
-            print('left')
-            self.retVal = -1
-        if event.key == 'right':
-            print('right')
-            self.retVal = 1
         if event.key == 'enter':
-            ticker = self.stockData['Symbol'].iloc[-1]
+            ticker = self.get_curr_stock_data()['Symbol'].iloc[-1]
             if ticker not in self.markedTickerList:
                 self.markedTickerList.append(ticker)
             print(ticker, 'is marked!')
@@ -152,7 +189,7 @@ class JdChart:
         self.ax1.plot(temp_df['50MA'], label='MA50', color='orange')
 
         self.ax1.set_xticks(x[::40])
-        self.ax1.set_xticklabels(self.stockData.index[::40].date)
+        self.ax1.set_xticklabels(in_stock_date.index[::40].date)
 
     def _draw_line_chart_ax1(self, in_stock_date):
         self.ax1.plot(in_stock_date['Close'], label='Close')
@@ -160,23 +197,26 @@ class JdChart:
         self.ax1.plot(in_stock_date['150MA'], label='MA150', color='blue')
         self.ax1.plot(in_stock_date['50MA'], label='MA50', color='orange')
 
-    def Show(self, titleName, ranks_atrs, curr_rank):
+    def draw_stock_chart(self):
         # 차트 그리기
+        ticker = self.get_curr_ticker()
+        currStockData = self.get_curr_stock_data()
+        currStockData = currStockData[['Name', 'Industry', 'TRS', 'TC', 'TR', 'High', 'Low', 'Open', 'Close', 'Volume',
+                                        'ATRS_Exp', 'ATRS150_Exp', '50MA', '150MA', '200MA']]
 
-        self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
-        self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)
-        self.fig.canvas.mpl_connect('close_event', self.on_close)
 
-        name = self.stockData['Name'][0]
-        ticker = titleName
+        ranks_atrs = self.stockManager.get_ATRS150_exp_Ranks_Normalized(ticker)
+        curr_rank = self.stockManager.get_ATRS150_exp_Ranks(ticker).iloc[-1]
+
+        name = currStockData['Name'][0]
         font_path = 'NanumGothic.ttf'
         fontprop = fm.FontProperties(fname=font_path, size=30)
-        industryKor = self.stockData['Industry'][0]
+        industryKor = currStockData['Industry'][0]
         sectorText = self.get_sector(ticker)
         industryText =  self.get_industry(ticker)
         titleStr = f"{ticker} ({name}) \n {industryKor},  ATRS Rank: {int(curr_rank)}th"
-        trs = self.stockData['TRS'].iloc[-1]
-        tc = self.stockData['TC'].iloc[-1]
+        trs = currStockData['TRS'].iloc[-1]
+        tc = currStockData['TC'].iloc[-1]
 
         top10 = self.top10_in_industries.get(industryText)
         top10_len = 0
@@ -184,18 +224,18 @@ class JdChart:
             top10_len = len(top10)
 
 
-        trueRange_NR_x = self.stockManager.check_NR_with_TrueRange(self.stockData)
-        bIsInsideBar = self.stockManager.check_insideBar(self.stockData)
-        bIsPocketPivot = self.stockManager.check_pocket_pivot(self.stockData)
-        bIsMaConverging, bIsPower3 = self.stockManager.check_ma_converging(self.stockData)
+        trueRange_NR_x = self.stockManager.check_NR_with_TrueRange(currStockData)
+        bIsInsideBar = self.stockManager.check_insideBar(currStockData)
+        bIsPocketPivot = self.stockManager.check_pocket_pivot(currStockData)
+        bIsMaConverging, bIsPower3 = self.stockManager.check_ma_converging(currStockData)
         
-        bNearMa10 = self.stockManager.check_near_ma(self.stockData, 10, 1.5)
-        bNearMa20 = self.stockManager.check_near_ma(self.stockData, 20, 1.5)
-        bNearMa50 = self.stockManager.check_near_ma(self.stockData, 50, 1.5)
+        bNearMa10 = self.stockManager.check_near_ma(currStockData, 10, 1.5)
+        bNearMa20 = self.stockManager.check_near_ma(currStockData, 20, 1.5)
+        bNearMa50 = self.stockManager.check_near_ma(currStockData, 50, 1.5)
 
-        bSupported_by_ma10 = self.stockManager.check_supported_by_ma(self.stockData, 10, 1.5)
-        bSupported_by_ma20 = self.stockManager.check_supported_by_ma(self.stockData, 20, 1.5)
-        bSupported_by_ma50 = self.stockManager.check_supported_by_ma(self.stockData, 50, 1.5)
+        bSupported_by_ma10 = self.stockManager.check_supported_by_ma(currStockData, 10, 1.5)
+        bSupported_by_ma20 = self.stockManager.check_supported_by_ma(currStockData, 20, 1.5)
+        bSupported_by_ma50 = self.stockManager.check_supported_by_ma(currStockData, 50, 1.5)
 
         near_ma_list = []
         if bNearMa10:
@@ -215,9 +255,13 @@ class JdChart:
 
       
         # 좌측 info text box 설정
-        if self.text_box_info != None:
-            self.text_box_info.remove()
-            self.text_box_info = None
+        # if self.text_box_info != None:
+        #     self.text_box_info.remove()
+        #     self.text_box_info = None
+
+        if self.text_box_info is None:
+            props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+            self.text_box_info = self.fig.text(0.01, 0.9, "", transform=self.fig.transFigure, fontsize=14, bbox=props, verticalalignment='top', horizontalalignment='left')
 
         industryRanks_long = pd.Series(dtype='float64')
         if not pd.isna(industryText):
@@ -252,21 +296,23 @@ class JdChart:
             msg += f"\n========================"
 
 
-            props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-            self.text_box_info = self.fig.text(0.01, 0.9,
-                                        msg,
-                                        transform=self.fig.transFigure, fontsize=14,
-                                        bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
-                                        verticalalignment='top', horizontalalignment='left')
+            self.text_box_info.set_text(msg)
+
+            # props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+            # self.text_box_info = self.fig.text(0.01, 0.9,
+            #                             msg,
+            #                             transform=self.fig.transFigure, fontsize=14,
+            #                             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
+            #                             verticalalignment='top', horizontalalignment='left')
 
 
         self.ax1.cla()
 
 
         if self.bDrawBarChart:
-            self._draw_bar_chart_ax1(self.stockData)
+            self._draw_bar_chart_ax1(currStockData)
         else:
-            self._draw_line_chart_ax1(self.stockData)
+            self._draw_line_chart_ax1(currStockData)
 
         self.ax1.legend(loc='lower left')
         self.ax1.grid()
@@ -274,11 +320,11 @@ class JdChart:
 
 
         # Draw industry ranks to the ax2 instead of volumes
-        stockDataLen = len(self.stockData['Close'].index)
+        stockDataLen = len(currStockData['Close'].index)
         # Can not draw chart if the stock data len is longer than industry rank data.
         if not industryRanks_long.empty and stockDataLen < len(industryRanks_long):
             long_industry_rank_datas = industryRanks_long.values[-stockDataLen:]
-            long_industry_rank_reindexed = pd.Series(long_industry_rank_datas, index=self.stockData['Close'].index)
+            long_industry_rank_reindexed = pd.Series(long_industry_rank_datas, index=currStockData['Close'].index)
 
             self.ax2.cla()
             self.ax2.plot(long_industry_rank_reindexed, label ='Industry RS score', color='green')
@@ -288,8 +334,8 @@ class JdChart:
         else:
             # Draw volume chart to the ax2
             self.ax2.cla()
-            self.ax2.bar(self.stockData.index,
-                        self.stockData['Volume'], alpha=0.3, color='blue', width=0.7)
+            self.ax2.bar(currStockData.index,
+                        currStockData['Volume'], alpha=0.3, color='blue', width=0.7)
             self.ax2.set_ylabel('Volume')
 
         ############## Rank data를 그래프에 추가하기 ###############
@@ -298,36 +344,33 @@ class JdChart:
 
 
         # self.stockData와 rank_df를 합치기 위해 index 기준으로 join
-        self.stockData = self.stockData.join(ranks_atrs_exp_df, how='left')
+        currStockData = currStockData.join(ranks_atrs_exp_df, how='left')
 
         # NaN 값을 0으로 대체
-        self.stockData.fillna(0, inplace=True)
+        currStockData.fillna(0, inplace=True)
 
         # ax3에 그래프 그리기
         self.ax3.cla()
 
         self.ax3.set_ylim([0, 1])
         if len(ranks_atrs_exp_df) != 0:
-            self.ax3.plot(self.stockData['Rank_ATRS150_Exp'], label='Rank_ATRS150_Exp', color='red', alpha=0.5)
+            self.ax3.plot(currStockData['Rank_ATRS150_Exp'], label='Rank_ATRS150_Exp', color='red', alpha=0.5)
         self.ax3.legend(loc='lower left')
         self.ax3.axhline(y=0.5, color='black', linestyle='--')
  
         self.ax4.cla()
         self.ax4.set_ylim([-0.5, 0.5])
-        self.ax4.plot(self.stockData['ATRS_Exp'], label='ATRS_Exp')
-        self.ax4.legend(loc='lower left')
-        self.ax4.fill_between(self.stockData.index, self.stockData['ATRS_Exp'], 0, where=self.stockData['ATRS_Exp'] < 0, color='red', alpha=0.3)
-        self.ax4.fill_between(self.stockData.index, self.stockData['ATRS_Exp'], 0, where=self.stockData['ATRS_Exp'] >= 0, color='green', alpha=0.3)
+        self.ax4.plot(currStockData['ATRS_Exp'], label='ATRS_Exp')
+
+        self.ax4.fill_between(currStockData.index, currStockData['ATRS_Exp'], 0, where=currStockData['ATRS_Exp'] < 0, color='red', alpha=0.3)
+        self.ax4.fill_between(currStockData.index, currStockData['ATRS_Exp'], 0, where=currStockData['ATRS_Exp'] >= 0, color='green', alpha=0.3)
+
         self.ax4.axhline(y=0, color='black', linestyle='--')
+        self.ax4.legend(loc='lower left')
 
-        plt.draw()
 
-        while True:
-            plt.pause(0.01)
-            if self.retVal != 0:
-                break
-            if not plt.fignum_exists(self.fig.number):
-                break
+        return self.fig
+
 
     def draw_updown_chart(self):
 
@@ -357,7 +400,4 @@ class JdChart:
 
         while True:
             plt.pause(0.01)
-            if self.retVal != 0:
-                break
-            if not plt.fignum_exists(self.fig.number):
-                break
+
