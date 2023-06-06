@@ -112,7 +112,7 @@ class JdChart:
     
     
     def move_to_next_stock(self, stepNum = 1):
-        self.curr_ticker_index = min(self.curr_ticker_index + stepNum, len(self.selected_tickers))
+        self.curr_ticker_index = min(self.curr_ticker_index + stepNum, len(self.selected_tickers)-1)
         self.annotateObj = None
         self.text_box_coordinate = None
 
@@ -322,7 +322,6 @@ class JdChart:
             f"MA Converging: {bIsMaConverging}\n"
             f"Near MA : {near_ma_list}\n"
             f"MA Supported by: {supported_by_ma_list}\n"
-            f"MA Converging: {bIsMaConverging}\n"
 
             f"Power of 3: {bIsPower3}\n"
             f"Industry RS Score : {int(industryRanks_long.get('1d ago', 0))} \n\n"
