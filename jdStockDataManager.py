@@ -1041,6 +1041,7 @@ class JdStockDataManager:
 
         bIsConverging = False
         bIsPower3 = False
+        bIsPower2 = False
 
         ma10_datas = inStockData['Close'].rolling(window=10).mean()
         ma20_datas = inStockData['Close'].rolling(window=20).mean()
@@ -1060,7 +1061,14 @@ class JdStockDataManager:
         if bIsConverging:
             low = inStockData['Low'].iloc[-1]
             close = inStockData['Close'].iloc[-1]
-            
+
+            ma_list = [ma10, ma20]
+            ma_min = min(ma_list)
+            ma_max = max(ma_list)
+
+            if low < ma_min and close > ma_max:
+                bIsPower2 = True
+           
             ma_list = [ma10, ma20, ma50]
             ma_min = min(ma_list)
             ma_max = max(ma_list)
@@ -1068,7 +1076,7 @@ class JdStockDataManager:
             if low < ma_min and close > ma_max:
                 bIsPower3 = True
 
-        return (bIsConverging, bIsPower3)
+        return (bIsConverging, bIsPower3, bIsPower2)
 
     
     # check the low and close gap from the ma
@@ -1131,7 +1139,7 @@ class JdStockDataManager:
             bPocketPivot = self.check_pocket_pivot(stockData)
             bInsideBar = self.check_insideBar(stockData)
             NR_x = self.check_NR_with_TrueRange(stockData)
-            bConverging, bPower3 = self.check_ma_converging(stockData)
+            bConverging, bPower3, bPower2 = self.check_ma_converging(stockData)
             bNearMA = self.check_near_ma(stockData)
 
             stock_info_dic[ticker] = [industry, industry_score, int(atrsRank), bConverging, bPocketPivot, bInsideBar, NR_x]

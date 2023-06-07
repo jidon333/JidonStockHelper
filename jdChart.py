@@ -273,7 +273,7 @@ class JdChart:
         trueRange_NR_x = self.stockManager.check_NR_with_TrueRange(currStockData)
         bIsInsideBar = self.stockManager.check_insideBar(currStockData)
         bIsPocketPivot = self.stockManager.check_pocket_pivot(currStockData)
-        bIsMaConverging, bIsPower3 = self.stockManager.check_ma_converging(currStockData)
+        bIsMaConverging, bIsPower3, bIsPower2 = self.stockManager.check_ma_converging(currStockData)
         
         bNearMa10 = self.stockManager.check_near_ma(currStockData, 10, 1.5)
         bNearMa20 = self.stockManager.check_near_ma(currStockData, 20, 1.5)
@@ -324,6 +324,7 @@ class JdChart:
             f"MA Supported by: {supported_by_ma_list}\n"
 
             f"Power of 3: {bIsPower3}\n"
+            f"Power of 2: {bIsPower2}\n"
             f"Industry RS Score : {int(industryRanks_long.get('1d ago', 0))} \n\n"
             
             )
