@@ -800,7 +800,9 @@ class JdStockDataManager:
                 print(requestQueue)
                 errorTickers.extend(requestQueue)
 
-        print("Complete!")      
+        print("Complete!")
+        # remove duplicated df
+        df_list = list(set(df_list))
         result_df = pd.concat(df_list)
         result_df.index.name = 'Symbol'
         result_df.to_csv(os.path.join(metadata_folder, 'Stock_GICS.csv'), encoding='utf-8-sig')

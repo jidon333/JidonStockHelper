@@ -18,6 +18,8 @@ from matplotlib.widgets import TextBox, Button
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
+import matplotlib.ticker as tk
+
 
 from jdStockDataManager import JdStockDataManager 
 
@@ -259,15 +261,21 @@ class JdChart:
         fontprop = fm.FontProperties(fname=font_path, size=30)
         industryKor = currStockData['Industry'][0]
         sectorText = self.get_sector(ticker)
-        industryText =  self.get_industry(ticker)
+        industryText = self.get_industry(ticker)
+        
         titleStr = f"{ticker} ({name}) \n {industryKor},  ATRS Rank: {int(curr_rank)}th"
         trs = currStockData['TRS'].iloc[-1]
         tc = currStockData['TC'].iloc[-1]
 
-        top10 = self.top10_in_industries.get(industryText)
-        top10_len = 0
-        if top10 != None:
-            top10_len = len(top10)
+        try:
+            top10 = self.top10_in_industries.get(industryText, None)
+            top10_len = 0
+            if top10 != None:
+                top10_len = len(top10)
+        except Exception as e:
+            print(e)
+            top10 = None
+            top10_len = 0
 
 
         trueRange_NR_x = self.stockManager.check_NR_with_TrueRange(currStockData)
@@ -351,6 +359,13 @@ class JdChart:
         self.ax1.legend(loc='lower left')
         self.ax1.grid()
         self.ax1.set_title(titleStr, fontproperties=fontprop)
+        self.ax1.set_yscale('log')
+        # 메이저 눈금선 포매터 설정
+        self.ax1.yaxis.set_major_formatter(tk.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+
+        # 마이너 눈금선 포매터 설정
+        self.ax1.yaxis.set_minor_formatter(tk.FuncFormatter(lambda y, _: '{:g}'.format(y)))
+
 
 
         # Draw industry ranks to the ax2 instead of volumes
