@@ -135,7 +135,7 @@ if index == 1:
             sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum)
     else:
         stock_list = sd.getStockListFromLocalCsv()
-        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, True)
+        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, False)
 
 
     ##---------------- 조건식 -----------------------------------------------------
@@ -195,7 +195,7 @@ if index == 1:
             bIsATRS_Ranking_Good = False
             try:
                 atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
-                bIsATRS_Ranking_Good = atrsRank < 1000
+                bIsATRS_Ranking_Good = atrsRank < 700
             except Exception as e:
                 print(e)
                 bIsATRS_Ranking_Good = False
@@ -204,7 +204,7 @@ if index == 1:
 
             if bIsUpperMA:
                 filterMatchNum = filterMatchNum + 1
-            if b_150ma_upper_than_200ma:
+            if b_150ma_upper_than_200ma or False:
                 filterMatchNum = filterMatchNum + 1
             if bMA_Slope_Plus:
                 filterMatchNum = filterMatchNum + 1
@@ -214,11 +214,11 @@ if index == 1:
                 filterMatchNum = filterMatchNum + 1
 
             # # 기본 MMT 만족 종목에 대해서만 계산하도록 하자.
-            #bPocketPivot = sd.check_pocket_pivot(inStockData)
-            # bInsideBar = sd.check_insideBar(inStockData)
-            # NR_x = sd.check_NR_with_TrueRange(inStockData)
+            # bPocketPivot = sd.check_pocket_pivot(inStockData)
+            #bInsideBar = sd.check_insideBar(inStockData)
+            #NR_x = sd.check_NR_with_TrueRange(inStockData)
             # bConverging, bPower3 = sd.check_ma_converging(inStockData)
-            #bNearMA = sd.check_near_ma(inStockData)
+            #bNearMA = sd.check_near_ma(innStockData)
 
 
             # 거래량, VCP, RS는 포기 못함
@@ -244,9 +244,9 @@ if index == 1:
             pickle.dump(out_stock_datas_dic, f)
 
 
-    # pocket pivot
-    #quantTickers = ['SYM']
-    #selected_tickers = list(set(selected_tickers) & set(quantTickers))
+    # selected_tickers = ['CSTM', 'H', 'WK', 'AMAM', 'Z', 'MCK', 'TWNK', 'LTH', 'OMC', 'EXPD', 'HAE', 'JPM', 'PLAY', 'DECK', 'SHOP', 'ITGR', 'FERG', 'SKX', 'GFL', 'MMSI', 'KEX', 'EXP',
+    #                     'LSTR', 'HXL', 'VRE', 'PCVX', 'RRR']
+    #selected_tickers = [s.upper() for s in selected_tickers]
     selected_tickers.sort()
 
 
@@ -287,6 +287,6 @@ elif index == 8:
     sd.cook_long_term_industry_rank_scores()
     sd.cook_top10_in_industries()
 elif index == 9:
-    cook_infos_from_last_searched_tickers(sd, 'US_MMT_0603_2')
+    cook_infos_from_last_searched_tickers(sd, 'US_MMT')
 
 # --------------------------------------------------------------------

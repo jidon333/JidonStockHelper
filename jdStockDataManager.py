@@ -801,9 +801,11 @@ class JdStockDataManager:
                 errorTickers.extend(requestQueue)
 
         print("Complete!")
-        # remove duplicated df
-        df_list = list(set(df_list))
+
         result_df = pd.concat(df_list)
+        # remove duplicated df
+        result_df = result_df.loc[~result_df.index.duplicated()]
+        
         result_df.index.name = 'Symbol'
         result_df.to_csv(os.path.join(metadata_folder, 'Stock_GICS.csv'), encoding='utf-8-sig')
 
