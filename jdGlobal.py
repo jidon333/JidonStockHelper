@@ -3,6 +3,7 @@ import os
 
 data_folder = os.path.join(os.getcwd(), 'StockData')
 metadata_folder = os.path.join(data_folder, 'MetaData')
+ui_folder = os.path.join(os.getcwd(), 'UI')
 
 
 def get_yes_no_input(qustionString):

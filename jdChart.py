@@ -22,6 +22,7 @@ import matplotlib.ticker as tk
 
 
 from jdStockDataManager import JdStockDataManager 
+from jdGlobal import ui_folder
 
 plt.switch_backend('Qt5Agg')
 
@@ -257,7 +258,7 @@ class JdChart:
         curr_rank = self.stockManager.get_ATRS150_exp_Ranks(ticker).iloc[-1]
 
         name = currStockData['Name'][0]
-        font_path = 'NanumGothic.ttf'
+        font_path = os.path.join(ui_folder, 'NanumGothic.ttf')
         fontprop = fm.FontProperties(fname=font_path, size=30)
         industryKor = currStockData['Industry'][0]
         sectorText = self.get_sector(ticker)
