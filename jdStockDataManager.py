@@ -639,12 +639,14 @@ class JdStockDataManager:
 
         for ticker in tickers:
             data = stock_datas_fromCsv[ticker]
-            name = data['Name'].iloc[-1]
-            industry = data['Industry'].iloc[-1]
+            name = data['Name'].iloc[-1].lower()
+            industry = data['Industry'].iloc[-1].lower()
             if pd.isna(name) or pd.isna(industry):
                 removeTargetTickers.append(ticker)
                 continue
             if 'acquisition' in name or '기타 금융업' in industry:
+                removeTargetTickers.append(ticker)
+            if 'acquisition' in name or '투자 지주 회사' in industry:
                 removeTargetTickers.append(ticker)
 
 
@@ -781,8 +783,8 @@ class JdStockDataManager:
                     print(e)
                     print(requestQueue)
                     errorTickers.extend(requestQueue)
+                    requestQueue.clear()
                     
-
 
         if len(requestQueue) > 0:
             try:
@@ -799,6 +801,37 @@ class JdStockDataManager:
                 print(e)
                 print(requestQueue)
                 errorTickers.extend(requestQueue)
+                requestQueue.clear()
+
+
+        errorSymbolNum = len(errorTickers)
+        symbols = errorTickers.copy()
+        errorTickers.clear()
+        for i in range(0, errorSymbolNum):
+            requestQueue.append(symbols[i])
+            if len(requestQueue) >= 1:
+                try:
+                    tickers = Ticker(requestQueue)
+                    profiles = tickers.get_modules("summaryProfile")
+                    df = pd.DataFrame.from_dict(profiles).T
+                    sector =  df['sector']
+                    industry = df['industry']
+                    df = pd.concat([sector, industry], axis=1)
+                    df.index.name = 'Symbol'
+                    df_list.append(df)
+                    requestQueue.clear()
+                    print(f"{i/symbolsNum*100:.2f}% Done")
+                except Exception as e:
+                    print(e)
+                    print(requestQueue)
+                    errorTickers.extend(requestQueue)
+                    requestQueue.clear()
+                time.sleep(1)
+
+
+
+        print('error tickers can\'t get the info')
+        print(errorTickers)
 
         print("Complete!")
 
@@ -1130,15 +1163,26 @@ class JdStockDataManager:
 
         for ticker in inTickers:
             gisc_df = self.get_GICS_df()
-            industry = gisc_df.loc[ticker]['industry']
-            scores = self.get_long_term_industry_rank_scores(industry)
-            if not scores.empty:
-                industry_score = self.get_long_term_industry_rank_scores(industry).iloc[-1]
+            
+            try:
+                industry = gisc_df.loc[ticker]['industry']
+                scores = self.get_long_term_industry_rank_scores(industry)
+            except:
+                industry = 'None'
+                scores = 'None'
+                
+            
+            industry_score = 0
+            if len(scores) != 0:
+                s_rank_scores : pd.Series = self.get_long_term_industry_rank_scores(industry)
+                if not s_rank_scores.empty:
+                    industry_score = s_rank_scores.iloc[-1]
             else:
                 print(f'can not find industry rank score from ticker: {ticker}, industry: {industry}')
 
             stockData = out_stock_datas_dic.get(ticker)
             atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
+
             
             bPocketPivot = self.check_pocket_pivot(stockData)
             bInsideBar = self.check_insideBar(stockData)

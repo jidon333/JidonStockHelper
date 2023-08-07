@@ -261,8 +261,12 @@ class JdChart:
         font_path = os.path.join(ui_folder, 'NanumGothic.ttf')
         fontprop = fm.FontProperties(fname=font_path, size=30)
         industryKor = currStockData['Industry'][0]
-        sectorText = self.get_sector(ticker)
-        industryText = self.get_industry(ticker)
+        try:
+            sectorText = self.get_sector(ticker)
+            industryText = self.get_industry(ticker)
+        except Exception as e:
+            sectorText = 'None'
+            industryText = 'None'
         
         titleStr = f"{ticker} ({name}) \n {industryKor},  ATRS Rank: {int(curr_rank)}th"
         trs = currStockData['TRS'].iloc[-1]
