@@ -254,8 +254,8 @@ class JdStockDataManager:
 
         if all_list.empty:
             # 모든 상장 종목 가져오기
-            nyse_list = fdr.StockListing('NYSE')
-            nasdaq_list = fdr.StockListing('NASDAQ')
+            nyse_list = self.get_fdr_stock_list('NYSE', daysNum)
+            nasdaq_list = self.get_fdr_stock_list('NASDAQ', daysNum)
             all_list = pd.concat([nyse_list, nasdaq_list])
 
         # 미국 주식시장의 거래일 가져오기
@@ -287,8 +287,8 @@ class JdStockDataManager:
                 return all_list
 
         except FileNotFoundError:
-            nyse_list = fdr.StockListing('NYSE')
-            nasdaq_list = fdr.StockListing('NASDAQ')
+            nyse_list = self.get_fdr_stock_list('NYSE')
+            nasdaq_list = self.get_fdr_stock_list('NASDAQ')
             all_list = pd.concat([nyse_list, nasdaq_list])
 
             # all_list에서 Symbol이 csv_names에 있는 경우만 추려냄
@@ -408,16 +408,45 @@ class JdStockDataManager:
 
 # ------------------- public -----------------------------------------------
 
+    def get_fdr_stock_list(self, market : str, daysNum = 365*5):
+
+        fdr_stock_list = pd.DataFrame()
+        bHaveCache = False 
+        cacheFileName = f"cache_fdr_{market}_list"
+
+        if str == 'NASDAQ' or str == 'NYSE':
+            print('get_fdr_stock_list(), invalid market type {0}!', market)
+            return fdr_stock_list
+
+        try:
+            with open(cacheFileName, "rb") as f:
+                fdr_stock_list = pickle.load(f)
+                bHaveCache = True
+        except Exception as e:
+            print(e)
+            bHaveCache = False
+
+
+        if not bHaveCache:
+            fdr_stock_list = fdr.StockListing(market)
+            fdr_stock_list = fdr_stock_list[fdr_stock_list['Symbol'].isin(self.csv_names)]
+
+            print('there\'s no cache. save the result newly.')
+            with open(cacheFileName, "wb") as f:
+                pickle.dump(fdr_stock_list, f)
+
+        return fdr_stock_list
+    
 
     def cookUpDownDatas(self, daysNum = 365*5):
         # S&P 500 지수의 모든 종목에 대해 매일 상승/하락한 종목 수 계산
-        nyse_list = fdr.StockListing('NYSE')
+        nyse_list = self.get_fdr_stock_list('NYSE', daysNum)
         nyse_list = nyse_list[nyse_list['Symbol'].isin(self.csv_names)]
 
-        nasdaq_list = fdr.StockListing('NASDAQ')
+        nasdaq_list = self.get_fdr_stock_list('NASDAQ', daysNum)
         nasdaq_list = nasdaq_list[nasdaq_list['Symbol'].isin(self.csv_names)]
 
-        sp500_list = fdr.StockListing('S&P500')
+        sp500_list = self.get_fdr_stock_list('S&P500', daysNum)
         sp500_list = sp500_list[sp500_list['Symbol'].isin(self.csv_names)]
 
 
@@ -450,8 +479,8 @@ class JdStockDataManager:
         
 
         if bExcludeNotInLocalCsv == False:
-            nyse_list = fdr.StockListing('NYSE')
-            nasdaq_list = fdr.StockListing('NASDAQ')
+            nyse_list = self.get_fdr_stock_list('NYSE', daysNum)
+            nasdaq_list = self.get_fdr_stock_list('NASDAQ', daysNum)
             all_list = pd.concat([nyse_list, nasdaq_list])
         else:
             all_list = self.getStockListFromLocalCsv()
@@ -1159,10 +1188,25 @@ class JdStockDataManager:
         self.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, bUseDataCache)
         atrs_ranking_df = self.get_ATRS_Ranking_df()
 
+        nyse_list = self.get_fdr_stock_list('NYSE')
+        nyse_list = nyse_list['Symbol'].tolist()
+
+        nasdaq_list = self.get_fdr_stock_list('NASDAQ')
+        nasdaq_list = nasdaq_list['Symbol'].tolist()
+
         stock_info_dic = {}
 
         for ticker in inTickers:
             gisc_df = self.get_GICS_df()
+            market = ''
+
+            if ticker in nyse_list:
+                market = 'NYSE'
+            if ticker in nasdaq_list:
+                market = 'NASDAQ'
+
+            if market == '':
+                print('can not find ticker {0} in any nyse or nasdaq market.', ticker)
             
             try:
                 industry = gisc_df.loc[ticker]['industry']
@@ -1190,13 +1234,13 @@ class JdStockDataManager:
             bConverging, bPower3, bPower2 = self.check_ma_converging(stockData)
             bNearMA = self.check_near_ma(stockData)
 
-            stock_info_dic[ticker] = [industry, industry_score, int(atrsRank), bConverging, bPocketPivot, bInsideBar, NR_x]
+            stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), bConverging, bPocketPivot, bInsideBar, NR_x]
 
 
         df = pd.DataFrame.from_dict(stock_info_dic).transpose()
-        columns = ['Industry', 'Industry Score', 'RS Rank', 'MA Converging', 'Pocket Pivot', 'Inside bar', 'NR(x)']
+        columns = ['Market', 'Industry', 'Industry Score', 'RS Rank', 'MA Converging', 'Pocket Pivot', 'Inside bar', 'NR(x)']
         df.columns = columns
-        df.index.name = 'Industry'
+        df.index.name = 'Symbol'
 
         save_path = os.path.join(metadata_folder, f'{fileName}.csv')
         df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
