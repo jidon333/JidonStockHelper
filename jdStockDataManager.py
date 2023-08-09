@@ -1234,11 +1234,13 @@ class JdStockDataManager:
             bConverging, bPower3, bPower2 = self.check_ma_converging(stockData)
             bNearMA = self.check_near_ma(stockData)
 
-            stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), bConverging, bPocketPivot, bInsideBar, NR_x]
+            trandingViewFormat = market + ':' + ticker + ','
+
+            stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), bConverging, bPocketPivot, bInsideBar, NR_x, trandingViewFormat]
 
 
         df = pd.DataFrame.from_dict(stock_info_dic).transpose()
-        columns = ['Market', 'Industry', 'Industry Score', 'RS Rank', 'MA Converging', 'Pocket Pivot', 'Inside bar', 'NR(x)']
+        columns = ['Market', 'Industry', 'Industry Score', 'RS Rank', 'MA Converging', 'Pocket Pivot', 'Inside bar', 'NR(x)', 'TrandingViewFormat']
         df.columns = columns
         df.index.name = 'Symbol'
 
