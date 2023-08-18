@@ -286,6 +286,8 @@ class JdChart:
         trueRange_NR_x = self.stockManager.check_NR_with_TrueRange(currStockData)
         bIsInsideBar = self.stockManager.check_insideBar(currStockData)
         bIsPocketPivot = self.stockManager.check_pocket_pivot(currStockData)
+        bWickPlay = self.stockManager.check_wickplay(currStockData)
+        bOEL = self.stockManager.check_OEL(currStockData)
         bIsMaConverging, bIsPower3, bIsPower2 = self.stockManager.check_ma_converging(currStockData)
         
         bNearMa10 = self.stockManager.check_near_ma(currStockData, 10, 1.5)
@@ -331,6 +333,8 @@ class JdChart:
             f"TC: {tc}\n"
             f"NR(x): {trueRange_NR_x}\n"
             f"Inside bar: {bIsInsideBar}\n"
+            f"Wick Play: {bWickPlay}\n"
+            f"OEL: {bOEL}\n"
             f"Pocket Pivot: {bIsPocketPivot}\n"
             f"MA Converging: {bIsMaConverging}\n"
             f"Near MA : {near_ma_list}\n"

@@ -1178,6 +1178,30 @@ class JdStockDataManager:
             return True
 
         return False
+    
+
+    def check_wickplay(self, inStockData: pd.DataFrame):
+        bWickPlay = False
+        d2_ago_open, d2_ago_high, d2_ago_low, d2_ago_close = inStockData['Open'].iloc[-2], inStockData['High'].iloc[-2], inStockData['Low'].iloc[-2], inStockData['Close'].iloc[-2]
+        d1_ago_open, d1_ago_high, d1_ago_low, d1_ago_close = inStockData['Open'].iloc[-1], inStockData['High'].iloc[-1], inStockData['Low'].iloc[-1], inStockData['Close'].iloc[-1]
+
+        # bullish candle
+        if d2_ago_open <= d2_ago_close:
+            if d1_ago_high <= d2_ago_high and d1_ago_low >= d2_ago_close:
+                bWickPlay = True
+        # bearish candle
+        else:
+            if d1_ago_high <= d2_ago_high and d1_ago_low >= d2_ago_open:
+                bWickPlay = True
+
+        return bWickPlay
+    
+
+    # open equal low
+    def check_OEL(self, inStockData: pd.DataFrame):
+        d1_ago_open, d1_ago_low = inStockData['Open'].iloc[-1], inStockData['Low'].iloc[-1]
+        bOEL = d1_ago_open == d1_ago_low
+        return bOEL
 
 
     def cook_stock_info_from_tickers(self, inTickers : list, fileName : str, bUseDataCache = True):
@@ -1231,16 +1255,18 @@ class JdStockDataManager:
             bPocketPivot = self.check_pocket_pivot(stockData)
             bInsideBar = self.check_insideBar(stockData)
             NR_x = self.check_NR_with_TrueRange(stockData)
+            bWickPlay = self.check_wickplay(stockData)
+            bOEL = self.check_OEL(stockData)
             bConverging, bPower3, bPower2 = self.check_ma_converging(stockData)
             bNearMA = self.check_near_ma(stockData)
 
             trandingViewFormat = market + ':' + ticker + ','
 
-            stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), bConverging, bPocketPivot, bInsideBar, NR_x, trandingViewFormat]
+            stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), bConverging, bPocketPivot, bInsideBar, NR_x, bWickPlay, bOEL, trandingViewFormat]
 
 
         df = pd.DataFrame.from_dict(stock_info_dic).transpose()
-        columns = ['Market', 'Industry', 'Industry Score', 'RS Rank', 'MA Converging', 'Pocket Pivot', 'Inside bar', 'NR(x)', 'TrandingViewFormat']
+        columns = ['Market', 'Industry', 'Industry Score', 'RS Rank', 'MA Converging', 'Pocket Pivot', 'Inside bar', 'NR(x)', 'Wick Play', 'OEL', 'TrandingViewFormat']
         df.columns = columns
         df.index.name = 'Symbol'
 
