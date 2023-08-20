@@ -95,7 +95,7 @@ class JdStockDataManager:
 
         return index_new_data
 
-    def _CookStockData(self, stock_data):
+    def _CookStockData(self, stock_data : pd.DataFrame):
 
         new_data = stock_data
 
@@ -129,6 +129,7 @@ class JdStockDataManager:
             ma_diff = stock_data['200MA'].diff()
             new_data['MA200_Slope'] = ma_diff / 2
 
+
             # TR 계산
             high = stock_data['High']
             low = stock_data['Low']
@@ -142,6 +143,16 @@ class JdStockDataManager:
             tr = np.maximum(tr, d3)
 
             new_data['TR'] = tr
+
+            # DR% (Daily Range)
+            daily_range_percentages = high / low
+
+            # ADR% (20-days)
+            n = 20
+            adr = daily_range_percentages.rolling(n).mean()
+            adr = 100 * (adr - 1)
+            new_data['ADR'] = adr
+
 
             # ATR 계산
             n = 14
@@ -192,7 +203,7 @@ class JdStockDataManager:
                                                  'Open', 'High', 'Low', 'Close', 'Adj Close',
                                                  'Volume', 'RS','50MA', '150MA', '200MA',
                                                  'MA150_Slope', 'MA200_Slope', 
-                                                 'TR', 'ATR', 'TC', 'ATC', 'TRS', 'ATRS', 'ATRS_Exp', 'ATRS150', 'ATRS150_Exp',
+                                                 'ADR', 'TR', 'ATR', 'TC', 'ATC', 'TRS', 'ATRS', 'ATRS_Exp', 'ATRS150', 'ATRS150_Exp',
                                                  'IsOriginData_NaN'])
             
 
@@ -1009,6 +1020,13 @@ class JdStockDataManager:
             # sort sector scores. The bigger atrs14, the better 
             sorted_sector_scores = dict(sorted(sectorTotalScoreMap.items(), key=lambda x: x[1], reverse=True))
             return sorted_sector_scores
+    
+
+    def get_percentage_AtoB(self, priceA : float, priceB : float):
+        res = ((priceB - priceA)/priceA) * 100
+        return res
+
+        
 
     # cook industry ranks according to the atrs14_exp.
     def cook_short_term_industry_rank_scores(self):
@@ -1202,80 +1220,336 @@ class JdStockDataManager:
         d1_ago_open, d1_ago_low = inStockData['Open'].iloc[-1], inStockData['Low'].iloc[-1]
         bOEL = d1_ago_open == d1_ago_low
         return bOEL
+    
+    def check_OEH(self, inStockData: pd.DataFrame):
+        d1_ago_open, d1_ago_high = inStockData['Open'].iloc[-1], inStockData['High'].iloc[-1]
+        bOEH = d1_ago_open == d1_ago_high
+        return bOEH
+    
 
 
-    def cook_stock_info_from_tickers(self, inTickers : list, fileName : str, bUseDataCache = True):
-        stock_list = self.getStockListFromLocalCsv()
-        out_tickers = []
-        out_stock_datas_dic = {}
-        daysNum = 365
-        self.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, bUseDataCache)
-        atrs_ranking_df = self.get_ATRS_Ranking_df()
 
-        nyse_list = self.get_fdr_stock_list('NYSE')
-        nyse_list = nyse_list['Symbol'].tolist()
+    
+    
 
-        nasdaq_list = self.get_fdr_stock_list('NASDAQ')
-        nasdaq_list = nasdaq_list['Symbol'].tolist()
 
-        stock_info_dic = {}
-
-        for ticker in inTickers:
-            gisc_df = self.get_GICS_df()
-            market = ''
-
-            if ticker in nyse_list:
-                market = 'NYSE'
-            if ticker in nasdaq_list:
-                market = 'NASDAQ'
-
-            if market == '':
-                print('can not find ticker {0} in any nyse or nasdaq market.', ticker)
-            
-            try:
-                industry = gisc_df.loc[ticker]['industry']
-                scores = self.get_long_term_industry_rank_scores(industry)
-            except:
-                industry = 'None'
-                scores = 'None'
-                
-            
-            industry_score = 0
-            if len(scores) != 0:
-                s_rank_scores : pd.Series = self.get_long_term_industry_rank_scores(industry)
-                if not s_rank_scores.empty:
-                    industry_score = s_rank_scores.iloc[-1]
+    # --------------- C/V Check list --------------
+    def check_lower_lows_3(self, inStockData: pd.DataFrame, days=15):
+        ll_cnt = 0
+        ticker = inStockData['Symbol'].iloc[-1]
+        lows = inStockData['Low'].iloc[-days:].tolist()
+        for i in range(0, days-1):
+            # lower low
+            if lows[i] > lows[i+1]:
+                ll_cnt += 1
             else:
-                print(f'can not find industry rank score from ticker: {ticker}, industry: {industry}')
+                ll_cnt = 0
 
-            stockData = out_stock_datas_dic.get(ticker)
-            atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
+            if ll_cnt >= 3:
+                return True
+        return False
+    
 
+    def check_higher_highs_3(self, inStockData: pd.DataFrame, days=15):
+        hh_cnt = 0
+        ticker = inStockData['Symbol'].iloc[-1]
+        highs = inStockData['High'].iloc[-days:].tolist()
+        for i in range(0, days-1):
+            # higher high
+            if highs[i] < highs[i+1]:
+                hh_cnt += 1
+            else:
+                hh_cnt = 0
+            if hh_cnt >= 3:
+                return True
+
+        return False
+    
+
+    def _check_below_N_ma_closed_cnt(self, inStockData: pd.DataFrame, MA_Num, days):
+
+        ticker = inStockData['Symbol'].iloc[-1]
+        ma_datas = inStockData['Close'].rolling(window=MA_Num).mean().iloc[-days:].tolist()
+        opens = inStockData['Open'].iloc[-days:].tolist()
+        closes = inStockData['Close'].iloc[-days:].tolist()
+
+        ma_below_closed_cnt = 0
+        for i in range(0, days):
+            ma = ma_datas[i]
+            open = opens[i]
+            close = closes[i]
+            if open >= ma and close < ma:
+                ma_below_closed_cnt += 1
             
-            bPocketPivot = self.check_pocket_pivot(stockData)
-            bInsideBar = self.check_insideBar(stockData)
-            NR_x = self.check_NR_with_TrueRange(stockData)
-            bWickPlay = self.check_wickplay(stockData)
-            bOEL = self.check_OEL(stockData)
-            bConverging, bPower3, bPower2 = self.check_ma_converging(stockData)
-            bNearMA = self.check_near_ma(stockData)
 
-            trandingViewFormat = market + ':' + ticker + ','
-
-            stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), bConverging, bPocketPivot, bInsideBar, NR_x, bWickPlay, bOEL, trandingViewFormat]
+        return ma_below_closed_cnt
 
 
-        df = pd.DataFrame.from_dict(stock_info_dic).transpose()
-        columns = ['Market', 'Industry', 'Industry Score', 'RS Rank', 'MA Converging', 'Pocket Pivot', 'Inside bar', 'NR(x)', 'Wick Play', 'OEL', 'TrandingViewFormat']
-        df.columns = columns
-        df.index.name = 'Symbol'
+    def check_below_20ma_closed_cnt(self, inStockData: pd.DataFrame, days=15):
+        return self._check_below_N_ma_closed_cnt(inStockData, 20, days)
 
-        save_path = os.path.join(metadata_folder, f'{fileName}.csv')
-        df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
-        print(f'{fileName}.csv', 'is saved!')
+    def check_below_50ma_closed_cnt(self, inStockData: pd.DataFrame, days=15):
+        return self._check_below_N_ma_closed_cnt(inStockData, 50, days)
+    
+    def check_up_more_than_adr_cnt(self, inStockData: pd.DataFrame, days=15):
+        ticker = inStockData['Symbol'].iloc[-1]
+        closes = inStockData['Close'].iloc[-days:].tolist()
+        ADRs = inStockData['ADR'].iloc[-days:].tolist()
 
-           
-        
+        cnt = 0
+        for i in range(0, days-1):
+            prev_close = closes[i]
+            close = closes[i+1]
+            gap_percentage = self.get_percentage_AtoB(prev_close, close)
+            if gap_percentage > 0 and abs(gap_percentage) >= ADRs[i]:
+                cnt += 1
+            
+        return cnt
+    
+    def check_down_more_than_adr_cnt(self, inStockData: pd.DataFrame, days=15):
+        ticker = inStockData['Symbol'].iloc[-1]
+        closes = inStockData['Close'].iloc[-days:].tolist()
+        ADRs = inStockData['ADR'].iloc[-days:].tolist()
+
+        cnt = 0
+        for i in range(0, days-1):
+            prev_close = closes[i]
+            close = closes[i+1]
+            gap_percentage = self.get_percentage_AtoB(prev_close, close)
+            if gap_percentage < 0 and abs(gap_percentage) >= ADRs[i]:
+                cnt += 1
+            
+        return cnt
+    
+    def check_bullish_bearish_candle_count_in_n_days(self, inStockData: pd.DataFrame, days=15):
+        opens = inStockData['Open'].iloc[-days:].tolist()
+        closes = inStockData['Close'].iloc[-days:].tolist()
+
+        bullishCandleCnt = 0
+        bearlishCandleCnt = 0
+
+        for i in range(0, days):
+            open = opens[i]
+            close = closes[i]
+
+            if open < close:
+                bullishCandleCnt += 1
+            else:
+                bearlishCandleCnt += 1
+
+
+        return bullishCandleCnt, bearlishCandleCnt
+    
+
+    def check_20ma_gap_more_than_20ptg_cnt(self, inStockData: pd.DataFrame, days=15):
+        closes = inStockData['Close'].iloc[-days:].tolist()
+        ma20_prices = inStockData['Close'].rolling(window=20).mean().iloc[-days:].tolist()
+
+        big_gap_cnt = 0
+        for i in range(0, days):   
+            close = closes[i]
+            ma20 = ma20_prices[i]
+
+            if close > ma20:
+                gap_from_20ma =  abs((ma20 - close)/close) * 100
+                if gap_from_20ma > 20:
+                    big_gap_cnt += 1
+
+        return big_gap_cnt
+    
+
+    def check_close_equal_high_or_low_cnt(self, inStockData: pd.DataFrame, days=15):
+        closes = inStockData['Close'].iloc[-days:].tolist()
+        highs = inStockData['High'].iloc[-days:].tolist()
+        lows = inStockData['Low'].iloc[-days:].tolist()
+  
+        close_equal_high_cnt = 0
+        close_equal_low_cnt = 0
+
+
+        for i in range(0, days):
+            close = closes[i]
+            high = highs[i]
+            low = lows[i]
+
+            if low != high:
+                if close == high:
+                    close_equal_high_cnt += 1
+                if close == low:
+                    close_equal_low_cnt += 1
+
+
+        return close_equal_high_cnt, close_equal_low_cnt
+    
+
+
+    def check_oops_up_reversal_cnt(self, inStockData: pd.DataFrame, days=15):
+        opens = inStockData['Open'].iloc[-days:].tolist()
+        closes = inStockData['Close'].iloc[-days:].tolist()
+        lows = inStockData['Low'].iloc[-days:].tolist()
+
+        oops_up_cnt = 0
+
+        for i in range(0, days-1):
+            prev_low = lows[i]
+            open = opens[i+1]
+            close = closes[i+1]
+
+            if open < prev_low and close > prev_low:
+                oops_up_cnt += 1
+
+        return oops_up_cnt
+
+
+    def check_OEL_cnt(self, inStockData: pd.DataFrame, days=15):
+        ticker = inStockData['Symbol'].iloc[-1]
+        opens = inStockData['Open'].iloc[-days:].tolist()
+        lows = inStockData['Low'].iloc[-days:].tolist()
+
+        condition_cnt = 0
+        for i in range(0, days):
+            open = opens[i]
+            low = lows[i]
+            if open == low:
+                condition_cnt += 1
+    
+        return condition_cnt
+    
+
+    def check_OEH_cnt(self, inStockData: pd.DataFrame, days=15):
+        ticker = inStockData['Symbol'].iloc[-1]
+        opens = inStockData['Open'].iloc[-days:].tolist()
+        highs = inStockData['High'].iloc[-days:].tolist()
+
+        condition_cnt = 0
+        for i in range(0, days):
+            open = opens[i]
+            high = highs[i]
+            if open == high:
+                condition_cnt += 1
+
+        return condition_cnt
+    
+
+    # 전일 고가보다 위로 1 ADR% 만큼 주가가 상승했으나 전일 고가 아래에서 마감
+    def check_squat_cnt(self, inStockData: pd.DataFrame, days=15):
+        ticker = inStockData['Symbol'].iloc[-1]
+        highs = inStockData['High'].iloc[-days:].tolist()
+        closes = inStockData['Close'].iloc[-days:].tolist()
+        ADRs = inStockData['ADR'].iloc[-days:].tolist()
+
+        squat_cnt = 0
+        for i in range(0, days-1):
+            prevHigh = highs[i]
+            high = highs[i+1]
+            close = closes[i+1]
+            adr = ADRs[i]
+
+            if high > prevHigh:
+                gap_pct = self.get_percentage_AtoB(prevHigh, high)
+                if gap_pct >= adr:
+                    if close < prevHigh:
+                        squat_cnt += 1
+
+        return squat_cnt
+    
+    # 스쿼트 발생 이후 3일 안에 회복 (스쿼트가 먼저 발생해야 한다.)
+    def check_squat_recovery_cnt(self, inStockData: pd.DataFrame, days=15):
+        ticker = inStockData['Symbol'].iloc[-1]
+        highs = inStockData['High'].iloc[-days:].tolist()
+        closes = inStockData['Close'].iloc[-days:].tolist()
+        ADRs = inStockData['ADR'].iloc[-days:].tolist()
+
+        recovery_success_cnt = 0
+        for i in range(0, days-1):
+            prevHigh = highs[i]
+            high = highs[i+1]
+            close = closes[i+1]
+            adr = ADRs[i]
+
+            if high > prevHigh:
+                gap_pct = self.get_percentage_AtoB(prevHigh, high)
+                if gap_pct >= adr:
+                    # 스쿼트 발생!
+                    if close < prevHigh:
+                        # 스쿼트 발생후 3일 이내 회복 확인
+                        # 1d after squat
+                        if i+2 < days:
+                            close_after_squat_1d = closes[i+2]
+                            if high < close_after_squat_1d:
+                                recovery_success_cnt += 1
+                                continue
+
+                        # 2d after squat
+                        if i+3 < days:
+                            close_after_squat_2d = closes[i+3]
+                            if high < close_after_squat_2d:
+                                recovery_success_cnt += 1
+                                continue
+
+                        # 3d after squat
+                        if i+4 < days:
+                            close_after_squat_3d = closes[i+4]
+                            if high < close_after_squat_3d:
+                                recovery_success_cnt += 1
+                                continue
+                    
+
+        return recovery_success_cnt
+    
+
+    # rs_check_range: Check if RS is maximum within N days.
+    # days: Check if the day with the maximum RS occurred among n days.
+    def check_rs_N_day_new_high_in_n_days(self, inStockData: pd.DataFrame, atrs_ranking_df : pd.DataFrame, rs_check_range = 50, days = 15):
+        ticker = inStockData['Symbol'].iloc[-1]
+        rs_of_ticker = atrs_ranking_df.loc[ticker]
+        rs_ranks_in_n_days = rs_of_ticker.iloc[-days:].tolist()
+
+        for i in range(0, days):
+            # [-days ~ 0]
+            n_day_before_index = i - days
+            range_day_before_from_index = n_day_before_index - rs_check_range
+            today_rs_rank = rs_of_ticker.iloc[n_day_before_index]
+            # get last 'rs_check_range' days RS ranks
+            last_rs_ranks_in_range = rs_of_ticker.iloc[range_day_before_from_index : n_day_before_index]
+            # get top rs rank in last 'rs_check_range' days.
+            top_rank_in_last_range_days = last_rs_ranks_in_range.min()
+
+            # rs rank new high.
+            if today_rs_rank < top_rank_in_last_range_days:
+                # print(ticker)
+                # print(n_day_before_index, ' days before rs rank: ', today_rs_rank)
+                # print('last ', rs_check_range, 'days top rs rank from ', n_day_before_index, 'days: ', top_rank_in_last_range_days)
+                # print(today_rs_rank, ' < ', top_rank_in_last_range_days)
+                return True
+
+        return False
+    
+    def check_rs_N_day_new_low_in_n_days(self, inStockData: pd.DataFrame, atrs_ranking_df : pd.DataFrame, rs_check_range = 50, days = 15):
+        ticker = inStockData['Symbol'].iloc[-1]
+        rs_of_ticker = atrs_ranking_df.loc[ticker]
+        rs_ranks_in_n_days = rs_of_ticker.iloc[-days:].tolist()
+
+        for i in range(0, days):
+            # [-days ~ 0]
+            n_day_before_index = i - days
+            range_day_before_from_index = n_day_before_index - rs_check_range
+            today_rs_rank = rs_of_ticker.iloc[n_day_before_index]
+            # get last 'rs_check_range' days RS ranks
+            last_rs_ranks_in_range = rs_of_ticker.iloc[range_day_before_from_index : n_day_before_index]
+            # get top rs rank in last 'rs_check_range' days.
+            lowest_rank_in_last_range_days = last_rs_ranks_in_range.max()
+
+            # rs rank new low.
+            if today_rs_rank > lowest_rank_in_last_range_days:
+                # print(ticker)
+                # print(n_day_before_index, ' days before rs rank: ', today_rs_rank)
+                # print('last ', rs_check_range, 'days lowest rs rank from ', n_day_before_index, 'days: ', lowest_rank_in_last_range_days)
+                # print(today_rs_rank, ' > ', lowest_rank_in_last_range_days)
+                return True
+
+        return False
+
 
     # 현 주가가 150MA 및 200MA 위에 있는가?
     # 주가가 50일 MA위에 있는가?
@@ -1390,3 +1664,123 @@ class JdStockDataManager:
     def get_top10_in_industries(self):
         dic = load_from_json('top10_in_industries')
         return dic
+    
+    def cook_stock_info_from_tickers(self, inTickers : list, fileName : str, bUseDataCache = True):
+
+        cook_start_time = time.time()
+
+
+        stock_list = self.getStockListFromLocalCsv()
+        out_tickers = []
+        out_stock_datas_dic = {}
+        daysNum = 365
+        self.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, bUseDataCache)
+        atrs_ranking_df = self.get_ATRS_Ranking_df()
+
+        nyse_list = self.get_fdr_stock_list('NYSE')
+        nyse_list = nyse_list['Symbol'].tolist()
+
+        nasdaq_list = self.get_fdr_stock_list('NASDAQ')
+        nasdaq_list = nasdaq_list['Symbol'].tolist()
+
+        stock_info_dic = {}
+
+        for ticker in inTickers:
+            gisc_df = self.get_GICS_df()
+            market = ''
+
+            if ticker in nyse_list:
+                market = 'NYSE'
+            if ticker in nasdaq_list:
+                market = 'NASDAQ'
+
+            if market == '':
+                print('can not find ticker {0} in any nyse or nasdaq market.', ticker)
+            
+            try:
+                industry = gisc_df.loc[ticker]['industry']
+                scores = self.get_long_term_industry_rank_scores(industry)
+            except:
+                industry = 'None'
+                scores = 'None'
+                
+            
+            industry_score = 0
+            if len(scores) != 0:
+                s_rank_scores : pd.Series = self.get_long_term_industry_rank_scores(industry)
+                if not s_rank_scores.empty:
+                    industry_score = s_rank_scores.iloc[-1]
+            else:
+                print(f'can not find industry rank score from ticker: {ticker}, industry: {industry}')
+
+            stockData = out_stock_datas_dic.get(ticker)
+            atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
+
+            lower_low_3 = -1 if self.check_lower_lows_3(stockData) else 0 # bad
+            higher_high_3 = 1 if self.check_higher_highs_3(stockData) else 0 # good
+
+            below_20ma_closed = self.check_below_20ma_closed_cnt(stockData) * -1 # bad
+            below_50ma_closed = self.check_below_50ma_closed_cnt(stockData) * -1 # bad
+
+            up_more_than_adr = self.check_up_more_than_adr_cnt(stockData) # good
+            down_more_than_adr = self.check_down_more_than_adr_cnt(stockData) * -1 # bad
+
+            bullish_candle_cnt, bearish_candle_cnt = self.check_bullish_bearish_candle_count_in_n_days(stockData) # good vs bad
+            more_bullish_candle = 1 if bullish_candle_cnt > bearish_candle_cnt else -1
+
+            ma20_disparity_more_than_20ptg = self.check_20ma_gap_more_than_20ptg_cnt(stockData) * -1 # bad
+
+            close_equal_high, close_equal_low = self.check_close_equal_high_or_low_cnt(stockData) # bad, good
+            close_equal_low *= -1
+
+            open_equal_high = self.check_OEH_cnt(stockData) * -1 # bad
+            open_equal_low = self.check_OEL_cnt(stockData) # good
+
+            oops_up_reversal = self.check_oops_up_reversal_cnt(stockData) # good
+
+            squat = self.check_squat_cnt(stockData) * -1 # bad
+            squat_recovery = self.check_squat_recovery_cnt(stockData) # good
+
+            rs_new_high = 1 if self.check_rs_N_day_new_high_in_n_days(stockData, atrs_ranking_df, 50, 15) else 0 # good
+            rs_new_low = -1 if self.check_rs_N_day_new_low_in_n_days(stockData, atrs_ranking_df, 50, 15) else 0 # bad
+
+            CV_total_cnt = (lower_low_3 + higher_high_3 + below_20ma_closed + below_50ma_closed + up_more_than_adr + down_more_than_adr + more_bullish_candle +
+            ma20_disparity_more_than_20ptg + close_equal_low + close_equal_high + open_equal_high + open_equal_low + oops_up_reversal + squat + squat_recovery + 
+            rs_new_high + rs_new_low)
+
+
+            bPocketPivot = self.check_pocket_pivot(stockData)
+            bInsideBar = self.check_insideBar(stockData)
+            NR_x = self.check_NR_with_TrueRange(stockData)
+            bWickPlay = self.check_wickplay(stockData)
+            bOEL = self.check_OEL(stockData)
+            bConverging, bPower3, bPower2 = self.check_ma_converging(stockData)
+            bNearMA = self.check_near_ma(stockData)
+
+            trandingViewFormat = market + ':' + ticker + ','
+
+            stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), bConverging, bPocketPivot, bInsideBar, NR_x, bWickPlay, bOEL,
+                                      # C/V factors
+                                      lower_low_3, higher_high_3, below_20ma_closed, below_50ma_closed, up_more_than_adr, down_more_than_adr, more_bullish_candle,
+                                      ma20_disparity_more_than_20ptg, close_equal_low, close_equal_high, open_equal_high, open_equal_low, oops_up_reversal,
+                                      squat, squat_recovery, rs_new_high, rs_new_low, CV_total_cnt,
+                                      trandingViewFormat]
+
+
+        df = pd.DataFrame.from_dict(stock_info_dic).transpose()
+        columns = ['Market', 'Industry', 'Industry Score', 'RS Rank', 'MA Converging', 'Pocket Pivot', 'Inside bar', 'NR(x)', 'Wick Play', 'OEL',
+                   'lower_low_3', 'higher_high_3', 'below_20ma_closed', 'below_50ma_closed', 'up_more_than_adr', 'down_more_than_adr', 'more_bullish_candle',
+                    'ma20_disparity_more_than_20ptg', 'close_equal_low', 'close_equal_high', 'open_equal_high', 'open_equal_low', 'oops_up_reversal',
+                    'squat', 'squat_recovery', 'rs_50d_new_high', 'rs_50d_new_low' ,'CV_total_cnt',
+                    'TrandingViewFormat']
+        df.columns = columns
+        df.index.name = 'Symbol'
+
+        save_path = os.path.join(metadata_folder, f'{fileName}.csv')
+        df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
+        print(f'{fileName}.csv', 'is saved!')
+
+        cook_end_time = time.time()
+        elapsedTime = cook_end_time - cook_start_time
+        print('cook elapsed time: ', elapsedTime)
+

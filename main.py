@@ -135,7 +135,7 @@ if index == 1:
             sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum)
     else:
         stock_list = sd.getStockListFromLocalCsv()
-        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, False)
+        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, True)
 
 
     ##---------------- 조건식 -----------------------------------------------------
@@ -158,8 +158,7 @@ if index == 1:
 
             # early rejection for optimization
             if bIsUpperMA_150_200 == False:
-                continue
-            
+                continue        
 
             rs = inStockData['RS'].iloc[-1]
             ma150_slope = inStockData['MA150_Slope'].iloc[-1]
@@ -204,7 +203,7 @@ if index == 1:
 
             if bIsUpperMA:
                 filterMatchNum = filterMatchNum + 1
-            if b_150ma_upper_than_200ma or False:
+            if b_150ma_upper_than_200ma or True: # 150, 200 정배열 조건 삭제
                 filterMatchNum = filterMatchNum + 1
             if bMA_Slope_Plus:
                 filterMatchNum = filterMatchNum + 1
@@ -215,9 +214,9 @@ if index == 1:
 
             # # 기본 MMT 만족 종목에 대해서만 계산하도록 하자.
             # bPocketPivot = sd.check_pocket_pivot(inStockData)
-            #bInsideBar = sd.check_insideBar(inStockData)
-            #NR_x = sd.check_NR_with_TrueRange(inStockData)
-            # bConverging, bPower3 = sd.check_ma_converging(inStockData)
+            # bInsideBar = sd.check_insideBar(inStockData)
+            # NR_x = sd.check_NR_with_TrueRange(inStockData)
+            #bConverging, bPower3, bPower2 = sd.check_ma_converging(inStockData)
             #bNearMA = sd.check_near_ma(innStockData)
 
 
@@ -244,9 +243,10 @@ if index == 1:
             pickle.dump(out_stock_datas_dic, f)
 
 
-    # selected_tickers = ['CSTM', 'H', 'WK', 'AMAM', 'Z', 'MCK', 'TWNK', 'LTH', 'OMC', 'EXPD', 'HAE', 'JPM', 'PLAY', 'DECK', 'SHOP', 'ITGR', 'FERG', 'SKX', 'GFL', 'MMSI', 'KEX', 'EXP',
-    #                     'LSTR', 'HXL', 'VRE', 'PCVX', 'RRR']
-    #selected_tickers = [s.upper() for s in selected_tickers]
+
+    #mask_tickers = ['URTY', 'FAS',    'ARKK',    'ACLS',    'IDCC',    'COCO',    'NVDA',    'META',    'TSLA',    'TQQQ',    'CXT',    'PHM',    'EXP']
+    #mask_tickers = [s.upper() for s in mask_tickers]
+    #selected_tickers = list(set(selected_tickers) & set(mask_tickers))
     selected_tickers.sort()
 
 
@@ -271,6 +271,7 @@ elif index == 3:
 elif index == 4:
     sd.cookUpDownDatas()
 elif index == 5:
+    remove_local_caches()
     sd.cookLocalStockData()
 elif index == 6:
     remove_local_caches()
@@ -287,6 +288,6 @@ elif index == 8:
     sd.cook_long_term_industry_rank_scores()
     sd.cook_top10_in_industries()
 elif index == 9:
-    cook_infos_from_last_searched_tickers(sd, 'US_MMT')
+    cook_infos_from_last_searched_tickers(sd, 'US_MTT_0820')
 
 # --------------------------------------------------------------------
