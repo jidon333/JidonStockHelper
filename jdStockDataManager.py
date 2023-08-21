@@ -1238,9 +1238,13 @@ class JdStockDataManager:
         ll_cnt = 0
         ticker = inStockData['Symbol'].iloc[-1]
         lows = inStockData['Low'].iloc[-days:].tolist()
+        closes = inStockData['Close'].iloc[-days:].tolist()
+
         for i in range(0, days-1):
             # lower low
-            if lows[i] > lows[i+1]:
+            prev_low = lows[i]
+            today_close = closes[i+1]
+            if prev_low > today_close:
                 ll_cnt += 1
             else:
                 ll_cnt = 0
@@ -1254,9 +1258,13 @@ class JdStockDataManager:
         hh_cnt = 0
         ticker = inStockData['Symbol'].iloc[-1]
         highs = inStockData['High'].iloc[-days:].tolist()
+        closes = inStockData['Close'].iloc[-days:].tolist()
+
         for i in range(0, days-1):
+            prev_high = highs[i]
+            today_close = closes[i+1]
             # higher high
-            if highs[i] < highs[i+1]:
+            if prev_high < today_close:
                 hh_cnt += 1
             else:
                 hh_cnt = 0
