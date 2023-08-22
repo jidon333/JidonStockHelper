@@ -194,7 +194,7 @@ if index == 1:
             bIsATRS_Ranking_Good = False
             try:
                 atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
-                bIsATRS_Ranking_Good = atrsRank < 700
+                bIsATRS_Ranking_Good = atrsRank < 1000
             except Exception as e:
                 print(e)
                 bIsATRS_Ranking_Good = False
@@ -288,6 +288,6 @@ elif index == 8:
     sd.cook_long_term_industry_rank_scores()
     sd.cook_top10_in_industries()
 elif index == 9:
-    cook_infos_from_last_searched_tickers(sd, 'US_MTT_0820')
+    cook_infos_from_last_searched_tickers(sd, 'US_MTT_0822')
 
 # --------------------------------------------------------------------

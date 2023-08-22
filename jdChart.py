@@ -248,7 +248,7 @@ class JdChart:
         # 차트 그리기
         ticker = self.get_curr_ticker()
         currStockData = self.get_curr_stock_data()
-        currStockData = currStockData[['Name', 'Industry', 'TRS', 'TC', 'TR', 'High', 'Low', 'Open', 'Close', 'Volume',
+        currStockData = currStockData[['Name', 'Industry', 'ADR', 'TRS', 'TC', 'TR', 'High', 'Low', 'Open', 'Close', 'Volume',
                                         'ATRS_Exp', 'ATRS150_Exp', '50MA', '150MA', '200MA']]
         
         print('ticker: ', ticker)
@@ -271,6 +271,7 @@ class JdChart:
         titleStr = f"{ticker} ({name}) \n {industryKor},  ATRS Rank: {int(curr_rank)}th"
         trs = currStockData['TRS'].iloc[-1]
         tc = currStockData['TC'].iloc[-1]
+        adr = currStockData['ADR'].iloc[-1]
 
         try:
             top10 = self.top10_in_industries.get(industryText, None)
@@ -331,6 +332,7 @@ class JdChart:
             f"Industry: {industryText}\n"
             f"TRS: {trs}\n"
             f"TC: {tc}\n"
+            f"ADR(%): {adr}\n"
             f"NR(x): {trueRange_NR_x}\n"
             f"Inside bar: {bIsInsideBar}\n"
             f"Wick Play: {bWickPlay}\n"

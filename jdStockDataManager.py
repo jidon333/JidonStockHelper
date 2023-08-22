@@ -1102,23 +1102,8 @@ class JdStockDataManager:
         
         return bIsInsideBar
     
-    def check_pocket_pivot(self, inStockData: pd.DataFrame):
-        # Check Pocket pivot
-        # get the last 10 days from the last day.
-        bIsPocketPivot = False
-
-        # if last day close is plus, check the pocket pivot.
-        bIsLastDayCloseUp = inStockData['Close'].iloc[-1] > inStockData['Close'].iloc[-2]
-        if bIsLastDayCloseUp:
-            recent_10_days_volumes = inStockData[-12:-1]
-            last_day_volume = inStockData['Volume'].iloc[-1]
-            # select if 
-            price_drop_condition = recent_10_days_volumes['Close'] < recent_10_days_volumes['Close'].shift(1)
-            volume_on_price_drop_days = recent_10_days_volumes.loc[price_drop_condition, 'Volume']
-            if volume_on_price_drop_days.max() < last_day_volume:
-                bIsPocketPivot = True
-
-        return bIsPocketPivot
+    def get_moving_average_data(self, inStockData: pd.DataFrame, Num):
+        return inStockData['Close'].rolling(window=Num).mean()
 
     # return boolean tuple (bIsConverging, bIsPower3)
     def check_ma_converging(self, inStockData: pd.DataFrame):
@@ -1557,7 +1542,77 @@ class JdStockDataManager:
                 return True
 
         return False
+    
 
+
+
+    def check_pocket_pivot(self, inStockData: pd.DataFrame):
+        # Check Pocket pivot
+        bIsPocketPivot = False
+
+        # only bullish day
+        bBullishDay = inStockData['Close'].iloc[-1] > inStockData['Open'].iloc[-1]
+        if bBullishDay:
+            # get the last 10 days from the last day. considering shift operaion below.
+            recent_10_days_volumes = inStockData[-12:-1]
+            last_day_volume = inStockData['Volume'].iloc[-1]
+
+            # select price down days's volume
+            price_drop_condition = recent_10_days_volumes['Close'] < recent_10_days_volumes['Close'].shift(1)
+            volume_on_price_drop_days = recent_10_days_volumes.loc[price_drop_condition, 'Volume']
+
+            # today's volume is bigger than last 10 down day's volume.
+            if volume_on_price_drop_days.max() < last_day_volume:
+                ma10 = self.get_moving_average_data(inStockData, 10).iloc[-1]
+                low = inStockData['Low'].iloc[-1]
+                ma10_to_low = self.get_percentage_AtoB(ma10, low)
+
+                # stock price shouldn't above the ma10 more than 0.1%
+                if ma10_to_low <= 0.1:
+                    bIsPocketPivot = True
+
+        return bIsPocketPivot
+
+
+    def check_pocket_pivot_cnt(self, inStockData: pd.DataFrame, days=15):
+        ticker = inStockData['Symbol'].iloc[-1]
+        #dates = inStockData.iloc[-days:].index.tolist()
+        closes = inStockData['Close'].iloc[-days:].tolist()
+        opens = inStockData['Open'].iloc[-days:].tolist()
+        volumes = inStockData['Volume'].iloc[-days:].tolist()
+        lows = inStockData['Low'].iloc[-days:].tolist()
+        ma10 = self.get_moving_average_data(inStockData, 10).iloc[-days:].tolist()
+        pocket_pivot_cnt = 0
+
+        for i in range(0, days):
+            #today_date = dates[i]
+            today_close = closes[i]
+            today_open = opens[i]
+
+            today_volume = volumes[i]
+            today_low = lows[i]
+            today_ma10 = ma10[i]
+
+            bBullishDay = today_close > today_open
+            # bullish day
+            if bBullishDay:
+                ma10_to_low_pcg = self.get_percentage_AtoB(today_ma10, today_low)
+                # stock price shouldn't above the ma10 more than 0.1%
+                if ma10_to_low_pcg <= 0.1:
+                    n_day_before_index = i - days
+                    last_10_days_volumes_range_index = n_day_before_index - 10
+                    # [days -10, days]
+                    last_10_days_volumes = inStockData[last_10_days_volumes_range_index : n_day_before_index]
+
+                    # select price down day's volume
+                    price_drop_condition = last_10_days_volumes['Close'] < last_10_days_volumes['Close'].shift(1)
+                    volumes_of_price_drop_days = last_10_days_volumes.loc[price_drop_condition, 'Volume']
+
+                    # today's day volume is bigger than last 10 down day's volume.
+                    if volumes_of_price_drop_days.max() < today_volume:
+                        pocket_pivot_cnt += 1
+
+        return pocket_pivot_cnt
 
     # 현 주가가 150MA 및 200MA 위에 있는가?
     # 주가가 50일 MA위에 있는가?
@@ -1674,9 +1729,7 @@ class JdStockDataManager:
         return dic
     
     def cook_stock_info_from_tickers(self, inTickers : list, fileName : str, bUseDataCache = True):
-
         cook_start_time = time.time()
-
 
         stock_list = self.getStockListFromLocalCsv()
         out_tickers = []
@@ -1752,9 +1805,12 @@ class JdStockDataManager:
             rs_new_high = 1 if self.check_rs_N_day_new_high_in_n_days(stockData, atrs_ranking_df, 50, 15) else 0 # good
             rs_new_low = -1 if self.check_rs_N_day_new_low_in_n_days(stockData, atrs_ranking_df, 50, 15) else 0 # bad
 
+            pocket_pivot_cnt = self.check_pocket_pivot_cnt(stockData)
+
+
             CV_total_cnt = (lower_low_3 + higher_high_3 + below_20ma_closed + below_50ma_closed + up_more_than_adr + down_more_than_adr + more_bullish_candle +
             ma20_disparity_more_than_20ptg + close_equal_low + close_equal_high + open_equal_high + open_equal_low + oops_up_reversal + squat + squat_recovery + 
-            rs_new_high + rs_new_low)
+            rs_new_high + rs_new_low + pocket_pivot_cnt)
 
 
             bPocketPivot = self.check_pocket_pivot(stockData)
@@ -1771,7 +1827,7 @@ class JdStockDataManager:
                                       # C/V factors
                                       lower_low_3, higher_high_3, below_20ma_closed, below_50ma_closed, up_more_than_adr, down_more_than_adr, more_bullish_candle,
                                       ma20_disparity_more_than_20ptg, close_equal_low, close_equal_high, open_equal_high, open_equal_low, oops_up_reversal,
-                                      squat, squat_recovery, rs_new_high, rs_new_low, CV_total_cnt,
+                                      squat, squat_recovery, rs_new_high, rs_new_low, pocket_pivot_cnt, CV_total_cnt,
                                       trandingViewFormat]
 
 
@@ -1779,14 +1835,18 @@ class JdStockDataManager:
         columns = ['Market', 'Industry', 'Industry Score', 'RS Rank', 'MA Converging', 'Pocket Pivot', 'Inside bar', 'NR(x)', 'Wick Play', 'OEL',
                    'lower_low_3', 'higher_high_3', 'below_20ma_closed', 'below_50ma_closed', 'up_more_than_adr', 'down_more_than_adr', 'more_bullish_candle',
                     'ma20_disparity_more_than_20ptg', 'close_equal_low', 'close_equal_high', 'open_equal_high', 'open_equal_low', 'oops_up_reversal',
-                    'squat', 'squat_recovery', 'rs_50d_new_high', 'rs_50d_new_low' ,'CV_total_cnt',
+                    'squat', 'squat_recovery', 'rs_50d_new_high', 'rs_50d_new_low', 'pocket_pivot' ,'CV_total_cnt',
                     'TrandingViewFormat']
         df.columns = columns
         df.index.name = 'Symbol'
 
-        save_path = os.path.join(metadata_folder, f'{fileName}.csv')
-        df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
-        print(f'{fileName}.csv', 'is saved!')
+        # save_path = os.path.join(metadata_folder, f'{fileName}.csv')
+        # df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
+        # print(f'{fileName}.csv', 'is saved!')
+
+        save_path = os.path.join(metadata_folder, f'{fileName}.xlsx')
+        df.to_excel(save_path, index_label='Symbol')
+        print(f'{fileName}.xlsx', 'is saved!')
 
         cook_end_time = time.time()
         elapsedTime = cook_end_time - cook_start_time
