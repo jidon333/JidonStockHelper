@@ -36,6 +36,9 @@ from PyQt5.QtCore import Qt
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
+sd = JdStockDataManager()
+
+
 def DrawStockDatas(stock_datas_dic, selected_tickers, inStockManager : JdStockDataManager, maxCnt = -1):
     
 
@@ -211,7 +214,7 @@ def filter_stocks_high_ADR_swing(stock_datas_dic : dict):
             sector = gisc_df.loc[ticker]['sector']
             bIsNotHealthCare = sector != 'Healthcare'
         except Exception as e:
-            print(e)
+            print('Can\'t find GISC for ',e)
 
         if bIsVolumeEnough and bADRMoreThan4 and bIsUpperMA and bIsNotHealthCare:
             filtered_tickers.append(ticker)
@@ -227,63 +230,59 @@ def filter_stock_ALL(stock_datas_dic : dict):
     return filtered_tickers
 
 
-def screening_stocks_by_func(filter_func, bForceNotUseCache = True):
+def screening_stocks_by_func(filter_func, bUseLoadedStockData = True):
     out_tickers = []
     out_stock_datas_dic = {}
 
-    if not bForceNotUseCache:
-        bUseLocalCache = get_yes_no_input('Do you want to see last chart data? \n It will use cached local data and it will save loading time. \n (y/n)')
-    else:
-        bUseLocalCache = False
-
     daysNum = int(365)
-    if bUseLocalCache:
-        try:
-            with open('cache_tickers', "rb") as f:
-                out_tickers = pickle.load(f)
-
-            with open('cache_stock_datas_dic', 'rb') as f:
-                out_stock_datas_dic = pickle.load(f)
-            
-        except FileNotFoundError:
-            print('Can not find your last stock chart data in local.\n The chart data will be re-generated. ')
-            bUseLocalCache = False
-            stock_list = sd.getStockListFromLocalCsv()
-            sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum)
-    else:
-        stock_list = sd.getStockListFromLocalCsv()
-        sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, True)
+    stock_list = sd.getStockListFromLocalCsv()
+    sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, bUseLoadedStockData)
 
 
     ##---------------- 조건식 -----------------------------------------------------
-    if not bUseLocalCache:
+    search_start_time = time.time()
+    selected_tickers = []
+    selected_tickers = filter_func(out_stock_datas_dic)
+    selected_tickers.sort()
 
-        search_start_time = time.time()
-        selected_tickers = []
-        selected_tickers = filter_func(out_stock_datas_dic)
-        selected_tickers.sort()
-   
-        search_end_time = time.time()
-        execution_time = search_end_time - search_start_time
-        print(f"Search tiem elapsed: {execution_time}sec")
-
-    elif bUseLocalCache:
-        selected_tickers = out_tickers
-
-    # 데이터를 파일에 저장
-    if not bUseLocalCache:
-        with open('cache_tickers', "wb") as f:
-            pickle.dump(selected_tickers, f)
-
-        with open('cache_stock_datas_dic', "wb") as f:
-            pickle.dump(out_stock_datas_dic, f)
-
+    search_end_time = time.time()
+    execution_time = search_end_time - search_start_time
+    print(f"Search tiem elapsed: {execution_time}sec")
     print('filtered by quant data: \n', selected_tickers)
     print('selected tickers num: ', len(selected_tickers))
 
     return out_stock_datas_dic, selected_tickers
 
+def screen_stocks_and_show_chart(filter_function, bUseLocalLoadedStockDataForScreening):
+    bUseLocalCache = get_yes_no_input('Do you want to see last chart data? \n It will just show your last chart data without screening. \n (y/n)')
+    if bUseLocalCache:
+        try:
+            with open('cache_tickers', "rb") as f:
+                tickers = pickle.load(f)
 
+            with open('cache_stock_datas_dic', 'rb') as f:
+                stock_data = pickle.load(f)
+            
+        except FileNotFoundError:
+            print('Can not find your last stock chart data in local.\n The chart data will be re-generated. ')
+            bUseLocalCache = False
+            stock_data, tickers = screening_stocks_by_func(filter_function, bUseLocalLoadedStockDataForScreening)
+
+    else:
+        stock_data, tickers = screening_stocks_by_func(filter_function, bUseLocalLoadedStockDataForScreening)
+
+    # 데이터를 파일에 저장
+    if not bUseLocalCache:
+        with open('cache_tickers', "wb") as f:
+            pickle.dump(tickers, f)
+
+        with open('cache_stock_datas_dic', "wb") as f:
+            pickle.dump(stock_data, f)
+
+    print('filtered by quant data: \n', tickers)
+    print('selected tickers num: ', len(tickers))
+
+    DrawStockDatas(stock_data, tickers, sd)
 
 print("Select the chart type. \n \
       1: Stock Data Chart \n \
@@ -298,24 +297,10 @@ print("Select the chart type. \n \
       10: MTT Index chart ")
 
 index = int(input())
-sd = JdStockDataManager()
 
 if index == 1:
-    stock_data, tickers = screening_stocks_by_func(filter_stocks_MTT, False)
-    #stock_data, tickers = screening_stocks_by_func(filter_stocks_high_ADR_swing, False)
-    #stock_data, tickers = screening_stocks_by_func(filter_stock_ALL, False)
-
-    # mask_tickers = ['FSLY', 'VRT', 'CLS', 'CELH', 'BLDR', 'KNF', 'FRSH', 'SOFI', 'AEHR',
-    #   'CVNA', 'DLO', 'ACLS', 'DKNG', 'LSCC', 'CFLT', 'NVDA', 'TSLA', 'SMCI',
-    #     'PLTR', 'GLBE', 'UPWK', 'MBD', 'NFLX', 'META', 'ROKU', 'UBER', 'MNDY', 'STRL', 'TEAM', 'KD', 'IONQ']
+    screen_stocks_and_show_chart(filter_stock_ALL, True)
     
-    #tickers = list(set(mask_tickers) & set(tickers))
-    #tickers.sort()
-    print('filtered by quant data: \n', tickers)
-    print('selected tickers num: ', len(tickers))
-
-    DrawStockDatas(stock_data, tickers, sd)
-
 elif index == 2:
     updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*3)
     DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500)
@@ -349,7 +334,7 @@ elif index == 8:
     sd.cook_long_term_industry_rank_scores()
     sd.cook_top10_in_industries()
 elif index == 9:
-    screening_stocks_by_func(filter_stocks_MTT)
+    screening_stocks_by_func(filter_stocks_MTT, True)
     cook_infos_from_last_searched_tickers(sd, 'US_MTT_0909')
 elif index == 10:
     df = sd.get_MTT_count_data_from_csv()

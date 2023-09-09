@@ -487,7 +487,7 @@ class JdStockDataManager:
         
         stock_data_len = 365*5 # 기본 데이터는 든든하게 미리 챙겨두기
         stock_list = self.getStockListFromLocalCsv()
-        self.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, stock_data_len, True)
+        self.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, stock_data_len, False)
 
         nyse = mcal.get_calendar('NYSE')
         trading_days = nyse.schedule(start_date=dt.date.today() - dt.timedelta(days=daysNum), end_date=dt.date.today()).index
