@@ -30,7 +30,7 @@ class JdChart:
     def __init__(self, inStockManager = None):
 
         self.bDrawBarChart = True
-        self.bDrawingUpDownChart = False
+        self.bDrawingStockChart = True
 
         self.bShowMa10 = False
         self.bShowMa20 = False
@@ -42,7 +42,7 @@ class JdChart:
         self.text_box_info = None
 
 
-        # for stock dat achart
+        # for stock data chart
         self.stock_datas_dic : dict[str, pd.DataFrame]
         self.curr_ticker_index = 0
         self.selected_tickers : list
@@ -51,6 +51,8 @@ class JdChart:
         self.updown_nyse : pd.DataFrame
         self.updown_nasdaq : pd.DataFrame
         self.updown_sp500 : pd.DataFrame
+
+        self.mtt_count_df : pd.DataFrame
 
         self.top10_in_industries : dict
         self.top10_in_industries = self.stockManager.get_top10_in_industries()
@@ -94,6 +96,15 @@ class JdChart:
 
             self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
             self.fig.canvas.mpl_connect('close_event', self.on_close)
+
+    def init_plots_for_mtt_count(self, mtt_count_df : pd.DataFrame):
+        self.mtt_count_df = mtt_count_df
+
+        #self.fig, (self.ax1) = plt.subplots(figsize=(20, 10))
+        self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(20, 10), gridspec_kw={'height_ratios': [3, 1]})  # 2개의 서브플롯을 생성
+
+        self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
+        self.fig.canvas.mpl_connect('close_event', self.on_close)
      
     def get_curr_ticker(self):
         return self.selected_tickers[self.curr_ticker_index]
@@ -164,7 +175,7 @@ class JdChart:
                                         transform=drawAxis.transAxes,
                                         ha='center', va='top')
         else:
-                if self.bDrawBarChart and not self.bDrawingUpDownChart:
+                if self.bDrawBarChart and self.bDrawingStockChart:
                     currStockData = self.get_curr_stock_data()
                     x = int(x)
                     if x < 0 : x=0
@@ -285,7 +296,7 @@ class JdChart:
 
 
         trueRange_NR_x = self.stockManager.check_NR_with_TrueRange(currStockData)
-        bIsInsideBar = self.stockManager.check_insideBar(currStockData)
+        bIsInsideBar, bDoubleInsideBar = self.stockManager.check_insideBar(currStockData)
         bIsPocketPivot = self.stockManager.check_pocket_pivot(currStockData)
         bWickPlay = self.stockManager.check_wickplay(currStockData)
         bOEL = self.stockManager.check_OEL(currStockData)
@@ -335,6 +346,7 @@ class JdChart:
             f"ADR(%): {adr}\n"
             f"NR(x): {trueRange_NR_x}\n"
             f"Inside bar: {bIsInsideBar}\n"
+            f"Double Inside bar: {bDoubleInsideBar}\n"
             f"Wick Play: {bWickPlay}\n"
             f"OEL: {bOEL}\n"
             f"Pocket Pivot: {bIsPocketPivot}\n"
@@ -434,7 +446,7 @@ class JdChart:
 
     def draw_updown_chart(self):
 
-        self.bDrawingUpDownChart = True
+        self.bDrawingStockChart = False
 
 
         self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
@@ -453,6 +465,48 @@ class JdChart:
 
         # Add a horizontal line at y=0
         self.ax1.axhline(y=0, color='black', linestyle='--')
+
+        # Show the chart and pause the execution
+        plt.draw()
+
+        while True:
+            plt.pause(0.01)
+
+
+    def draw_mtt_count_chart(self):
+
+        self.bDrawingStockChart = False
+
+        self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
+        self.fig.canvas.mpl_connect('close_event', self.on_close)
+
+        temp_df = self.mtt_count_df
+
+        #temp_df['200MA'] = temp_df['Count'].rolling(window=200).mean()
+        temp_df['150MA'] = temp_df['Count'].rolling(window=150).mean()
+        temp_df['50MA'] = temp_df['Count'].rolling(window=50).mean()
+        #temp_df['20MA'] = temp_df['Count'].rolling(window=20).mean()
+        temp_df['10MA'] = temp_df['Count'].rolling(window=10).mean()
+
+
+
+        # Draw ma first for the drawing order
+        #self.ax1.plot(temp_df['200MA'], label='MA200', color='green')
+        self.ax1.plot(temp_df['150MA'], label='MA150', color='blue')
+        self.ax1.plot(temp_df['50MA'], label='MA50', color='orange')
+        #self.ax1.plot(temp_df['20MA'], label='MA20', color='red', alpha=0.5)
+        self.ax1.plot(temp_df['10MA'], label='MA10', color='black', alpha=0.5)
+        # Add legend, title, and grid
+        self.ax1.legend()
+        self.ax1.set_title('MTT Count Moving Averages')
+        self.ax1.grid()
+
+        self.ax2.plot(temp_df.index, temp_df['Count'], label='Count', alpha=0.3, color='blue')
+        self.ax2.axhline(y=400, color='black', linestyle='--')
+        self.ax2.legend()
+        self.ax2.set_title('MTT Count Chart')
+        self.ax2.grid()
+
 
         # Show the chart and pause the execution
         plt.draw()

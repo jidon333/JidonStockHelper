@@ -62,6 +62,12 @@ def DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500):
     chart.init_plots_for_up_down(updown_nyse, updown_nasdaq, updown_sp500)
     chart.draw_updown_chart()
 
+
+def draw_MTT_count_Index(mtt_cnt_df):
+    chart = JdChart(sd)
+    chart.init_plots_for_mtt_count(mtt_cnt_df)
+    chart.draw_mtt_count_chart()
+
 def remove_outdated_tickers():
     with open("DataReader_exception.json", "r") as outfile:
         data = json.load(outfile)
@@ -98,28 +104,139 @@ def cook_infos_from_last_searched_tickers(inStockManager : JdStockDataManager, i
 
 
 
-print("Select the chart type. \n \
-      1: Stock Data Chart \n \
-      2: Momentum Index Chart \n \
-      3: Sync local .csv datas from web \n \
-      4: cook up-down datas using local csv files. \n \
-      5: cook local stock data. \n \
-      6: Download stock data from web and overwrite local files. (It will takes so long...) \n \
-      7: cook ATRS Ranking \n \
-      8: cook industry Ranking \n \
-      9: cook stock infos from the last searched tickers \n")
+# return filtered tickers
+def filter_stocks_MTT(stock_datas_dic : dict, n_day_before = -1):
+    filtered_tickers = []
+    atrs_ranking_df = sd.get_ATRS_Ranking_df()
+    gisc_df = sd.get_GICS_df()
 
-index = int(input())
-#index = 1
+    for ticker, inStockData in stock_datas_dic.items():
 
-sd = JdStockDataManager()
-out_tickers = []
-out_stock_datas_dic = {}
+        try:
+            close = inStockData['Close'].iloc[n_day_before]
+            ma150 = inStockData['150MA'].iloc[n_day_before]
+            ma200 = inStockData['200MA'].iloc[n_day_before]
+        except Exception as e:
+            continue
 
-if index == 1:
-    bUseLocalCache = get_yes_no_input('Do you want to see last chart data? \n It will use cached local data and it will save loading time. \n (y/n)')
+        bIsUpperMA_150_200 = close > ma150 and close > ma200
+        # early rejection for optimization
+        if bIsUpperMA_150_200 == False:
+            continue        
+
+        try:
+            rs = inStockData['RS'].iloc[n_day_before]
+            ma150_slope = inStockData['MA150_Slope'].iloc[n_day_before]
+            ma200_slope = inStockData['MA200_Slope'].iloc[n_day_before]
+            ma50 = inStockData['50MA'].iloc[n_day_before]
+            volume_ma50 = inStockData['Volume'].rolling(window=50).mean().iloc[n_day_before]
+            ADR = inStockData['ADR'].iloc[n_day_before]
+        except Exception as e:
+            continue
+
+        # (거래량 50일 평균 20만이상 + 10불이상 or 하루거래량 100억 이상)
+        bIsVolumeEnough = (volume_ma50 >= 200000 and close >= 10 ) or volume_ma50*close > 10000000
+        # 마지막날 거래량 100,000주 이상
+        #bIsVolumeEnough = bIsVolumeEnough and last_volume >= 100000
+        bIsUpperMA = close > bIsUpperMA_150_200 and close > ma50
+        b_150ma_upper_than_200ma = ma150 > ma200
+        bMA_Slope_Plus = ma150_slope > 0 and ma200_slope > 0
+        b_50ma_biggerThan_150ma_200ma = ma50 > ma150 and ma50 > ma200
+
+        bIsATRS_Ranking_Good = False
+        try:
+            atrsRank = atrs_ranking_df.loc[ticker].iloc[n_day_before]
+            bIsATRS_Ranking_Good = atrsRank < 1000
+        except Exception as e:
+            print(e)
+            bIsATRS_Ranking_Good = False
+  
+        filterMatchNum = 0
+
+        if ADR < 1:
+            continue
+
+        if bIsUpperMA:
+            filterMatchNum = filterMatchNum + 1
+        if b_150ma_upper_than_200ma or True: # 150, 200 정배열 조건 삭제
+            filterMatchNum = filterMatchNum + 1
+        if bMA_Slope_Plus:
+            filterMatchNum = filterMatchNum + 1
+        if b_50ma_biggerThan_150ma_200ma:
+            filterMatchNum = filterMatchNum + 1
+        if bIsATRS_Ranking_Good:
+            filterMatchNum = filterMatchNum + 1
+
+        #거래량, VCP, RS는 포기 못함
+        if filterMatchNum >= 5 and bIsVolumeEnough:
+            filtered_tickers.append(ticker)
+
+    return filtered_tickers
+
+def filter_stocks_high_ADR_swing(stock_datas_dic : dict):
+    filtered_tickers = []
+    atrs_ranking_df = sd.get_ATRS_Ranking_df()
+    gisc_df = sd.get_GICS_df()
+
+    for ticker, inStockData in stock_datas_dic.items():
+
+        close = inStockData['Close'].iloc[-1]
+        ma150 = inStockData['150MA'].iloc[-1]
+        ma200 = inStockData['200MA'].iloc[-1]
+        bIsUpperMA_150_200 = close > ma150 and close > ma200
+
+        # early rejection for optimization
+        if bIsUpperMA_150_200 == False:
+            continue
+    
+        ma50 = inStockData['50MA'].iloc[-1]
+        volume_ma50 = inStockData['Volume'].rolling(window=50).mean().iloc[-1]
+        ADR = inStockData['ADR'].iloc[-1]
+        bIsUpperMA = close > bIsUpperMA_150_200 and close > ma50
+
+        # 설명 : 스테이지1을 포함, 단기 트레이딩을 위한 고ADR 단기 모멘텀 스크리너
+        # 1. $5 이상
+        # 2. ETF/ETN 제외
+        # 3. 20일 ADR 4% 이상
+        # 4. 50일 평균 거래량 100만주 이상
+        # 5. 가격 > 50SMA
+        # 6. 가격 > 200SMA
+        # 7. 섹터 제외 : Health Technology
+
+        bIsVolumeEnough = (volume_ma50 >= 1000000 and close >= 5 )
+        bADRMoreThan4 = ADR >=4.0
+        bIsUpperMA
+        bIsNotHealthCare = False
+        try:
+            sector = gisc_df.loc[ticker]['sector']
+            bIsNotHealthCare = sector != 'Healthcare'
+        except Exception as e:
+            print(e)
+
+        if bIsVolumeEnough and bADRMoreThan4 and bIsUpperMA and bIsNotHealthCare:
+            filtered_tickers.append(ticker)
+
+    return filtered_tickers
+
+# just return all stock's tickers
+def filter_stock_ALL(stock_datas_dic : dict):
+    filtered_tickers = []
+    for ticker, inStockData in stock_datas_dic.items():
+        filtered_tickers.append(ticker)
+
+    return filtered_tickers
+
+
+def screening_stocks_by_func(filter_func, bForceNotUseCache = True):
+    out_tickers = []
+    out_stock_datas_dic = {}
+
+    if not bForceNotUseCache:
+        bUseLocalCache = get_yes_no_input('Do you want to see last chart data? \n It will use cached local data and it will save loading time. \n (y/n)')
+    else:
+        bUseLocalCache = False
+
     daysNum = int(365)
-
     if bUseLocalCache:
         try:
             with open('cache_tickers', "rb") as f:
@@ -139,100 +256,19 @@ if index == 1:
 
 
     ##---------------- 조건식 -----------------------------------------------------
-
-    # Collect Technical data for screening.
     if not bUseLocalCache:
 
         search_start_time = time.time()
-
         selected_tickers = []
-    
-        atrs_ranking_df = sd.get_ATRS_Ranking_df()
-
-        for ticker, inStockData in out_stock_datas_dic.items():
-
-            close = inStockData['Close'].iloc[-1]
-            ma150 = inStockData['150MA'].iloc[-1]
-            ma200 = inStockData['200MA'].iloc[-1]
-            bIsUpperMA_150_200 = close > ma150 and close > ma200
-
-            # early rejection for optimization
-            if bIsUpperMA_150_200 == False:
-                continue        
-
-            rs = inStockData['RS'].iloc[-1]
-            ma150_slope = inStockData['MA150_Slope'].iloc[-1]
-            ma200_slope = inStockData['MA200_Slope'].iloc[-1]
-       
-            ma50 = inStockData['50MA'].iloc[-1]
-            ma20 = inStockData['Close'].rolling(window=20).mean().iloc[-1]
-            ma10 = inStockData['Close'].rolling(window=10).mean().iloc[-1]
-            tr = inStockData['TR'].iloc[-1]
-            tc = inStockData['TC'].iloc[-1]
-            atr = inStockData['ATR'].iloc[-1]
-            last_volume = inStockData['Volume'].iloc[-1]
-            volume_ma50 = inStockData['Volume'].rolling(window=50).mean().iloc[-1]
-            # (거래량 50일 평균 20만이상 + 10불이상 or 하루거래량 100억 이상)
-            bIsVolumeEnough = (volume_ma50 >= 200000 and close >= 10 ) or volume_ma50*close > 10000000
-            # 마지막날 거래량 100,000주 이상
-            #bIsVolumeEnough = bIsVolumeEnough and last_volume >= 100000
-            bIsUpperMA = close > bIsUpperMA_150_200 and close > ma50
-            b_150ma_upper_than_200ma = ma150 > ma200
-            bMA_Slope_Plus = ma150_slope > 0 and ma200_slope > 0
-            b_50ma_biggerThan_150ma_200ma = ma50 > ma150 and ma50 > ma200
-
-            bIsRSGood = rs > 0
-
-            gap_from_10ma =  abs((ma10 - close)/close) * 100
-            gap_from_20ma =  abs((ma20 - close)/close) * 100
-            gap_from_50ma =  abs((ma50 - close)/close) * 100
-            gap_from_200ma =  abs((ma200 - close)/close) * 100
-            bIsPriceNearMA = (gap_from_10ma < 5) or (gap_from_20ma < 5)
-
-            bIsVolatilityLow = tc < 1 and tr < atr
-
-            bIsATRS_Ranking_Good = False
-            try:
-                atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
-                bIsATRS_Ranking_Good = atrsRank < 1000
-            except Exception as e:
-                print(e)
-                bIsATRS_Ranking_Good = False
-
-            filterMatchNum = 0
-
-            if bIsUpperMA:
-                filterMatchNum = filterMatchNum + 1
-            if b_150ma_upper_than_200ma or True: # 150, 200 정배열 조건 삭제
-                filterMatchNum = filterMatchNum + 1
-            if bMA_Slope_Plus:
-                filterMatchNum = filterMatchNum + 1
-            if b_50ma_biggerThan_150ma_200ma:
-                filterMatchNum = filterMatchNum + 1
-            if bIsATRS_Ranking_Good:
-                filterMatchNum = filterMatchNum + 1
-
-            # # 기본 MMT 만족 종목에 대해서만 계산하도록 하자.
-            # bPocketPivot = sd.check_pocket_pivot(inStockData)
-            # bInsideBar = sd.check_insideBar(inStockData)
-            # NR_x = sd.check_NR_with_TrueRange(inStockData)
-            #bConverging, bPower3, bPower2 = sd.check_ma_converging(inStockData)
-            #bNearMA = sd.check_near_ma(innStockData)
-
-
-            # 거래량, VCP, RS는 포기 못함
-            if filterMatchNum >= 5 and bIsVolumeEnough:
-                selected_tickers.append(ticker)
-
+        selected_tickers = filter_func(out_stock_datas_dic)
+        selected_tickers.sort()
    
-    
         search_end_time = time.time()
         execution_time = search_end_time - search_start_time
         print(f"Search tiem elapsed: {execution_time}sec")
 
     elif bUseLocalCache:
         selected_tickers = out_tickers
-
 
     # 데이터를 파일에 저장
     if not bUseLocalCache:
@@ -242,19 +278,43 @@ if index == 1:
         with open('cache_stock_datas_dic', "wb") as f:
             pickle.dump(out_stock_datas_dic, f)
 
-
-
-    #mask_tickers = ['URTY', 'FAS',    'ARKK',    'ACLS',    'IDCC',    'COCO',    'NVDA',    'META',    'TSLA',    'TQQQ',    'CXT',    'PHM',    'EXP']
-    #mask_tickers = [s.upper() for s in mask_tickers]
-    #selected_tickers = list(set(selected_tickers) & set(mask_tickers))
-    selected_tickers.sort()
-
-
     print('filtered by quant data: \n', selected_tickers)
     print('selected tickers num: ', len(selected_tickers))
-    DrawStockDatas(out_stock_datas_dic, selected_tickers, sd)
-    # -----------------------------------------------------------------------------------------------------
 
+    return out_stock_datas_dic, selected_tickers
+
+
+
+print("Select the chart type. \n \
+      1: Stock Data Chart \n \
+      2: Momentum Index Chart \n \
+      3: Sync local .csv datas from web and gernerate other meta datas.(up_down, RS, industry, mtt count, etc ..) \n \
+      4: cook up-down datas using local csv files. \n \
+      5: cook local stock data. \n \
+      6: Download stock data from web and overwrite local files. (It will takes so long...) \n \
+      7: cook ATRS Ranking \n \
+      8: cook industry Ranking \n \
+      9: cook screening result as xlsx file. \n \
+      10: MTT Index chart ")
+
+index = int(input())
+sd = JdStockDataManager()
+
+if index == 1:
+    stock_data, tickers = screening_stocks_by_func(filter_stocks_MTT, False)
+    #stock_data, tickers = screening_stocks_by_func(filter_stocks_high_ADR_swing, False)
+    #stock_data, tickers = screening_stocks_by_func(filter_stock_ALL, False)
+
+    # mask_tickers = ['FSLY', 'VRT', 'CLS', 'CELH', 'BLDR', 'KNF', 'FRSH', 'SOFI', 'AEHR',
+    #   'CVNA', 'DLO', 'ACLS', 'DKNG', 'LSCC', 'CFLT', 'NVDA', 'TSLA', 'SMCI',
+    #     'PLTR', 'GLBE', 'UPWK', 'MBD', 'NFLX', 'META', 'ROKU', 'UBER', 'MNDY', 'STRL', 'TEAM', 'KD', 'IONQ']
+    
+    #tickers = list(set(mask_tickers) & set(tickers))
+    #tickers.sort()
+    print('filtered by quant data: \n', tickers)
+    print('selected tickers num: ', len(tickers))
+
+    DrawStockDatas(stock_data, tickers, sd)
 
 elif index == 2:
     updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*3)
@@ -268,6 +328,7 @@ elif index == 3:
     sd.cook_short_term_industry_rank_scores()
     sd.cook_long_term_industry_rank_scores()
     sd.cook_top10_in_industries()
+    sd.cook_MTT_count_data(filter_stocks_MTT, 10, True)
 elif index == 4:
     sd.cookUpDownDatas()
 elif index == 5:
@@ -288,6 +349,11 @@ elif index == 8:
     sd.cook_long_term_industry_rank_scores()
     sd.cook_top10_in_industries()
 elif index == 9:
-    cook_infos_from_last_searched_tickers(sd, 'US_MTT_0822')
+    screening_stocks_by_func(filter_stocks_MTT)
+    cook_infos_from_last_searched_tickers(sd, 'US_MTT_0909')
+elif index == 10:
+    df = sd.get_MTT_count_data_from_csv()
+    draw_MTT_count_Index(df)
+
 
 # --------------------------------------------------------------------

@@ -351,8 +351,6 @@ class JdStockDataManager:
 
             webData = webData_copy
 
-
-
             # remove duplicate index from csvData.
             csvData = csvData[~csvData.index.isin(webData.index)]
 
@@ -480,6 +478,87 @@ class JdStockDataManager:
                 json.dump(exception_ticker_list, outfile, indent = 4)
 
         return daily_changes_nyse_df, daily_changes_nasdaq_df, daily_changes_sp500_df
+
+
+    def cook_MTT_count_data(self, mtt_search_func, daysNum = 365, bAccumulateToExistingData = True):
+        out_tickers = []
+        out_stock_datas_dic = {}
+
+        
+        stock_data_len = 365*5 # 기본 데이터는 든든하게 미리 챙겨두기
+        stock_list = self.getStockListFromLocalCsv()
+        self.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, stock_data_len, True)
+
+        nyse = mcal.get_calendar('NYSE')
+        trading_days = nyse.schedule(start_date=dt.date.today() - dt.timedelta(days=daysNum), end_date=dt.date.today()).index
+        valid_start_date = trading_days[0]
+        valid_end_date = trading_days[-1]
+
+        days = []
+        cnts = []
+        trading_days_num = len(trading_days)
+
+
+        for i in range(1, trading_days_num):
+            day = trading_days[-i]
+            search_start_time = time.time()
+            selected_tickers = []
+            selected_tickers = mtt_search_func(out_stock_datas_dic, -i)
+            cnt = len(selected_tickers)
+
+            search_end_time = time.time()
+            execution_time = search_end_time - search_start_time
+            #print(f"Search time elapsed: {execution_time}sec")
+            days.append(day)
+            cnts.append(cnt)
+            print(f'MTT cnt of {day}: {cnt}')
+
+        # days와 cnts 리스트로 데이터프레임 생성
+        days.reverse()
+        cnts.reverse()
+        data = {'Date': days, 'Count': cnts}
+        new_df = pd.DataFrame(data)
+        new_df['Date'] = pd.to_datetime(data['Date'])
+        new_df.set_index('Date', inplace=True)
+        save_path = os.path.join(metadata_folder, 'MTT_Counts.csv')
+        if bAccumulateToExistingData:
+            local_df = pd.read_csv(save_path)
+            local_df['Date'] = pd.to_datetime(local_df['Date'])
+            local_df.set_index('Date', inplace=True)
+
+            # 중복 인덱스 제거
+            local_df = local_df[~local_df.index.isin(new_df.index)]
+
+            concat_df = pd.concat([local_df, new_df])
+            concat_df.to_csv(save_path, encoding='utf-8-sig')
+
+        else:
+            # 데이터프레임을 CSV 파일로 저장
+            new_df.to_csv(save_path, encoding='utf-8-sig')
+
+
+        
+        
+
+    def get_MTT_count_data_from_csv(self, daysNum = 365*2):
+            # ------------ nyse -------------------
+            data_path = os.path.join(metadata_folder, "MTT_Counts.csv")
+            data = pd.read_csv(data_path)
+
+            # 문자열을 datetime 객체로 변경
+            data['Date'] = pd.to_datetime(data['Date'])
+
+            # Date 행을 인덱스로 설정
+            data.set_index('Date', inplace=True)
+
+            # 미국 주식시장의 거래일 가져오기
+            trading_days = nyse.schedule(start_date=dt.date.today() - dt.timedelta(days=daysNum), end_date=dt.date.today()).index
+            startDay = trading_days[0].date()
+            endDay = min(trading_days[-1], data.index[-1]).date()
+
+            # 시작일부터 종료일까지 가져오기
+            mtt_cnt_data = data[startDay:endDay]
+            return mtt_cnt_data
 
     def downloadStockDatasFromWeb(self, daysNum = 365 * 5, bExcludeNotInLocalCsv = True):
         print("-------------------_downloadStockDatasFromWeb-----------------\n ")
@@ -1097,10 +1176,19 @@ class JdStockDataManager:
         d2_ago_high, d2_ago_low = inStockData['High'].iloc[-2], inStockData['Low'].iloc[-2]
         d1_ago_high, d1_ago_low = inStockData['High'].iloc[-1], inStockData['Low'].iloc[-1]
         bIsInsideBar = False
+        bDoubleInsideBar = False
         if d2_ago_high > d1_ago_high and d2_ago_low < d1_ago_low:
             bIsInsideBar = True
+
+        if bIsInsideBar:
+            d3_ago_high, d3_ago_low = inStockData['High'].iloc[-3], inStockData['Low'].iloc[-3]
+            if d3_ago_high > d2_ago_high and d3_ago_low < d2_ago_low:
+                bDoubleInsideBar = True
+
+
+
         
-        return bIsInsideBar
+        return bIsInsideBar, bDoubleInsideBar
     
     def get_moving_average_data(self, inStockData: pd.DataFrame, Num):
         return inStockData['Close'].rolling(window=Num).mean()
@@ -1814,16 +1902,17 @@ class JdStockDataManager:
 
 
             bPocketPivot = self.check_pocket_pivot(stockData)
-            bInsideBar = self.check_insideBar(stockData)
+            bInsideBar, bDoubleInsideBar = self.check_insideBar(stockData)
             NR_x = self.check_NR_with_TrueRange(stockData)
             bWickPlay = self.check_wickplay(stockData)
             bOEL = self.check_OEL(stockData)
             bConverging, bPower3, bPower2 = self.check_ma_converging(stockData)
             bNearMA = self.check_near_ma(stockData)
+            ADR = stockData['ADR'].iloc[-1]
 
             trandingViewFormat = market + ':' + ticker + ','
 
-            stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), bConverging, bPocketPivot, bInsideBar, NR_x, bWickPlay, bOEL,
+            stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), ADR, bConverging, bPower3, bPocketPivot, bInsideBar, bDoubleInsideBar, NR_x, bWickPlay, bOEL,
                                       # C/V factors
                                       lower_low_3, higher_high_3, below_20ma_closed, below_50ma_closed, up_more_than_adr, down_more_than_adr, more_bullish_candle,
                                       ma20_disparity_more_than_20ptg, close_equal_low, close_equal_high, open_equal_high, open_equal_low, oops_up_reversal,
@@ -1832,7 +1921,7 @@ class JdStockDataManager:
 
 
         df = pd.DataFrame.from_dict(stock_info_dic).transpose()
-        columns = ['Market', 'Industry', 'Industry Score', 'RS Rank', 'MA Converging', 'Pocket Pivot', 'Inside bar', 'NR(x)', 'Wick Play', 'OEL',
+        columns = ['Market', 'Industry', 'Industry Score', 'RS Rank','ADR(%)', 'MA Converging', 'Power of 3', 'Pocket Pivot', 'Inside bar', 'Double Inside bar', 'NR(x)', 'Wick Play', 'OEL',
                    'lower_low_3', 'higher_high_3', 'below_20ma_closed', 'below_50ma_closed', 'up_more_than_adr', 'down_more_than_adr', 'more_bullish_candle',
                     'ma20_disparity_more_than_20ptg', 'close_equal_low', 'close_equal_high', 'open_equal_high', 'open_equal_low', 'oops_up_reversal',
                     'squat', 'squat_recovery', 'rs_50d_new_high', 'rs_50d_new_low', 'pocket_pivot_cnt' ,'CV_total_cnt',
