@@ -92,21 +92,6 @@ def remove_local_caches():
 
 
 
-
-def cook_infos_from_last_searched_tickers(inStockManager : JdStockDataManager, inFileName):
-    tickers = []
-    try:
-        with open('cache_tickers', "rb") as f:
-            tickers = pickle.load(f)
-        
-    except FileNotFoundError:
-        print(f'Can not find your last searched ticker list file \'cache_tickers\' ')
-
-    if len(tickers) != 0:
-        sd.cook_stock_info_from_tickers(tickers, inFileName)
-
-
-
 # return filtered tickers
 def filter_stocks_MTT(stock_datas_dic : dict, n_day_before = -1):
     filtered_tickers = []
@@ -279,9 +264,6 @@ def screen_stocks_and_show_chart(filter_function, bUseLocalLoadedStockDataForScr
         with open('cache_stock_datas_dic', "wb") as f:
             pickle.dump(stock_data, f)
 
-    print('filtered by quant data: \n', tickers)
-    print('selected tickers num: ', len(tickers))
-
     DrawStockDatas(stock_data, tickers, sd)
 
 print("Select the chart type. \n \
@@ -299,7 +281,7 @@ print("Select the chart type. \n \
 index = int(input())
 
 if index == 1:
-    screen_stocks_and_show_chart(filter_stock_ALL, True)
+    screen_stocks_and_show_chart(filter_stocks_MTT, True)
     
 elif index == 2:
     updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*3)
@@ -334,8 +316,8 @@ elif index == 8:
     sd.cook_long_term_industry_rank_scores()
     sd.cook_top10_in_industries()
 elif index == 9:
-    screening_stocks_by_func(filter_stocks_MTT, True)
-    cook_infos_from_last_searched_tickers(sd, 'US_MTT_0909')
+    stock_data, tickers = screening_stocks_by_func(filter_stocks_MTT, True)
+    sd.cook_stock_info_from_tickers(tickers, 'US_MTT_0909')
 elif index == 10:
     df = sd.get_MTT_count_data_from_csv()
     draw_MTT_count_Index(df)

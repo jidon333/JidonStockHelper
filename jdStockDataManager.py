@@ -22,6 +22,9 @@ from jdGlobal import get_yes_no_input
 from jdGlobal import data_folder
 from jdGlobal import metadata_folder
 
+import openpyxl
+from openpyxl.styles import PatternFill, Font, Color
+
 
 nyse = mcal.get_calendar('NYSE')
 
@@ -1907,12 +1910,28 @@ class JdStockDataManager:
             bWickPlay = self.check_wickplay(stockData)
             bOEL = self.check_OEL(stockData)
             bConverging, bPower3, bPower2 = self.check_ma_converging(stockData)
+
+            bNearMa10 = self.check_near_ma(stockData, 10, 1.5)
+            bNearMa20 = self.check_near_ma(stockData, 20, 1.5)
+            bNearMa50 = self.check_near_ma(stockData, 50, 1.5)
+
+            near_ma_list = []
+            if bNearMa10:
+                near_ma_list.append(10)
+            if bNearMa20:
+                near_ma_list.append(20)
+            if bNearMa50:
+                near_ma_list.append(50)
+            
+
+
+
             bNearMA = self.check_near_ma(stockData)
             ADR = stockData['ADR'].iloc[-1]
 
             trandingViewFormat = market + ':' + ticker + ','
 
-            stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), ADR, bConverging, bPower3, bPocketPivot, bInsideBar, bDoubleInsideBar, NR_x, bWickPlay, bOEL,
+            stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), ADR, near_ma_list, bPower3, bPocketPivot, bInsideBar, bDoubleInsideBar, NR_x, bWickPlay, bOEL,
                                       # C/V factors
                                       lower_low_3, higher_high_3, below_20ma_closed, below_50ma_closed, up_more_than_adr, down_more_than_adr, more_bullish_candle,
                                       ma20_disparity_more_than_20ptg, close_equal_low, close_equal_high, open_equal_high, open_equal_low, oops_up_reversal,
@@ -1921,7 +1940,7 @@ class JdStockDataManager:
 
 
         df = pd.DataFrame.from_dict(stock_info_dic).transpose()
-        columns = ['Market', 'Industry', 'Industry Score', 'RS Rank','ADR(%)', 'MA Converging', 'Power of 3', 'Pocket Pivot', 'Inside bar', 'Double Inside bar', 'NR(x)', 'Wick Play', 'OEL',
+        columns = ['Market', 'Industry', 'Industry Score', 'RS Rank','ADR(%)', 'Near MA list(1.5%)', 'Power of 3', 'Pocket Pivot', 'Inside bar', 'Double Inside bar', 'NR(x)', 'Wick Play', 'OEL',
                    'lower_low_3', 'higher_high_3', 'below_20ma_closed', 'below_50ma_closed', 'up_more_than_adr', 'down_more_than_adr', 'more_bullish_candle',
                     'ma20_disparity_more_than_20ptg', 'close_equal_low', 'close_equal_high', 'open_equal_high', 'open_equal_low', 'oops_up_reversal',
                     'squat', 'squat_recovery', 'rs_50d_new_high', 'rs_50d_new_low', 'pocket_pivot_cnt' ,'CV_total_cnt',
@@ -1929,13 +1948,42 @@ class JdStockDataManager:
         df.columns = columns
         df.index.name = 'Symbol'
 
-        # save_path = os.path.join(metadata_folder, f'{fileName}.csv')
-        # df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
-        # print(f'{fileName}.csv', 'is saved!')
-
         save_path = os.path.join(metadata_folder, f'{fileName}.xlsx')
         df.to_excel(save_path, index_label='Symbol')
         print(f'{fileName}.xlsx', 'is saved!')
+
+
+        # 엑셀 조건수 서식 적용
+        wb = openpyxl.load_workbook(save_path)
+        sheet = wb['Sheet1']
+        column_range = 'H:AG'
+
+        red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')  # 연한 빨강
+        green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')  # 연한 녹색
+
+        for column in sheet.iter_cols(min_row=2, max_row=sheet.max_row, min_col=8, max_col=33):
+            for cell in column:
+                if cell.value == None:
+                    continue
+
+                if cell.column == 12:
+                    if cell.value > 3:
+                        cell.fill = green_fill
+                        continue
+
+                if cell.value == 'TRUE':
+                    cell.fill = green_fill
+                elif cell.value == 'FALSE':
+                    cell.fill = red_fill
+
+
+                if cell.value > 0:
+                    cell.fill = green_fill
+                elif cell.value < 0:
+                    cell.fill = red_fill
+
+        wb.save(save_path)
+
 
         cook_end_time = time.time()
         elapsedTime = cook_end_time - cook_start_time
