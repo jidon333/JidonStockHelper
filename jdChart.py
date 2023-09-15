@@ -34,6 +34,8 @@ class JdChart:
 
         self.bShowMa10 = False
         self.bShowMa20 = False
+        self.bShowEMA10 = False
+        self.bShowEMA21 = False
         
         self.stockManager : JdStockDataManager = inStockManager
 
@@ -148,9 +150,11 @@ class JdChart:
             print('can not find ticker ', inTicker)
             return False
       
-    def set_ma_visibility(self, bShowMa10, bShowMa20):
+    def set_ma_visibility(self, bShowMa10, bShowMa20, bShowEMA10, bShowEMA21):
         self.bShowMa10 = bShowMa10
         self.bShowMa20 = bShowMa20
+        self.bShowEMA10 = bShowEMA10
+        self.bShowEMA21 = bShowEMA21
 
 
     def on_close(self, event):
@@ -206,6 +210,8 @@ class JdChart:
         self.ax1.plot(temp_df['200MA'], label='MA200', color='green')
         self.ax1.plot(temp_df['150MA'], label='MA150', color='blue')
         self.ax1.plot(temp_df['50MA'], label='MA50', color='orange')
+
+
         if self.bShowMa20:
             temp_df['20MA'] = temp_df['Close'].rolling(window=20).mean()
             self.ax1.plot(temp_df['20MA'], label='MA20', color='red', alpha=0.5)
@@ -213,6 +219,15 @@ class JdChart:
         if self.bShowMa10:
                 temp_df['10MA'] = temp_df['Close'].rolling(window=10).mean()
                 self.ax1.plot(temp_df['10MA'], label='MA10', color='black', alpha=0.5)
+
+        if self.bShowEMA10:
+            temp_df['10EMA'] = temp_df['Close'].ewm(span=10, adjust=False).mean()
+            self.ax1.plot(temp_df['10EMA'], label='EMA10', color='black', alpha=0.5)
+
+        if self.bShowEMA21:
+            temp_df['21EMA'] = temp_df['Close'].ewm(span=21, adjust=False).mean()
+            self.ax1.plot(temp_df['21EMA'], label='EMA21', color='red', alpha=0.5)
+
 
         # Draw bar chart
         horizontal_OHLC_length = 0.2
@@ -245,6 +260,14 @@ class JdChart:
         if self.bShowMa10:
             in_stock_date['10MA'] = in_stock_date['Close'].rolling(window=10).mean()
             self.ax1.plot(in_stock_date['10MA'], label='MA10', color='black', alpha=0.5)
+
+        if self.bShowEMA10:
+            in_stock_date['10EMA'] = in_stock_date['Close'].ewm(span=10, adjust=False).mean()
+            self.ax1.plot(in_stock_date['10EMA'], label='EMA10', color='black', alpha=0.5)
+
+        if self.bShowEMA21:
+            in_stock_date['21EMA'] = in_stock_date['Close'].ewm(span=21, adjust=False).mean()
+            self.ax1.plot(in_stock_date['21EMA'], label='EMA21', color='red', alpha=0.5)
 
         self.ax1.plot(in_stock_date['Close'], label='Close')
 
@@ -302,27 +325,27 @@ class JdChart:
         bOEL = self.stockManager.check_OEL(currStockData)
         bIsMaConverging, bIsPower3, bIsPower2 = self.stockManager.check_ma_converging(currStockData)
         
-        bNearMa10 = self.stockManager.check_near_ma(currStockData, 10, 1.5)
-        bNearMa20 = self.stockManager.check_near_ma(currStockData, 20, 1.5)
+        bNearEma10 = self.stockManager.check_near_ma(currStockData, 10, 1.5, True)
+        bNearEma21 = self.stockManager.check_near_ma(currStockData, 21, 1.5, True)
         bNearMa50 = self.stockManager.check_near_ma(currStockData, 50, 1.5)
 
-        bSupported_by_ma10 = self.stockManager.check_supported_by_ma(currStockData, 10, 1.5)
-        bSupported_by_ma20 = self.stockManager.check_supported_by_ma(currStockData, 20, 1.5)
+        bSupported_by_ema10 = self.stockManager.check_supported_by_ma(currStockData, 10, 1.5, True)
+        bSupported_by_ema21 = self.stockManager.check_supported_by_ma(currStockData, 21, 1.5, True)
         bSupported_by_ma50 = self.stockManager.check_supported_by_ma(currStockData, 50, 1.5)
 
         near_ma_list = []
-        if bNearMa10:
+        if bNearEma10:
             near_ma_list.append(10)
-        if bNearMa20:
-            near_ma_list.append(20)
+        if bNearEma21:
+            near_ma_list.append(21)
         if bNearMa50:
             near_ma_list.append(50)
 
         supported_by_ma_list = []
-        if bSupported_by_ma10:
+        if bSupported_by_ema10:
             supported_by_ma_list.append(10)
-        if bSupported_by_ma20:
-            supported_by_ma_list.append(20)
+        if bSupported_by_ema21:
+            supported_by_ma_list.append(21)
         if bSupported_by_ma50:
             supported_by_ma_list.append(50)
 

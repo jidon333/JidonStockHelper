@@ -39,9 +39,14 @@ class JdWindowClass(QMainWindow, form_class):
 
         self.checkbox_ma10 : QCheckBox
         self.checkbox_ma20 : QCheckBox
+        self.checkbox_ema10 : QCheckBox
+        self.checkbox_ema21 : QCheckBox
 
         self.checkbox_ma10.stateChanged.connect(self.on_ma_checkbox_changed)
         self.checkbox_ma20.stateChanged.connect(self.on_ma_checkbox_changed)
+        self.checkbox_ema10.stateChanged.connect(self.on_ma_checkbox_changed)
+        self.checkbox_ema21.stateChanged.connect(self.on_ma_checkbox_changed)
+
 
 
         self.setFocusPolicy(Qt.StrongFocus)
@@ -82,8 +87,10 @@ class JdWindowClass(QMainWindow, form_class):
     def on_ma_checkbox_changed(self):
         bMa10Checked = self.checkbox_ma10.isChecked()
         bMa20Checked = self.checkbox_ma20.isChecked()
+        beEma10Checked = self.checkbox_ema10.isChecked()
+        beEma21Checked = self.checkbox_ema21.isChecked()
 
-        self.chart.set_ma_visibility(bMa10Checked, bMa20Checked)
+        self.chart.set_ma_visibility(bMa10Checked, bMa20Checked, beEma10Checked, beEma21Checked)
         self.chart.draw_stock_chart()
         self.refresh_canvas()
 

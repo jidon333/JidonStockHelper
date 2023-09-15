@@ -1240,8 +1240,12 @@ class JdStockDataManager:
 
     
     # check the low and close gap from the ma
-    def check_near_ma(self, inStockData: pd.DataFrame, MA_Num = 10, max_gap_pct = 1.5):
-        ma_datas = inStockData['Close'].rolling(window=MA_Num).mean()
+    def check_near_ma(self, inStockData: pd.DataFrame, MA_Num = 10, max_gap_pct = 1.5, bUseEMA = False):
+
+        if bUseEMA:
+            ma_datas = inStockData['Close'].ewm(span=MA_Num, adjust=False).mean()
+        else:
+            ma_datas = inStockData['Close'].rolling(window=MA_Num).mean()
 
         low = inStockData['Low'].iloc[-1]
         close = inStockData['Close'].iloc[-1]
@@ -1253,11 +1257,16 @@ class JdStockDataManager:
         return ma_gap_from_close < max_gap_pct or ma_gap_from_low < max_gap_pct
    
 
-    def check_supported_by_ma(self, inStockData: pd.DataFrame, MA_Num = 10, max_gap_pct = 1.5):
+    def check_supported_by_ma(self, inStockData: pd.DataFrame, MA_Num = 10, max_gap_pct = 1.5, bUseEMA = False):
         # print('low > ma and low and ma gap < max_gap_pct')
         # print('low < ma and close > ma')
 
-        ma_datas = inStockData['Close'].rolling(window=MA_Num).mean()
+        if bUseEMA:
+            ma_datas = inStockData['Close'].ewm(span=MA_Num, adjust=False).mean()
+        else:
+            ma_datas = inStockData['Close'].rolling(window=MA_Num).mean()
+
+        
         low = inStockData['Low'].iloc[-1]
         close = inStockData['Close'].iloc[-1]
         ma = ma_datas.iloc[-1]
@@ -1911,15 +1920,15 @@ class JdStockDataManager:
             bOEL = self.check_OEL(stockData)
             bConverging, bPower3, bPower2 = self.check_ma_converging(stockData)
 
-            bNearMa10 = self.check_near_ma(stockData, 10, 1.5)
-            bNearMa20 = self.check_near_ma(stockData, 20, 1.5)
+            bNearEma10 = self.check_near_ma(stockData, 10, 1.5, True)
+            bNearEma21 = self.check_near_ma(stockData, 21, 1.5, True)
             bNearMa50 = self.check_near_ma(stockData, 50, 1.5)
 
             near_ma_list = []
-            if bNearMa10:
+            if bNearEma10:
                 near_ma_list.append(10)
-            if bNearMa20:
-                near_ma_list.append(20)
+            if bNearEma21:
+                near_ma_list.append(21)
             if bNearMa50:
                 near_ma_list.append(50)
             

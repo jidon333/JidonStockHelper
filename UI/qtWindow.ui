@@ -58,7 +58,7 @@
      <rect>
       <x>350</x>
       <y>10</y>
-      <width>311</width>
+      <width>331</width>
       <height>41</height>
      </rect>
     </property>
@@ -85,6 +85,29 @@
      <widget class="QCheckBox" name="checkbox_ma20">
       <property name="text">
        <string>MA20</string>
+      </property>
+     </widget>
+    </widget>
+    <widget class="QSplitter" name="splitter_2">
+     <property name="geometry">
+      <rect>
+       <x>170</x>
+       <y>20</y>
+       <width>162</width>
+       <height>16</height>
+      </rect>
+     </property>
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <widget class="QCheckBox" name="checkbox_ema10">
+      <property name="text">
+       <string>EMA10</string>
+      </property>
+     </widget>
+     <widget class="QCheckBox" name="checkbox_ema21">
+      <property name="text">
+       <string>EMA21</string>
       </property>
      </widget>
     </widget>
