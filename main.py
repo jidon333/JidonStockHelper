@@ -97,6 +97,7 @@ def filter_stocks_MTT(stock_datas_dic : dict, n_day_before = -1):
     filtered_tickers = []
     atrs_ranking_df = sd.get_ATRS_Ranking_df()
     gisc_df = sd.get_GICS_df()
+    rs_ranks = []
 
     for ticker, inStockData in stock_datas_dic.items():
 
@@ -158,7 +159,7 @@ def filter_stocks_MTT(stock_datas_dic : dict, n_day_before = -1):
         #거래량, VCP, RS는 포기 못함
         if filterMatchNum >= 5 and bIsVolumeEnough:
             filtered_tickers.append(ticker)
-
+            
     return filtered_tickers
 
 def filter_stocks_high_ADR_swing(stock_datas_dic : dict):
@@ -215,7 +216,27 @@ def filter_stock_ALL(stock_datas_dic : dict):
     return filtered_tickers
 
 
-def screening_stocks_by_func(filter_func, bUseLoadedStockData = True):
+def filter_stock_Custom(stock_datas_dic : dict):
+    filtered_tickers = []
+    Mtt_tickers = filter_stock_ALL(stock_datas_dic)
+    for ticker in Mtt_tickers:
+        try:
+            ADR = stock_datas_dic[ticker]['ADR'].iloc[-1]
+            if ADR > 2:
+                filtered_tickers.append(ticker)
+
+        except Exception as e:
+            continue
+        
+
+
+
+    myTickers = ['APP','MOD','STRL','ANF','PRDO','XPO','MMYT','PDD','TSLA','XPEV', 'SMCI']
+    filtered_tickers = list(set(myTickers) & set(filtered_tickers))
+    return filtered_tickers
+
+
+def screening_stocks_by_func(filter_func, bUseLoadedStockData = True, bSortByRS = False):
     out_tickers = []
     out_stock_datas_dic = {}
 
@@ -228,8 +249,25 @@ def screening_stocks_by_func(filter_func, bUseLoadedStockData = True):
     search_start_time = time.time()
     selected_tickers = []
     selected_tickers = filter_func(out_stock_datas_dic)
-    selected_tickers.sort()
 
+
+
+    # sort
+    if bSortByRS:
+        rs_ranks = []
+        for ticker in selected_tickers:
+            try:
+                rank = sd.get_ATRS150_exp_Ranks(ticker).iloc[-1]
+                rs_ranks.append((ticker, rank))
+            except Exception as e:
+                print(e)
+        
+        rs_ranks.sort(key=lambda x : x[1])
+        keys = [x[0] for x in rs_ranks]
+        selected_tickers = keys
+    else:
+        selected_tickers.sort()
+    
     search_end_time = time.time()
     execution_time = search_end_time - search_start_time
     print(f"Search tiem elapsed: {execution_time}sec")
@@ -238,7 +276,7 @@ def screening_stocks_by_func(filter_func, bUseLoadedStockData = True):
 
     return out_stock_datas_dic, selected_tickers
 
-def screen_stocks_and_show_chart(filter_function, bUseLocalLoadedStockDataForScreening):
+def screen_stocks_and_show_chart(filter_function, bUseLocalLoadedStockDataForScreening, bSortByRS):
     bUseLocalCache = get_yes_no_input('Do you want to see last chart data? \n It will just show your last chart data without screening. \n (y/n)')
     if bUseLocalCache:
         try:
@@ -251,10 +289,10 @@ def screen_stocks_and_show_chart(filter_function, bUseLocalLoadedStockDataForScr
         except FileNotFoundError:
             print('Can not find your last stock chart data in local.\n The chart data will be re-generated. ')
             bUseLocalCache = False
-            stock_data, tickers = screening_stocks_by_func(filter_function, bUseLocalLoadedStockDataForScreening)
+            stock_data, tickers = screening_stocks_by_func(filter_function, bUseLocalLoadedStockDataForScreening, bSortByRS)
 
     else:
-        stock_data, tickers = screening_stocks_by_func(filter_function, bUseLocalLoadedStockDataForScreening)
+        stock_data, tickers = screening_stocks_by_func(filter_function, bUseLocalLoadedStockDataForScreening, bSortByRS)
 
     # 데이터를 파일에 저장
     if not bUseLocalCache:
@@ -264,6 +302,7 @@ def screen_stocks_and_show_chart(filter_function, bUseLocalLoadedStockDataForScr
         with open('cache_stock_datas_dic', "wb") as f:
             pickle.dump(stock_data, f)
 
+    print(tickers)
     DrawStockDatas(stock_data, tickers, sd)
 
 print("Select the chart type. \n \
@@ -281,8 +320,8 @@ print("Select the chart type. \n \
 index = int(input())
 
 if index == 1:
-    screen_stocks_and_show_chart(filter_stocks_MTT, True)
-    
+    screen_stocks_and_show_chart(filter_stocks_MTT, True, True)
+    #screen_stocks_and_show_chart(filter_stock_ALL, True, False)
 elif index == 2:
     updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*3)
     DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500)
@@ -294,8 +333,8 @@ elif index == 3:
     sd.cook_ATRS150_exp_Ranks(365*2)
     sd.cook_short_term_industry_rank_scores()
     sd.cook_long_term_industry_rank_scores()
-    sd.cook_top10_in_industries()
     sd.cook_MTT_count_data(filter_stocks_MTT, 10, True)
+    sd.cook_top10_in_industries()
 elif index == 4:
     sd.cookUpDownDatas()
 elif index == 5:
@@ -316,8 +355,9 @@ elif index == 8:
     sd.cook_long_term_industry_rank_scores()
     sd.cook_top10_in_industries()
 elif index == 9:
-    stock_data, tickers = screening_stocks_by_func(filter_stocks_MTT, True)
-    sd.cook_stock_info_from_tickers(tickers, 'US_MTT_0909')
+    stock_data, tickers = screening_stocks_by_func(filter_stocks_MTT, True, True)
+    #stock_data, tickers = screening_stocks_by_func(filter_stock_Custom, True)
+    sd.cook_stock_info_from_tickers(tickers, 'US_MTT_1019')
 elif index == 10:
     df = sd.get_MTT_count_data_from_csv()
     draw_MTT_count_Index(df)

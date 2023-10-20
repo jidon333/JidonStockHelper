@@ -68,6 +68,10 @@ class JdStockDataManager:
         self.long_term_industry_rank_df = pd.DataFrame()
         self.short_term_industry_rank_df = pd.DataFrame()
 
+        self.atrs_ranking_df = pd.DataFrame()
+
+        
+
 # ------------------- private -----------------------------------------------
     def _CookIndexData(self, index_data, n = 14):
         index_new_data = index_data
@@ -832,9 +836,7 @@ class JdStockDataManager:
         propertyName = 'ATRS150_Exp'
 
         try:
-            csv_path = os.path.join(metadata_folder, f'{propertyName}_Ranking.csv')
-            rank_df = pd.read_csv(csv_path)
-            rank_df = rank_df.set_index('Symbol')
+            rank_df = self.get_ATRS_Ranking_df()
             serise_rankChanges = rank_df.loc[Symbol]
 
             max_value = len(rank_df)
@@ -855,11 +857,8 @@ class JdStockDataManager:
         propertyName = 'ATRS150_Exp'
 
         try:
-            csv_path = os.path.join(metadata_folder, f'{propertyName}_Ranking.csv')
-            rank_df = pd.read_csv(csv_path)
-            rank_df = rank_df.set_index('Symbol')
+            rank_df = self.get_ATRS_Ranking_df()
             serise_rankChanges = rank_df.loc[Symbol]
-            
             serise_rankChanges.name = f'Rank_{propertyName}'
 
             return serise_rankChanges
@@ -872,10 +871,14 @@ class JdStockDataManager:
         propertyName = 'ATRS150_Exp'
 
         try:
-            csv_path = os.path.join(metadata_folder, f'{propertyName}_Ranking.csv')
-            rank_df = pd.read_csv(csv_path)
-            rank_df = rank_df.set_index('Symbol')
-            return rank_df
+            if self.atrs_ranking_df.empty == True:
+                csv_path = os.path.join(metadata_folder, f'{propertyName}_Ranking.csv')
+                rank_df = pd.read_csv(csv_path)
+                rank_df = rank_df.set_index('Symbol')
+                self.atrs_ranking_df = rank_df
+                return rank_df
+            else:
+                return self.atrs_ranking_df
         
         except Exception as e:
             return pd.DataFrame()
@@ -1722,7 +1725,7 @@ class JdStockDataManager:
 
     # basically It's like a MMT. But ease the MA alignment condition.
     # + exclude low volume stocks
-    def check_stage2(self, inStockData: pd.DataFrame):
+    def check_stage2(self, inStockData: pd.DataFrame, bOnlyLongTermMACheck = False):
             close = inStockData['Close'].iloc[-1]
             ma150 = inStockData['150MA'].iloc[-1]
             ma200 = inStockData['200MA'].iloc[-1]
@@ -1744,24 +1747,34 @@ class JdStockDataManager:
             if bIsVolumeEnough == False:
                 return False
 
-            bIsUpperMA = close > bIsUpperMA_150_200 and close > ma50
-            b_150ma_upper_than_200ma = ma150 > ma200
-            b_50ma_biggerThan_150ma_200ma = ma50 > ma150 and ma50 > ma200
-            bMA_Slope_Plus = ma150_slope > 0 and ma200_slope > 0
+            if bOnlyLongTermMACheck:
+                bIsUpperMA = close > bIsUpperMA_150_200
 
+                filterMatchNum = 0
+                if bIsUpperMA:
+                    filterMatchNum = filterMatchNum + 1
 
-            filterMatchNum = 0
+                return filterMatchNum >= 1
 
-            if bIsUpperMA:
-                filterMatchNum = filterMatchNum + 1
-            if b_150ma_upper_than_200ma or True:
-                filterMatchNum = filterMatchNum + 1
-            if bMA_Slope_Plus:
-                filterMatchNum = filterMatchNum + 1
-            if b_50ma_biggerThan_150ma_200ma:
-                filterMatchNum = filterMatchNum + 1
+            else:
+                bIsUpperMA = close > bIsUpperMA_150_200 and close > ma50
+                b_150ma_upper_than_200ma = ma150 > ma200
+                b_50ma_biggerThan_150ma_200ma = ma50 > ma150 and ma50 > ma200
+                bMA_Slope_Plus = ma150_slope > 0 and ma200_slope > 0
 
-            return filterMatchNum >= 4
+                filterMatchNum = 0
+
+                if bIsUpperMA:
+                    filterMatchNum = filterMatchNum + 1
+                if b_150ma_upper_than_200ma or True:
+                    filterMatchNum = filterMatchNum + 1
+                if bMA_Slope_Plus:
+                    filterMatchNum = filterMatchNum + 1
+                if b_50ma_biggerThan_150ma_200ma:
+                    filterMatchNum = filterMatchNum + 1
+
+                return filterMatchNum >= 4
+
 
 
     def cook_top10_in_industries(self):
@@ -1782,7 +1795,8 @@ class JdStockDataManager:
                 ticker, rank = data
                 stock_data = out_stock_datas_dic.get(ticker, pd.DataFrame())
                 if not stock_data.empty:
-                    bIsStage2 = self.check_stage2(stock_data)
+                    # just 150, 200 MA check or MMT criteria
+                    bIsStage2 = self.check_stage2(stock_data, True)
                     if bIsStage2:
                         top10_in_industry.append(data)
 
@@ -1874,8 +1888,11 @@ class JdStockDataManager:
             else:
                 print(f'can not find industry rank score from ticker: {ticker}, industry: {industry}')
 
-            stockData = out_stock_datas_dic.get(ticker)
-            atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
+            try:
+                stockData = out_stock_datas_dic.get(ticker)
+                atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
+            except:
+                continue
 
             lower_low_3 = -1 if self.check_lower_lows_3(stockData) else 0 # bad
             higher_high_3 = 1 if self.check_higher_highs_3(stockData) else 0 # good
