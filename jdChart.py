@@ -99,15 +99,22 @@ class JdChart:
             self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
             self.fig.canvas.mpl_connect('close_event', self.on_close)
 
-    def init_plots_for_mtt_count(self, mtt_count_df : pd.DataFrame):
+    def init_plots_for_count_data(self, mtt_count_df : pd.DataFrame, type = "line"):
+        """
+        type: line or bar
+        """
         self.mtt_count_df = mtt_count_df
 
-        #self.fig, (self.ax1) = plt.subplots(figsize=(20, 10))
-        self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(20, 10), gridspec_kw={'height_ratios': [3, 1]})  # 2개의 서브플롯을 생성
-
-        self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
-        self.fig.canvas.mpl_connect('close_event', self.on_close)
-     
+        if type == "line":
+            self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(20, 10), gridspec_kw={'height_ratios': [3, 1]})  # 2개의 서브플롯을 생성
+            self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
+            self.fig.canvas.mpl_connect('close_event', self.on_close)
+        elif type == "bar":
+            #self.fig, (self.ax1) = plt.subplots(figsize=(20, 10))  # 1개의 서브플롯을 생성
+            self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(20, 10), gridspec_kw={'height_ratios': [3, 1]})  # 2개의 서브플롯을 생성
+            self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
+            self.fig.canvas.mpl_connect('close_event', self.on_close)
+        
     def get_curr_ticker(self):
         return self.selected_tickers[self.curr_ticker_index]
     
@@ -496,7 +503,11 @@ class JdChart:
             plt.pause(0.01)
 
 
-    def draw_mtt_count_chart(self):
+    def draw_count_data_chart(self, name : str, chart_type = "line"):
+        """
+        name : {name} Count chart, {name} Count Moving Average ..
+        chart_type : line, bar
+        """
 
         self.bDrawingStockChart = False
 
@@ -505,33 +516,44 @@ class JdChart:
 
         temp_df = self.mtt_count_df
 
-        #temp_df['200MA'] = temp_df['Count'].rolling(window=200).mean()
-        temp_df['150MA'] = temp_df['Count'].rolling(window=150).mean()
-        temp_df['50MA'] = temp_df['Count'].rolling(window=50).mean()
-        #temp_df['20MA'] = temp_df['Count'].rolling(window=20).mean()
-        temp_df['10MA'] = temp_df['Count'].rolling(window=10).mean()
+
+        if chart_type == "line":
+            temp_df['150MA'] = temp_df['Count'].rolling(window=150).mean()
+            temp_df['50MA'] = temp_df['Count'].rolling(window=50).mean()
+            temp_df['10MA'] = temp_df['Count'].rolling(window=10).mean()
+
+            # Draw ma first for the drawing order
+            self.ax1.plot(temp_df['150MA'], label='MA150', color='blue')
+            self.ax1.plot(temp_df['50MA'], label='MA50', color='orange')
+            self.ax1.plot(temp_df['10MA'], label='MA10', color='black', alpha=0.5)
+            # Add legend, title, and grid
+            self.ax1.legend()
+            self.ax1.set_title(f'{name} Count Moving Averages')
+            self.ax1.grid()
+
+            self.ax2.plot(temp_df.index, temp_df['Count'], label='Count', alpha=0.3, color='blue')
+            self.ax2.axhline(y=400, color='black', linestyle='--')
+            self.ax2.legend()
+            self.ax2.set_title(f'{name} Count Chart')
+            self.ax2.grid()
+        elif chart_type == "bar":
+
+           
+            temp_df['10MA'] = temp_df['Count'].rolling(window=10).mean()
+            self.ax1.plot(temp_df['10MA'], label='MA10', color='black', alpha=0.5)
+            self.ax1.legend()
+            self.ax1.set_title(f'{name} Count Moving Average')
+            self.ax1.grid()
+
+            colors = ['green' if val > 100 else 'red' for val in temp_df['Count']]
+            self.ax2.bar(temp_df.index, temp_df['Count'], label='Count', alpha=0.5, color=colors)
+            self.ax2.axhline(y=100, color='black', linestyle='--')
+            self.ax2.legend()
+            self.ax2.set_title(f'{name} Count Bar Chart')
+            self.ax2.grid(axis='y')
 
 
-
-        # Draw ma first for the drawing order
-        #self.ax1.plot(temp_df['200MA'], label='MA200', color='green')
-        self.ax1.plot(temp_df['150MA'], label='MA150', color='blue')
-        self.ax1.plot(temp_df['50MA'], label='MA50', color='orange')
-        #self.ax1.plot(temp_df['20MA'], label='MA20', color='red', alpha=0.5)
-        self.ax1.plot(temp_df['10MA'], label='MA10', color='black', alpha=0.5)
-        # Add legend, title, and grid
-        self.ax1.legend()
-        self.ax1.set_title('MTT Count Moving Averages')
-        self.ax1.grid()
-
-        self.ax2.plot(temp_df.index, temp_df['Count'], label='Count', alpha=0.3, color='blue')
-        self.ax2.axhline(y=400, color='black', linestyle='--')
-        self.ax2.legend()
-        self.ax2.set_title('MTT Count Chart')
-        self.ax2.grid()
-
-
-        # Show the chart and pause the execution
+   # Show the chart and pause the execution
         plt.draw()
 
         while True:

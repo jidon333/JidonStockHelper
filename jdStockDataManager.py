@@ -487,7 +487,7 @@ class JdStockDataManager:
         return daily_changes_nyse_df, daily_changes_nasdaq_df, daily_changes_sp500_df
 
 
-    def cook_MTT_count_data(self, mtt_search_func, daysNum = 365, bAccumulateToExistingData = True):
+    def cook_filter_count_data(self, filter_func, fileName : str, daysNum = 365, bAccumulateToExistingData = True):
         out_tickers = []
         out_stock_datas_dic = {}
 
@@ -510,7 +510,7 @@ class JdStockDataManager:
             day = trading_days[-i]
             search_start_time = time.time()
             selected_tickers = []
-            selected_tickers = mtt_search_func(out_stock_datas_dic, -i)
+            selected_tickers = filter_func(out_stock_datas_dic, -i)
             cnt = len(selected_tickers)
 
             search_end_time = time.time()
@@ -518,7 +518,7 @@ class JdStockDataManager:
             #print(f"Search time elapsed: {execution_time}sec")
             days.append(day)
             cnts.append(cnt)
-            print(f'MTT cnt of {day}: {cnt}')
+            print(f'{fileName} cnt of {day}: {cnt}')
 
         # days와 cnts 리스트로 데이터프레임 생성
         days.reverse()
@@ -527,7 +527,7 @@ class JdStockDataManager:
         new_df = pd.DataFrame(data)
         new_df['Date'] = pd.to_datetime(data['Date'])
         new_df.set_index('Date', inplace=True)
-        save_path = os.path.join(metadata_folder, 'MTT_Counts.csv')
+        save_path = os.path.join(metadata_folder, f'{fileName}.csv')
         if bAccumulateToExistingData:
             local_df = pd.read_csv(save_path)
             local_df['Date'] = pd.to_datetime(local_df['Date'])
@@ -544,12 +544,13 @@ class JdStockDataManager:
             new_df.to_csv(save_path, encoding='utf-8-sig')
 
 
-        
-        
-
-    def get_MTT_count_data_from_csv(self, daysNum = 365*2):
+    
+    def get_count_data_from_csv(self, fileName : str, daysNum = 365*2):
+            """ 
+            fileName: {fileName}_Counts.csv 
+            """
             # ------------ nyse -------------------
-            data_path = os.path.join(metadata_folder, "MTT_Counts.csv")
+            data_path = os.path.join(metadata_folder, f"{fileName}_Counts.csv")
             data = pd.read_csv(data_path)
 
             # 문자열을 datetime 객체로 변경
@@ -564,8 +565,8 @@ class JdStockDataManager:
             endDay = min(trading_days[-1], data.index[-1]).date()
 
             # 시작일부터 종료일까지 가져오기
-            mtt_cnt_data = data[startDay:endDay]
-            return mtt_cnt_data
+            cnt_data = data[startDay:endDay]
+            return cnt_data
 
     def downloadStockDatasFromWeb(self, daysNum = 365 * 5, bExcludeNotInLocalCsv = True):
         print("-------------------_downloadStockDatasFromWeb-----------------\n ")

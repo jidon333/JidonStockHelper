@@ -66,10 +66,10 @@ def DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500):
     chart.draw_updown_chart()
 
 
-def draw_MTT_count_Index(mtt_cnt_df):
+def draw_count_data_Index(mtt_cnt_df, name : str, chart_type = "line"):
     chart = JdChart(sd)
-    chart.init_plots_for_mtt_count(mtt_cnt_df)
-    chart.draw_mtt_count_chart()
+    chart.init_plots_for_count_data(mtt_cnt_df, chart_type)
+    chart.draw_count_data_chart(name, chart_type)
 
 def remove_outdated_tickers():
     with open("DataReader_exception.json", "r") as outfile:
@@ -338,6 +338,31 @@ def filter_stock_Good_RS(stock_datas_dic : dict):
     return filtered_tickers
 
 
+def filter_stock_FA50(stock_datas_dic : dict, n_day_before = -1):
+    filtered_tickers = []
+    Mtt_tickers = filter_stock_ALL(stock_datas_dic)
+    gisc_df = sd.get_GICS_df()
+    bIsVolumeEnough = False
+    for ticker in Mtt_tickers:
+        stockData = stock_datas_dic[ticker]
+        try:
+            ADR = stockData['ADR'].iloc[n_day_before]
+            volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[n_day_before]
+            close = stockData['Close'].iloc[n_day_before]
+            ma50 = stockData['50MA'].iloc[n_day_before]
+
+            bIsVolumeEnough = (volume_ma50 >= 1000000 and close >= 8 )
+            bUpperThan50MA = close >= ma50
+
+            if ADR > 3 and bIsVolumeEnough and bUpperThan50MA:
+                filtered_tickers.append(ticker)
+
+        except Exception as e:
+            continue
+    
+    return filtered_tickers
+
+
 def screening_stocks_by_func(filter_func, bUseLoadedStockData = True, bSortByRS = False):
     out_tickers = []
     out_stock_datas_dic = {}
@@ -417,15 +442,16 @@ print("Select the chart type. \n \
       7: cook ATRS Ranking \n \
       8: cook industry Ranking \n \
       9: cook screening result as xlsx file. \n \
-      10: MTT Index chart ")
+      10: MTT Index chart \n \
+      11: FA50 Index chart \n ")
 
 index = int(input())
 
 if index == 1:
     #screen_stocks_and_show_chart(filter_stocks_MTT, True, True)
-    screen_stocks_and_show_chart(filter_stock_ALL, True, False)
+    #screen_stocks_and_show_chart(filter_stock_ALL, True, False)
     #screen_stocks_and_show_chart(filter_stock_Good_RS, True, True)
-    #screen_stocks_and_show_chart(filter_stock_Custom, True, True)
+    screen_stocks_and_show_chart(filter_stock_FA50, True, True)
 
 elif index == 2:
     updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*3)
@@ -438,7 +464,8 @@ elif index == 3:
     sd.cook_ATRS150_exp_Ranks(365*2)
     sd.cook_short_term_industry_rank_scores()
     sd.cook_long_term_industry_rank_scores()
-    sd.cook_MTT_count_data(filter_stocks_MTT, 10, True)
+    sd.cook_filter_count_data(filter_stocks_MTT, "MTT_Counts", 10, True)
+    sd.cook_filter_count_data(filter_stock_FA50, "FA50_Counts", 10, True)
     sd.cook_top10_in_industries()
 elif index == 4:
     sd.cookUpDownDatas()
@@ -465,9 +492,15 @@ elif index == 9:
 
     #stock_data, tickers = screening_stocks_by_func(filter_stock_hope_from_bottom, True)
     #sd.cook_stock_info_from_tickers(tickers, 'US_hope_from_bottom_1030')
+
+    # stock_data, tickers = screening_stocks_by_func(filter_stock_FA50, True, True)
+    # sd.cook_stock_info_from_tickers(tickers, 'US_FA50_1030')
 elif index == 10:
-    df = sd.get_MTT_count_data_from_csv()
-    draw_MTT_count_Index(df)
+    df = sd.get_count_data_from_csv("MTT")
+    draw_count_data_Index(df, "MTT")
+elif index == 11:
+    df = sd.get_count_data_from_csv("FA50")
+    draw_count_data_Index(df, "FA50", "bar")
 
 
 # --------------------------------------------------------------------
