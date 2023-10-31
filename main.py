@@ -217,22 +217,124 @@ def filter_stock_ALL(stock_datas_dic : dict):
 
 
 def filter_stock_Custom(stock_datas_dic : dict):
+    # filter stock good RS 
     filtered_tickers = []
     Mtt_tickers = filter_stock_ALL(stock_datas_dic)
+    atrs_ranking_df = sd.get_ATRS_Ranking_df()
+    gisc_df = sd.get_GICS_df()
+    bIsATRS_Ranking_Good = False
+    bIsNotHealthCare = False
+    bIsVolumeEnough = False
     for ticker in Mtt_tickers:
+        stockData = stock_datas_dic[ticker]
         try:
-            ADR = stock_datas_dic[ticker]['ADR'].iloc[-1]
-            if ADR > 2:
+            ADR = stockData['ADR'].iloc[-1]
+            volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[-1]
+            close = stockData['Close'].iloc[-1]
+            ma150 = stockData['150MA'].iloc[-1]
+            ma200 = stockData['200MA'].iloc[-1]
+            bNear150or200 = False
+
+            if abs(sd.get_percentage_AtoB(close, ma150)) < ADR*2 or abs(sd.get_percentage_AtoB(close, ma200)) < ADR*2:
+                bNear150or200 = True
+
+            atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
+            bIsATRS_Ranking_Good = atrsRank < 2000
+            sector = gisc_df.loc[ticker]['sector']
+            bIsNotHealthCare = sector != 'Healthcare'
+            bIsNotEnergy = sector != 'Energy'
+
+            bIsVolumeEnough = (volume_ma50 >= 1000000 and close >= 5 )
+
+            if ADR > 2 and bIsATRS_Ranking_Good and bIsNotHealthCare and bIsNotEnergy and bIsVolumeEnough and bNear150or200:
+                if ma150 > ma200:
+                    filtered_tickers.append(ticker)
+
+        except Exception as e:
+            continue
+    
+    return filtered_tickers
+
+# - ADR 2이상
+# - RS 랭킹 상위 30%
+# - 헬스케어, 에너지 섹터 제외
+# - Volume 50MA 100만 이상 and 5불 이상 주식
+# - 150SMA > 200SMA (바닥으로 추락하기전 2단계였던 주식을 보고 싶었음)
+# - 150 or 200SMA 이격도 2 ADR 미만 (장기 이평선 근처에서 횡보하는 것을 찾기 위함)
+def filter_stock_hope_from_bottom(stock_datas_dic : dict):
+    filtered_tickers = []
+    Mtt_tickers = filter_stock_ALL(stock_datas_dic)
+    atrs_ranking_df = sd.get_ATRS_Ranking_df()
+    gisc_df = sd.get_GICS_df()
+    bIsATRS_Ranking_Good = False
+    bIsNotHealthCare = False
+    bIsVolumeEnough = False
+    for ticker in Mtt_tickers:
+        stockData = stock_datas_dic[ticker]
+        try:
+            ADR = stockData['ADR'].iloc[-1]
+            volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[-1]
+            close = stockData['Close'].iloc[-1]
+            ma150 = stockData['150MA'].iloc[-1]
+            ma200 = stockData['200MA'].iloc[-1]
+            bNear150or200 = False
+
+            if abs(sd.get_percentage_AtoB(close, ma150)) < ADR*2 or abs(sd.get_percentage_AtoB(close, ma200)) < ADR*2:
+                bNear150or200 = True
+
+            atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
+            bIsATRS_Ranking_Good = atrsRank < 2000
+            sector = gisc_df.loc[ticker]['sector']
+            bIsNotHealthCare = sector != 'Healthcare'
+            bIsNotEnergy = sector != 'Energy'
+
+            bIsVolumeEnough = (volume_ma50 >= 1000000 and close >= 5 )
+
+            if ADR > 2 and bIsATRS_Ranking_Good and bIsNotHealthCare and bIsNotEnergy and bIsVolumeEnough and bNear150or200:
+                if ma150 > ma200:
+                    filtered_tickers.append(ticker)
+
+        except Exception as e:
+            continue
+    
+    return filtered_tickers
+
+
+# ADR 2이상
+# RS 랭킹 상위 15%
+# 헬스케어, 에너지 섹터 제외
+# Volume 50MA 100만 이상 and 5불 이상 주식
+
+def filter_stock_Good_RS(stock_datas_dic : dict):
+    # filter stock good RS 
+    filtered_tickers = []
+    Mtt_tickers = filter_stock_ALL(stock_datas_dic)
+    atrs_ranking_df = sd.get_ATRS_Ranking_df()
+    gisc_df = sd.get_GICS_df()
+    bIsATRS_Ranking_Good = False
+    bIsNotHealthCare = False
+    bIsVolumeEnough = False
+    for ticker in Mtt_tickers:
+        stockData = stock_datas_dic[ticker]
+        try:
+            ADR = stockData['ADR'].iloc[-1]
+            volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[-1]
+            close = stockData['Close'].iloc[-1]
+            
+            atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
+            bIsATRS_Ranking_Good = atrsRank < 1000
+            sector = gisc_df.loc[ticker]['sector']
+            bIsNotHealthCare = sector != 'Healthcare'
+            bIsNotEnergy = sector != 'Energy'
+
+            bIsVolumeEnough = (volume_ma50 >= 1000000 and close >= 5 )
+
+            if ADR > 2 and bIsATRS_Ranking_Good and bIsNotHealthCare and bIsNotEnergy and bIsVolumeEnough:
                 filtered_tickers.append(ticker)
 
         except Exception as e:
             continue
-        
-
-
-
-    myTickers = ['APP','MOD','STRL','ANF','PRDO','XPO','MMYT','PDD','TSLA','XPEV', 'SMCI']
-    filtered_tickers = list(set(myTickers) & set(filtered_tickers))
+    
     return filtered_tickers
 
 
@@ -320,8 +422,11 @@ print("Select the chart type. \n \
 index = int(input())
 
 if index == 1:
-    screen_stocks_and_show_chart(filter_stocks_MTT, True, True)
-    #screen_stocks_and_show_chart(filter_stock_ALL, True, False)
+    #screen_stocks_and_show_chart(filter_stocks_MTT, True, True)
+    screen_stocks_and_show_chart(filter_stock_ALL, True, False)
+    #screen_stocks_and_show_chart(filter_stock_Good_RS, True, True)
+    #screen_stocks_and_show_chart(filter_stock_Custom, True, True)
+
 elif index == 2:
     updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*3)
     DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500)
@@ -356,8 +461,10 @@ elif index == 8:
     sd.cook_top10_in_industries()
 elif index == 9:
     stock_data, tickers = screening_stocks_by_func(filter_stocks_MTT, True, True)
-    #stock_data, tickers = screening_stocks_by_func(filter_stock_Custom, True)
-    sd.cook_stock_info_from_tickers(tickers, 'US_MTT_1019')
+    sd.cook_stock_info_from_tickers(tickers, 'US_MTT_1030')
+
+    #stock_data, tickers = screening_stocks_by_func(filter_stock_hope_from_bottom, True)
+    #sd.cook_stock_info_from_tickers(tickers, 'US_hope_from_bottom_1030')
 elif index == 10:
     df = sd.get_MTT_count_data_from_csv()
     draw_MTT_count_Index(df)

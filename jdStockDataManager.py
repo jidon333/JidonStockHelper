@@ -1725,15 +1725,16 @@ class JdStockDataManager:
 
     # basically It's like a MMT. But ease the MA alignment condition.
     # + exclude low volume stocks
-    def check_stage2(self, inStockData: pd.DataFrame, bOnlyLongTermMACheck = False):
+    def check_stage2(self, inStockData: pd.DataFrame, bOnly200MACheck = False):
             close = inStockData['Close'].iloc[-1]
             ma150 = inStockData['150MA'].iloc[-1]
             ma200 = inStockData['200MA'].iloc[-1]
             bIsUpperMA_150_200 = close > ma150 and close > ma200
 
             # early rejection for optimization
-            if bIsUpperMA_150_200 == False:
-                return False
+            if bOnly200MACheck == False:
+                if bIsUpperMA_150_200 == False:
+                    return False
             
             ma150_slope = inStockData['MA150_Slope'].iloc[-1]
             ma200_slope = inStockData['MA200_Slope'].iloc[-1]
@@ -1747,8 +1748,8 @@ class JdStockDataManager:
             if bIsVolumeEnough == False:
                 return False
 
-            if bOnlyLongTermMACheck:
-                bIsUpperMA = close > bIsUpperMA_150_200
+            if bOnly200MACheck:
+                bIsUpperMA = close > ma200
 
                 filterMatchNum = 0
                 if bIsUpperMA:
@@ -1795,7 +1796,7 @@ class JdStockDataManager:
                 ticker, rank = data
                 stock_data = out_stock_datas_dic.get(ticker, pd.DataFrame())
                 if not stock_data.empty:
-                    # just 150, 200 MA check or MMT criteria
+                    # just 200 MA check or MMT criteria
                     bIsStage2 = self.check_stage2(stock_data, True)
                     if bIsStage2:
                         top10_in_industry.append(data)

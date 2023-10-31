@@ -387,7 +387,7 @@ class JdChart:
             for i in range(0, top10_len):
                 top10_ticker = top10[i][0]
                 top10_rank = top10[i][1]
-                msg += f"{i+1}st: {top10_ticker}, {int(top10_rank)}\n"
+                msg += f"No.{i+1}: {top10_ticker}, {int(top10_rank)}\n"
             
             msg += f"\n========================"
 
