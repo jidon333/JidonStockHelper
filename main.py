@@ -36,6 +36,10 @@ from PyQt5.QtCore import Qt
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
+import pandas as pd
+
+
+
 sd = JdStockDataManager()
 
 
@@ -59,15 +63,21 @@ def DrawStockDatas(stock_datas_dic, selected_tickers, inStockManager : JdStockDa
         #프로그램을 이벤트루프로 진입시키는(프로그램을 작동시키는) 코드
         app.exec_()
 
-def DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500):
+def DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500, bOnlyForScreenShot = False):
     # show first element
     chart = JdChart(sd)
+    chart.bOnlyForScreenShot = bOnlyForScreenShot
     chart.init_plots_for_up_down(updown_nyse, updown_nasdaq, updown_sp500)
     chart.draw_updown_chart()
 
 
-def draw_count_data_Index(mtt_cnt_df, name : str, chart_type = "line"):
+def draw_count_data_Index(mtt_cnt_df, name : str, chart_type : str, bOnlyForScreenShot = False):
+    """
+    name : {name} Count chart, {name} Count Moving Average ..
+    chart_type : line or bar
+    """
     chart = JdChart(sd)
+    chart.bOnlyForScreenShot = bOnlyForScreenShot
     chart.init_plots_for_count_data(mtt_cnt_df, chart_type)
     chart.draw_count_data_chart(name, chart_type)
 
@@ -123,7 +133,7 @@ def filter_stocks_MTT(stock_datas_dic : dict, n_day_before = -1):
         except Exception as e:
             continue
 
-        # (거래량 50일 평균 20만이상 + 10불이상 or 하루거래량 100억 이상)
+        # (거래량 50일 평균 20만이상 + 10불이상 or 평균거래대금 1000만불 이상)
         bIsVolumeEnough = (volume_ma50 >= 200000 and close >= 10 ) or volume_ma50*close > 10000000
         # 마지막날 거래량 100,000주 이상
         #bIsVolumeEnough = bIsVolumeEnough and last_volume >= 100000
@@ -443,7 +453,8 @@ print("Select the chart type. \n \
       8: cook industry Ranking \n \
       9: cook screening result as xlsx file. \n \
       10: MTT Index chart \n \
-      11: FA50 Index chart \n ")
+      11: FA50 Index chart \n \
+      12: Generate All indicators and screening result ")
 
 index = int(input())
 
@@ -497,10 +508,39 @@ elif index == 9:
     # sd.cook_stock_info_from_tickers(tickers, 'US_FA50_1030')
 elif index == 10:
     df = sd.get_count_data_from_csv("MTT")
-    draw_count_data_Index(df, "MTT")
+    draw_count_data_Index(df, "MTT", "line")
 elif index == 11:
     df = sd.get_count_data_from_csv("FA50")
     draw_count_data_Index(df, "FA50", "bar")
+
+elif index == 12:
+    # auto generate indicator screenshot and MTT xlsx file. #
+
+    ### MI index chart
+    updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*3)
+    DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500, True)
+
+    ### MTT count chart
+    df = sd.get_count_data_from_csv("MTT")
+    draw_count_data_Index(df, "MTT", "line", True)
+
+    ### FA50 count chart
+    df = sd.get_count_data_from_csv("FA50")
+    draw_count_data_Index(df, "FA50", "bar", True)
+
+    ### cook MTT stock list as xlsx.
+
+    # get mtt screen list
+    stock_data, tickers = screening_stocks_by_func(filter_stocks_MTT, True, True)
+    
+    # Hack: get last date string from first stock data and use it for filename.
+    first_stock_data : pd.DataFrame = stock_data[tickers[0]]
+    lastday = str(first_stock_data.index[-1].date())
+
+    # cook file
+    sd.cook_stock_info_from_tickers(tickers, f'US_MTT_{lastday}')
+
+
 
 
 # --------------------------------------------------------------------

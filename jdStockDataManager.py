@@ -494,27 +494,28 @@ class JdStockDataManager:
         
         stock_data_len = 365*5 # 기본 데이터는 든든하게 미리 챙겨두기
         stock_list = self.getStockListFromLocalCsv()
-        self.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, stock_data_len, False)
+        self.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, stock_data_len, True)
 
         nyse = mcal.get_calendar('NYSE')
         trading_days = nyse.schedule(start_date=dt.date.today() - dt.timedelta(days=daysNum), end_date=dt.date.today()).index
         valid_start_date = trading_days[0]
-        valid_end_date = trading_days[-1]
+        end_date_index = 2
+        valid_end_date = trading_days[-end_date_index] # 어제가 마지막 거래일. trading_days[-1]은 오늘이고 trading_days[-2]가 어제다.
 
         days = []
         cnts = []
         trading_days_num = len(trading_days)
 
 
-        for i in range(1, trading_days_num):
+        for i in range(end_date_index, trading_days_num):
             day = trading_days[-i]
             search_start_time = time.time()
             selected_tickers = []
-            selected_tickers = filter_func(out_stock_datas_dic, -i)
+            selected_tickers = filter_func(out_stock_datas_dic, -i + 1) # filter_func[-1]은 어제이고 filter_func[-2]은 어저깨다. 1 더해줘야한다.
             cnt = len(selected_tickers)
 
-            search_end_time = time.time()
-            execution_time = search_end_time - search_start_time
+            #search_end_time = time.time()
+            #execution_time = search_end_time - search_start_time
             #print(f"Search time elapsed: {execution_time}sec")
             days.append(day)
             cnts.append(cnt)
@@ -1976,7 +1977,10 @@ class JdStockDataManager:
         df.columns = columns
         df.index.name = 'Symbol'
 
-        save_path = os.path.join(metadata_folder, f'{fileName}.xlsx')
+
+        save_path = os.path.join(metadata_folder, "FilteredStocks")
+        save_path = os.path.join(save_path, f'{fileName}.xlsx')
+        
         df.to_excel(save_path, index_label='Symbol')
         print(f'{fileName}.xlsx', 'is saved!')
 

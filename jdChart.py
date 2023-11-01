@@ -8,6 +8,7 @@ import sys
 
 import os
 import json
+import time
 
 
 
@@ -23,11 +24,14 @@ import matplotlib.ticker as tk
 
 from jdStockDataManager import JdStockDataManager 
 from jdGlobal import ui_folder
+from jdGlobal import screenshot_folder
 
 plt.switch_backend('Qt5Agg')
 
 class JdChart:
     def __init__(self, inStockManager = None):
+
+        self.bOnlyForScreenShot = False
 
         self.bDrawBarChart = True
         self.bDrawingStockChart = True
@@ -167,7 +171,8 @@ class JdChart:
     def on_close(self, event):
         print(self.markedTickerList)
         plt.close()
-        sys.exit()
+        if self.bOnlyForScreenShot == False:
+            sys.exit()
 
     def on_move(self, event):
         x, y = event.xdata, event.ydata
@@ -478,11 +483,6 @@ class JdChart:
 
         self.bDrawingStockChart = False
 
-
-        self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
-        self.fig.canvas.mpl_connect('close_event', self.on_close)
-
-
         # Plot sum and MA150 changes
         self.ax1.plot(self.updown_nyse.index, self.updown_nyse['ma150_changes'], label='NYSE 150 MI')
         self.ax1.plot(self.updown_nasdaq.index, self.updown_nasdaq['ma150_changes'], label='NASDAQ 150 MI')
@@ -499,7 +499,16 @@ class JdChart:
         # Show the chart and pause the execution
         plt.draw()
 
+        if self.bOnlyForScreenShot:
+            lastday = str(self.updown_sp500.index[-1].date())
+            file_path = os.path.join(screenshot_folder, f'MI_Index_chart_{lastday}.png')
+            plt.savefig(file_path)
+            time.sleep(1)
+            plt.close()
+
         while True:
+            if not plt.get_fignums():
+                break
             plt.pause(0.01)
 
 
@@ -510,9 +519,6 @@ class JdChart:
         """
 
         self.bDrawingStockChart = False
-
-        self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
-        self.fig.canvas.mpl_connect('close_event', self.on_close)
 
         temp_df = self.mtt_count_df
 
@@ -553,9 +559,18 @@ class JdChart:
             self.ax2.grid(axis='y')
 
 
-   # Show the chart and pause the execution
+        # Show the chart and pause the execution
         plt.draw()
 
+        if self.bOnlyForScreenShot:
+            lastday = str(temp_df.index[-1].date())
+            file_path = os.path.join(screenshot_folder, f'{name}_chart_{lastday}.png')
+            plt.savefig(file_path)
+            time.sleep(1)
+            plt.close()
+
         while True:
+            if not plt.get_fignums():
+                break
             plt.pause(0.01)
 
