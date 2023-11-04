@@ -499,8 +499,25 @@ class JdStockDataManager:
         nyse = mcal.get_calendar('NYSE')
         trading_days = nyse.schedule(start_date=dt.date.today() - dt.timedelta(days=daysNum), end_date=dt.date.today()).index
         valid_start_date = trading_days[0]
+
+
+        today_str = dt.date.today()
+        today_schedule = nyse.schedule(start_date=today_str, end_date=today_str)
+
+        
+        # 오늘이 거래일이라면 -2가 마지막 거래일
         end_date_index = 2
-        valid_end_date = trading_days[-end_date_index] # 어제가 마지막 거래일. trading_days[-1]은 오늘이고 trading_days[-2]가 어제다.
+        filter_index_offset = 1
+
+        # 오늘이 휴일인경우 -1이 마지막 거래일 맞음
+        if today_schedule.empty:
+            end_date_index = 1
+            filter_index_offset = 0
+
+
+
+        valid_end_date = trading_days[-end_date_index] # 어제가 마지막 거래일. trading_days[-1]은 오늘이고 trading_days[-2]가 어제다. (오늘이 거래일이라면)
+
 
         days = []
         cnts = []
@@ -511,7 +528,7 @@ class JdStockDataManager:
             day = trading_days[-i]
             search_start_time = time.time()
             selected_tickers = []
-            selected_tickers = filter_func(out_stock_datas_dic, -i + 1) # filter_func[-1]은 어제이고 filter_func[-2]은 어저깨다. 1 더해줘야한다.
+            selected_tickers = filter_func(out_stock_datas_dic, -i + filter_index_offset) # filter_func[-1]은 어제이고 filter_func[-2]은 어저깨다. 1 더해줘야한다. (오늘이 거래일이라면)
             cnt = len(selected_tickers)
 
             #search_end_time = time.time()
