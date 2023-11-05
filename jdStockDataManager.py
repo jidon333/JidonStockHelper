@@ -436,8 +436,8 @@ class JdStockDataManager:
         bHaveCache = False 
         cacheFileName = f"cache_fdr_{market}_list"
 
-        if market != 'NASDAQ' and market != 'NYSE':
-            print('get_fdr_stock_list(), invalid market type {0}!', market)
+        if market != 'NASDAQ' and market != 'NYSE' and market != 'S&P500':
+            print(f'get_fdr_stock_list(), invalid market type {0}!', market)
             return fdr_stock_list
 
         try:
