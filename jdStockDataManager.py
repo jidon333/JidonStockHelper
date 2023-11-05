@@ -21,6 +21,8 @@ import time
 from jdGlobal import get_yes_no_input
 from jdGlobal import data_folder
 from jdGlobal import metadata_folder
+from jdGlobal import screenshot_folder
+from jdGlobal import filteredStocks_folder
 
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Color
@@ -37,6 +39,14 @@ if not os.path.exists(data_folder):
 
 if not os.path.exists(metadata_folder):
     os.makedirs(metadata_folder)
+
+if not os.path.exists(filteredStocks_folder):
+    os.makedirs(filteredStocks_folder)
+
+if not os.path.exists(screenshot_folder):
+    os.makedirs(screenshot_folder)
+
+
 
 # for test
 stockIterateLimit = 99999
@@ -2021,8 +2031,7 @@ class JdStockDataManager:
         df.index.name = 'Symbol'
 
 
-        save_path = os.path.join(metadata_folder, "FilteredStocks")
-        save_path = os.path.join(save_path, f'{fileName}.xlsx')
+        save_path = os.path.join(filteredStocks_folder, f'{fileName}.xlsx')
         
         df.to_excel(save_path, index_label='Symbol')
         print(f'{fileName}.xlsx', 'is saved!')
