@@ -41,6 +41,7 @@ import pandas as pd
 
 
 sd = JdStockDataManager()
+MTT_ADR_minimum = 1
 
 
 def DrawStockDatas(stock_datas_dic, selected_tickers, inStockManager : JdStockDataManager, maxCnt = -1):
@@ -152,7 +153,7 @@ def filter_stocks_MTT(stock_datas_dic : dict, n_day_before = -1):
   
         filterMatchNum = 0
 
-        if ADR < 1:
+        if ADR < MTT_ADR_minimum:
             continue
 
         if bIsUpperMA:
@@ -229,7 +230,7 @@ def filter_stock_ALL(stock_datas_dic : dict):
 def filter_stock_Custom(stock_datas_dic : dict):
     # filter stock good RS 
     filtered_tickers = []
-    Mtt_tickers = filter_stock_ALL(stock_datas_dic)
+    Mtt_tickers = filter_stocks_MTT(stock_datas_dic)
     atrs_ranking_df = sd.get_ATRS_Ranking_df()
     gisc_df = sd.get_GICS_df()
     bIsATRS_Ranking_Good = False
@@ -248,30 +249,32 @@ def filter_stock_Custom(stock_datas_dic : dict):
             if abs(sd.get_percentage_AtoB(close, ma150)) < ADR*2 or abs(sd.get_percentage_AtoB(close, ma200)) < ADR*2:
                 bNear150or200 = True
 
-            atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
-            bIsATRS_Ranking_Good = atrsRank < 2000
+            # atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
+            # bIsATRS_Ranking_Good = atrsRank < 2000
             sector = gisc_df.loc[ticker]['sector']
-            bIsNotHealthCare = sector != 'Healthcare'
-            bIsNotEnergy = sector != 'Energy'
+            # bIsNotHealthCare = sector != 'Healthcare'
+            # bIsNotEnergy = sector == 'Energy'
 
             bIsVolumeEnough = (volume_ma50 >= 1000000 and close >= 5 )
 
-            if ADR > 2 and bIsATRS_Ranking_Good and bIsNotHealthCare and bIsNotEnergy and bIsVolumeEnough and bNear150or200:
-                if ma150 > ma200:
-                    filtered_tickers.append(ticker)
+            if sector == 'Energy':
+                filtered_tickers.append(ticker)
 
         except Exception as e:
             continue
     
     return filtered_tickers
 
-# - ADR 2이상
-# - RS 랭킹 상위 30%
-# - 헬스케어, 에너지 섹터 제외
-# - Volume 50MA 100만 이상 and 5불 이상 주식
-# - 150SMA > 200SMA (바닥으로 추락하기전 2단계였던 주식을 보고 싶었음)
-# - 150 or 200SMA 이격도 2 ADR 미만 (장기 이평선 근처에서 횡보하는 것을 찾기 위함)
+
 def filter_stock_hope_from_bottom(stock_datas_dic : dict):
+    """
+    - ADR 2이상
+    - RS 랭킹 상위 30%
+    - 헬스케어, 에너지 섹터 제외
+    - Volume 50MA 100만 이상 and 5불 이상 주식
+    - 150SMA > 200SMA (바닥으로 추락하기전 2단계였던 주식을 보고 싶었음)
+    - 150 or 200SMA 이격도 2 ADR 미만 (장기 이평선 근처에서 횡보하는 것을 찾기 위함)
+    """
     filtered_tickers = []
     Mtt_tickers = filter_stock_ALL(stock_datas_dic)
     atrs_ranking_df = sd.get_ATRS_Ranking_df()
@@ -454,15 +457,17 @@ print("Select the chart type. \n \
       9: cook screening result as xlsx file. \n \
       10: MTT Index chart \n \
       11: FA50 Index chart \n \
-      12: Generate All indicators and screening result ")
+      12: Generate All indicators and screening result \n")
 
 index = int(input())
 
 if index == 1:
-    #screen_stocks_and_show_chart(filter_stocks_MTT, True, True)
-    #screen_stocks_and_show_chart(filter_stock_ALL, True, False)
+    MTT_ADR_minimum = 3
+    #screen_stocks_and_show_chart(filter_stock_hope_from_bottom, True, True)
+    MTT_ADR_minimum = 1
+    screen_stocks_and_show_chart(filter_stock_ALL, True, False)
     #screen_stocks_and_show_chart(filter_stock_Good_RS, True, True)
-    screen_stocks_and_show_chart(filter_stock_FA50, True, True)
+    #screen_stocks_and_show_chart(filter_stock_FA50, True, True)
 
 elif index == 2:
     updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*3)
@@ -485,10 +490,15 @@ elif index == 5:
     sd.cookLocalStockData()
 elif index == 6:
     remove_local_caches()
-    sd.downloadStockDatasFromWeb(365*6, False)
+    sd.downloadStockDatasFromWeb(365*6, False) # you have 6 year data.... 
     remove_outdated_tickers()
     sd.remove_acquisition_tickers()
     sd.cook_Stock_GICS_df()
+    sd.cook_Nday_ATRS150_exp(365*2)
+    sd.cook_ATRS150_exp_Ranks(365*2)
+    sd.cook_top10_in_industries()
+    sd.cook_filter_count_data(filter_stocks_MTT, "MTT_Counts", 365*3, False)
+    sd.cook_filter_count_data(filter_stock_FA50, "FA50_Counts", 365*3, False)
 
 elif index == 7:
     sd.cook_Nday_ATRS150_exp(365*2)
@@ -504,7 +514,7 @@ elif index == 9:
     #stock_data, tickers = screening_stocks_by_func(filter_stock_hope_from_bottom, True)
     #sd.cook_stock_info_from_tickers(tickers, 'US_hope_from_bottom_1030')
 
-    # stock_data, tickers = screening_stocks_by_func(filter_stock_FA50, True, True)
+    #stock_data, tickers = screening_stocks_by_func(filter_stock_FA50, True, True)
     # sd.cook_stock_info_from_tickers(tickers, 'US_FA50_1030')
 elif index == 10:
     df = sd.get_count_data_from_csv("MTT")

@@ -38,6 +38,7 @@ if not os.path.exists(data_folder):
 if not os.path.exists(metadata_folder):
     os.makedirs(metadata_folder)
 
+# for test
 stockIterateLimit = 99999
 
 # 딕셔너리를 JSON 파일로 저장
@@ -61,8 +62,6 @@ def load_from_json(filename):
 class JdStockDataManager:
     def __init__(self):
         self.index_data = fdr.DataReader('US500')
-        self.csv_names = [os.path.splitext(f)[0] for f in os.listdir(data_folder) if f.endswith('.csv')]
-
         self.stock_GICS_df = pd.DataFrame()
 
         self.long_term_industry_rank_df = pd.DataFrame()
@@ -70,9 +69,14 @@ class JdStockDataManager:
 
         self.atrs_ranking_df = pd.DataFrame()
 
-        
-
 # ------------------- private -----------------------------------------------
+
+    def _get_csv_names(self):
+        csv_names =[os.path.splitext(f)[0] for f in os.listdir(data_folder) if f.endswith('.csv')]
+        return csv_names
+
+
+
     def _CookIndexData(self, index_data, n = 14):
         index_new_data = index_data
 
@@ -310,7 +314,7 @@ class JdStockDataManager:
             all_list = pd.concat([nyse_list, nasdaq_list])
 
             # all_list에서 Symbol이 csv_names에 있는 경우만 추려냄
-            all_list = all_list[all_list['Symbol'].isin(self.csv_names)]
+            all_list = all_list[all_list['Symbol'].isin(self._get_csv_names())]
 
             # 결과 로컬에 캐싱.(가끔 전체 주식 리스트 업데이트할때 캐시 지울 필요가 있따.)
             with open('cache_StockListFromLocalCsv', "wb") as f:
@@ -424,13 +428,15 @@ class JdStockDataManager:
 
 # ------------------- public -----------------------------------------------
 
-    def get_fdr_stock_list(self, market : str, daysNum = 365*5):
-
+    def get_fdr_stock_list(self, market : str, daysNum = 365*5, bIgnore_no_local_tickers = True):
+        """
+        bIgnore_no_local_tickers: Set False if you want to get all stock list from web when you have no local stock data.
+        """
         fdr_stock_list = pd.DataFrame()
         bHaveCache = False 
         cacheFileName = f"cache_fdr_{market}_list"
 
-        if str == 'NASDAQ' or str == 'NYSE':
+        if market != 'NASDAQ' and market != 'NYSE':
             print('get_fdr_stock_list(), invalid market type {0}!', market)
             return fdr_stock_list
 
@@ -445,7 +451,8 @@ class JdStockDataManager:
 
         if not bHaveCache:
             fdr_stock_list = fdr.StockListing(market)
-            fdr_stock_list = fdr_stock_list[fdr_stock_list['Symbol'].isin(self.csv_names)]
+            if bIgnore_no_local_tickers:
+                fdr_stock_list = fdr_stock_list[fdr_stock_list['Symbol'].isin(self._get_csv_names())]
 
             print('there\'s no cache. save the result newly.')
             with open(cacheFileName, "wb") as f:
@@ -457,13 +464,13 @@ class JdStockDataManager:
     def cookUpDownDatas(self, daysNum = 365*5):
         # S&P 500 지수의 모든 종목에 대해 매일 상승/하락한 종목 수 계산
         nyse_list = self.get_fdr_stock_list('NYSE', daysNum)
-        nyse_list = nyse_list[nyse_list['Symbol'].isin(self.csv_names)]
+        nyse_list = nyse_list[nyse_list['Symbol'].isin(self._get_csv_names())]
 
         nasdaq_list = self.get_fdr_stock_list('NASDAQ', daysNum)
-        nasdaq_list = nasdaq_list[nasdaq_list['Symbol'].isin(self.csv_names)]
+        nasdaq_list = nasdaq_list[nasdaq_list['Symbol'].isin(self._get_csv_names())]
 
         sp500_list = self.get_fdr_stock_list('S&P500', daysNum)
-        sp500_list = sp500_list[sp500_list['Symbol'].isin(self.csv_names)]
+        sp500_list = sp500_list[sp500_list['Symbol'].isin(self._get_csv_names())]
 
 
         # 미국 주식시장의 거래일 가져오기
@@ -494,8 +501,10 @@ class JdStockDataManager:
         
         stock_data_len = 365*5 # 기본 데이터는 든든하게 미리 챙겨두기
         stock_list = self.getStockListFromLocalCsv()
-        self.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, stock_data_len, True)
+        bUseCachedCSV = bAccumulateToExistingData # 갱신이 아니라 새로 데이터를 뽑는 경우 역시나 든든하게..
+        self.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, stock_data_len, bUseCachedCSV)
 
+        # 뭔가 내부 함수 에러나면 라이브러리 업그레이드부터 할 것 =ㅅ=;
         nyse = mcal.get_calendar('NYSE')
         trading_days = nyse.schedule(start_date=dt.date.today() - dt.timedelta(days=daysNum), end_date=dt.date.today()).index
         valid_start_date = trading_days[0]
@@ -595,8 +604,8 @@ class JdStockDataManager:
         
 
         if bExcludeNotInLocalCsv == False:
-            nyse_list = self.get_fdr_stock_list('NYSE', daysNum)
-            nasdaq_list = self.get_fdr_stock_list('NASDAQ', daysNum)
+            nyse_list = self.get_fdr_stock_list('NYSE', daysNum, False)
+            nasdaq_list = self.get_fdr_stock_list('NASDAQ', daysNum, False)
             all_list = pd.concat([nyse_list, nasdaq_list])
         else:
             all_list = self.getStockListFromLocalCsv()
@@ -718,6 +727,9 @@ class JdStockDataManager:
         return updown_nyse, updown_nasdaq, updown_sp500
 
     def getStockDatasFromCsv(self, stock_list, out_tickers : list[str], out_stock_datas_dic : dict[str, pd.DataFrame], daysNum = 365*5, bUseCacheData = False):
+        """
+        Caution! : if bUseCacheData is true, just return last funciton result no matter what other parameter it is. 
+        """
 
         if bUseCacheData:
             try:
@@ -785,7 +797,13 @@ class JdStockDataManager:
         for ticker in tickers:
             data = stock_datas_fromCsv[ticker]
             name = data['Name'].iloc[-1].lower()
-            industry = data['Industry'].iloc[-1].lower()
+            try:
+                industry = data['Industry'].iloc[-1].lower()
+            except Exception as e:
+                removeTargetTickers.append(ticker)
+                print(e)
+                continue
+                  
             if pd.isna(name) or pd.isna(industry):
                 removeTargetTickers.append(ticker)
                 continue
@@ -903,6 +921,14 @@ class JdStockDataManager:
             return pd.DataFrame()
         
     def cook_Stock_GICS_df(self):
+        """
+        If you got the HTTP 404 error, always check  yf library version first.
+        cmd: pip install --upgrade yahooquery
+
+        sometimes there's invalid sector and industry data in the csv file because of the yf's worng database.
+        in that case, just modify file in the excel editor.
+
+        """
         all_list = self.getStockListFromLocalCsv()
         symbols = all_list['Symbol'].tolist()
         df_list = []
