@@ -77,11 +77,13 @@ class JdChart:
     def init_plots_for_stock(self, in_stock_datas_dic : dict[str, pd.DataFrame], in_selected_tickers):
 
         self.fig = Figure(figsize=(20,10))
-        self.fig.subplots(4, 1, gridspec_kw={'height_ratios': [3, 1, 1, 1]})
+        #self.fig.subplots(4, 1, gridspec_kw={'height_ratios': [3, 1, 1, 1]})
+        self.fig.subplots(3, 1, gridspec_kw={'height_ratios': [3, 1, 2]})
+
         self.ax1 = self.fig.axes[0]
         self.ax2 = self.fig.axes[1]
         self.ax3 = self.fig.axes[2]
-        self.ax4 = self.fig.axes[3]
+        #self.ax4 = self.fig.axes[3]
         self.fig.subplots_adjust(left=0.24, right=0.95)
 
 
@@ -303,10 +305,10 @@ class JdChart:
         ranks_atrs = self.stockManager.get_ATRS150_exp_Ranks_Normalized(ticker)
         curr_rank = self.stockManager.get_ATRS150_exp_Ranks(ticker).iloc[-1]
 
-        name = currStockData['Name'][0]
+        name = currStockData['Name'].iloc[0]
         font_path = os.path.join(ui_folder, 'NanumGothic.ttf')
         fontprop = fm.FontProperties(fname=font_path, size=30)
-        industryKor = currStockData['Industry'][0]
+        industryKor = currStockData['Industry'].iloc[0]
         try:
             sectorText = self.get_sector(ticker)
             industryText = self.get_industry(ticker)
@@ -459,21 +461,23 @@ class JdChart:
         # ax3에 그래프 그리기
         self.ax3.cla()
 
-        self.ax3.set_ylim([0, 1])
+        self.ax3.set_ylim([0, 1.2])
         if len(ranks_atrs_exp_df) != 0:
-            self.ax3.plot(currStockData['Rank_ATRS150_Exp'], label='Rank_ATRS150_Exp', color='red', alpha=0.5)
+            self.ax3.plot(currStockData['Rank_ATRS150_Exp'], label='RS Rank Score', color='red', alpha=0.5)
         self.ax3.legend(loc='lower left')
-        self.ax3.axhline(y=0.5, color='black', linestyle='--')
+        #self.ax3.axhline(y=0.5, color='black', linestyle='--')
+        self.ax3.axhline(y=1.0, color='green', linestyle='--', alpha=0.5)
+
  
-        self.ax4.cla()
-        self.ax4.set_ylim([-0.5, 0.5])
-        self.ax4.plot(currStockData['ATRS_Exp'], label='ATRS_Exp')
+        # self.ax4.cla()
+        # self.ax4.set_ylim([-0.5, 0.5])
+        # self.ax4.plot(currStockData['ATRS_Exp'], label='ATRS_Exp')
 
-        self.ax4.fill_between(currStockData.index, currStockData['ATRS_Exp'], 0, where=currStockData['ATRS_Exp'] < 0, color='red', alpha=0.3)
-        self.ax4.fill_between(currStockData.index, currStockData['ATRS_Exp'], 0, where=currStockData['ATRS_Exp'] >= 0, color='green', alpha=0.3)
+        # self.ax4.fill_between(currStockData.index, currStockData['ATRS_Exp'], 0, where=currStockData['ATRS_Exp'] < 0, color='red', alpha=0.3)
+        # self.ax4.fill_between(currStockData.index, currStockData['ATRS_Exp'], 0, where=currStockData['ATRS_Exp'] >= 0, color='green', alpha=0.3)
 
-        self.ax4.axhline(y=0, color='black', linestyle='--')
-        self.ax4.legend(loc='lower left')
+        # self.ax4.axhline(y=0, color='black', linestyle='--')
+        # self.ax4.legend(loc='lower left')
 
 
         return self.fig

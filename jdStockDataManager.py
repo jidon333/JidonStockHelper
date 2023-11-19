@@ -367,7 +367,8 @@ class JdStockDataManager:
             webData_copy['IsOriginData_NaN'] = False
 
             # forward fill을 사용하여 NaN값을 이전 값으로 대체하면서, IsOriginData_NaN 레이블을 변경합니다.
-            webData_copy.fillna(method='ffill', inplace=True)
+            #webData_copy.fillna(method='ffill', inplace=True)
+            webData_copy.ffill(inplace=True)
             webData_copy.loc[webData['Open'].isnull(), 'IsOriginData_NaN'] = True
 
             webData = webData_copy
@@ -1114,8 +1115,10 @@ class JdStockDataManager:
 
         for i in range(1, nDay+1):
             for key, value in dn_list[i-1].items():
-                industry_rank_history_dic[key].append(value)
-
+                try:
+                    industry_rank_history_dic[key].append(value)
+                except Exception as e:
+                    print(e)
         rank_history_df = pd.DataFrame.from_dict(industry_rank_history_dic).transpose()
         rank_history_df = rank_history_df.rank(axis=0, ascending=True, method='dense')
         rank_history_df = (1 - rank_history_df.div(industryNum))*100
@@ -1205,7 +1208,10 @@ class JdStockDataManager:
 
         for i in range(1, nDay+1):
             for key, value in dn_list[i-1].items():
-                industry_atrs14_rank_history_dic[key].append(value)
+                try:
+                    industry_atrs14_rank_history_dic[key].append(value)
+                except Exception as e:
+                    print(e)
 
         rank_history_df = pd.DataFrame.from_dict(industry_atrs14_rank_history_dic).transpose()
         rank_history_df = rank_history_df.rank(axis=0, ascending=False, method='dense')
