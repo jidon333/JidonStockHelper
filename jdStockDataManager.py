@@ -1539,6 +1539,45 @@ class JdStockDataManager:
         return close_equal_high_cnt, close_equal_low_cnt
     
 
+    def check_failed_downside_wick_BO(self, inStockData: pd.DataFrame):
+        d2_ago_open, d2_ago_high, d2_ago_low, d2_ago_close = inStockData['Open'].iloc[-2], inStockData['High'].iloc[-2], inStockData['Low'].iloc[-2], inStockData['Close'].iloc[-2]
+        d1_ago_open, d1_ago_high, d1_ago_low, d1_ago_close = inStockData['Open'].iloc[-1], inStockData['High'].iloc[-1], inStockData['Low'].iloc[-1], inStockData['Close'].iloc[-1]
+
+        # bullish candle
+        if d2_ago_open <= d2_ago_close:
+            # 전일 심지 범위 안에서 출발
+            if d1_ago_open < d2_ago_open and d1_ago_open > d2_ago_low:
+                # 장중에 downside wick BO 발생
+                if d1_ago_low < d2_ago_low:
+                    # But 이말올 하여 종가는 전날 심지(open) 위에서 마감
+                    if d1_ago_close > d2_ago_open:
+                        return True
+                    
+        # bearish candle
+        else:
+            # 전일 심지 아래에서 출발
+            if d1_ago_open < d2_ago_close and d1_ago_open > d2_ago_low:
+                # 장중에 downside wick BO 발생
+                if d1_ago_low < d2_ago_low:
+                    # But 이말올하여 종가는 전날 심지(종가) 위에서 마감
+                    if d1_ago_close > d2_ago_close:
+                        return True
+                
+
+        return False
+    
+
+
+    def check_oops_up_reversal(self, inStockData: pd.DataFrame):
+        low_d1_ago = inStockData['Low'].iloc[-2]
+        open = inStockData['Open'].iloc[-1]
+        close = inStockData['Close'].iloc[-1]
+
+        if open < low_d1_ago and close > low_d1_ago:
+            return True
+        
+        return False
+
 
     def check_oops_up_reversal_cnt(self, inStockData: pd.DataFrame, days=15):
         opens = inStockData['Open'].iloc[-days:].tolist()
@@ -1997,6 +2036,8 @@ class JdStockDataManager:
             NR_x = self.check_NR_with_TrueRange(stockData)
             bWickPlay = self.check_wickplay(stockData)
             bOEL = self.check_OEL(stockData)
+            bOopsUpReversal = self.check_oops_up_reversal(stockData)
+            bFailedDownsideWickBO = self.check_failed_downside_wick_BO(stockData)
             bConverging, bPower3, bPower2 = self.check_ma_converging(stockData)
 
             bNearEma10 = self.check_near_ma(stockData, 10, 1.5, True)
@@ -2019,7 +2060,11 @@ class JdStockDataManager:
 
             trandingViewFormat = market + ':' + ticker + ','
 
-            stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), ADR, near_ma_list, bPower3, bPocketPivot, bInsideBar, bDoubleInsideBar, NR_x, bWickPlay, bOEL,
+            stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), ADR, near_ma_list, bPower3, bPocketPivot,
+                                      # Volatility Contraction
+                                      bInsideBar, bDoubleInsideBar, NR_x, bWickPlay,
+                                      # Demand
+                                      bOEL, bOopsUpReversal, bFailedDownsideWickBO,
                                       # C/V factors
                                       lower_low_3, higher_high_3, below_20ma_closed, below_50ma_closed, up_more_than_adr, down_more_than_adr, more_bullish_candle,
                                       ma20_disparity_more_than_20ptg, close_equal_low, close_equal_high, open_equal_high, open_equal_low, oops_up_reversal,
@@ -2028,7 +2073,9 @@ class JdStockDataManager:
 
 
         df = pd.DataFrame.from_dict(stock_info_dic).transpose()
-        columns = ['Market', 'Industry', 'Industry Score', 'RS Rank','ADR(%)', 'Near MA list(1.5%)', 'Power of 3', 'Pocket Pivot', 'Inside bar', 'Double Inside bar', 'NR(x)', 'Wick Play', 'OEL',
+        columns = ['Market', 'Industry', 'Industry Score', 'RS Rank','ADR(%)', 'Near MA list(1.5%)', 'Power of 3', 'Pocket Pivot',
+                   'Inside bar', 'Double Inside bar', 'NR(x)', 'Wick Play',
+                   'OEL', 'Oops up reversal', 'Failed downside wick BO',
                    'lower_low_3', 'higher_high_3', 'below_20ma_closed', 'below_50ma_closed', 'up_more_than_adr', 'down_more_than_adr', 'more_bullish_candle',
                     'ma20_disparity_more_than_20ptg', 'close_equal_low', 'close_equal_high', 'open_equal_high', 'open_equal_low', 'oops_up_reversal',
                     'squat', 'squat_recovery', 'rs_50d_new_high', 'rs_50d_new_low', 'pocket_pivot_cnt' ,'CV_total_cnt',
@@ -2051,11 +2098,12 @@ class JdStockDataManager:
         red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')  # 연한 빨강
         green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')  # 연한 녹색
 
-        for column in sheet.iter_cols(min_row=2, max_row=sheet.max_row, min_col=8, max_col=33):
+        for column in sheet.iter_cols(min_row=2, max_row=sheet.max_row, min_col=8, max_col=35):
             for cell in column:
                 if cell.value == None:
                     continue
 
+                # NR(x)
                 if cell.column == 12:
                     if cell.value > 3:
                         cell.fill = green_fill

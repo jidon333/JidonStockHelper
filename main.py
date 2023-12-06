@@ -463,11 +463,12 @@ index = int(input())
 
 if index == 1:
     MTT_ADR_minimum = 3
-    #screen_stocks_and_show_chart(filter_stock_hope_from_bottom, True, True)
+    #screen_stocks_and_show_chart(filter_stocks_MTT, True, True)
     MTT_ADR_minimum = 1
-    screen_stocks_and_show_chart(filter_stock_ALL, True, False)
+    #screen_stocks_and_show_chart(filter_stock_hope_from_bottom, True, True)
+    #screen_stocks_and_show_chart(filter_stock_ALL, True, False)
     #screen_stocks_and_show_chart(filter_stock_Good_RS, True, True)
-    #screen_stocks_and_show_chart(filter_stock_FA50, True, True)
+    screen_stocks_and_show_chart(filter_stocks_high_ADR_swing, True, True)
 
 elif index == 2:
     updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*3)
@@ -508,8 +509,8 @@ elif index == 8:
     sd.cook_long_term_industry_rank_scores()
     sd.cook_top10_in_industries()
 elif index == 9:
-    stock_data, tickers = screening_stocks_by_func(filter_stocks_MTT, True, True)
-    sd.cook_stock_info_from_tickers(tickers, 'US_MTT_1030')
+    stock_data, tickers = screening_stocks_by_func(filter_stock_hope_from_bottom, True, True)
+    sd.cook_stock_info_from_tickers(tickers, 'US_hope_from_bottom_2023-11-03')
 
     #stock_data, tickers = screening_stocks_by_func(filter_stock_hope_from_bottom, True)
     #sd.cook_stock_info_from_tickers(tickers, 'US_hope_from_bottom_1030')
@@ -550,7 +551,12 @@ elif index == 12:
     # cook file
     sd.cook_stock_info_from_tickers(tickers, f'US_MTT_{lastday}')
 
-
-
+    ### High ADR Swing
+    stock_data, tickers = screening_stocks_by_func(filter_stocks_high_ADR_swing, True, True)
+    first_stock_data : pd.DataFrame = stock_data[tickers[0]]
+    lastday = str(first_stock_data.index[-1].date())
+    sd.cook_stock_info_from_tickers(tickers, f'US_HighAdrSwing_{lastday}')
 
 # --------------------------------------------------------------------
+
+
