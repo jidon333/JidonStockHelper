@@ -313,6 +313,67 @@ def filter_stock_hope_from_bottom(stock_datas_dic : dict):
     return filtered_tickers
 
 
+def filter_stock_power_gap(stock_datas_dic : dict, n_day_before = -1):
+    """
+    - ADR 2이상
+    - 갭으로 주가 상승
+    - 최소 10% 이상 주가 상승
+        - 2 ADR(%) 이상 상승 
+        - ADR은 갭상한 날의 거래량이 포함 안되도록 하루 전날을 기준으로 한다.
+    - 주가는 200MA 위에 있어야 한다.
+    - 50일 평균 거래량의 200% 이상의 거래량 증가
+        - 거래량 50일 평균 20만이상 + 5불이상 or 평균거래대금 500만불 이상
+        - (원래는 10불이상, 거래대금 1000만불 이상을 거래 기준으로 넣지만 파워 갭은 주식의 성격을 변화시키므로 조건을 완화한다.)
+        - ADR과 마찬가지로 갭상 전날 거래량이 기준에 만족하지 못하는 것은 제외한다.
+    - DCR 50% 이상
+    - 헬스케어 섹터 제외(바이오 무빙 혼란하다.)
+
+    """
+    filtered_tickers = []
+    all_tickers = filter_stock_ALL(stock_datas_dic)
+    gisc_df = sd.get_GICS_df()
+    bIsNotHealthCare = False
+    bIsVolumeEnough = False
+    for ticker in all_tickers:
+        stockData = stock_datas_dic[ticker]
+        try:
+            ADR_1d_ago = stockData['ADR'].iloc[n_day_before-1]
+            volume_ma50_1d_ago = stockData['Volume'].rolling(window=50).mean().iloc[n_day_before-1]
+            volume = stockData['Volume'].iloc[n_day_before]
+
+            close = stockData['Close'].iloc[n_day_before]
+            open = stockData['Open'].iloc[n_day_before]
+            high = stockData['High'].iloc[n_day_before]
+            low = stockData['Low'].iloc[n_day_before]
+
+            close_1d_ago = stockData['Close'].iloc[n_day_before -1]
+            high_1d_ago = stockData['High'].iloc[n_day_before - 1]
+            ma200 = stockData['200MA'].iloc[n_day_before]
+
+            sector = gisc_df.loc[ticker]['sector']
+            bIsVolumeEnough = (volume_ma50_1d_ago >= 200000 and close >= 5 ) or volume_ma50_1d_ago*close > 5000000
+
+            change = sd.get_percentage_AtoB(close_1d_ago, close)
+
+            if high - low > 0:
+                DCR = (close - low) / (high - low)
+            else:
+                continue
+
+            if sector == 'Healthcare':
+                continue
+            
+            # 순서대로
+            # ADR > 2, Gap Open, 10% 이상 상승, 
+            #if ADR > 2 and open > high_1d_ago and change > 10 and change > ADR*2 and close > ma200 and volume > volume_ma50*2 and bIsVolumeEnough and DCR >= 0.5:
+            if ADR_1d_ago > 2 and open > high_1d_ago and change > 10 and change > ADR_1d_ago*2 and close > ma200 and volume > volume_ma50_1d_ago*2 and bIsVolumeEnough:
+                filtered_tickers.append(ticker)
+
+        except Exception as e:
+            continue
+    
+    return filtered_tickers
+
 # ADR 2이상
 # RS 랭킹 상위 15%
 # 헬스케어, 에너지 섹터 제외
@@ -376,7 +437,7 @@ def filter_stock_FA50(stock_datas_dic : dict, n_day_before = -1):
     return filtered_tickers
 
 
-def screening_stocks_by_func(filter_func, bUseLoadedStockData = True, bSortByRS = False):
+def screening_stocks_by_func(filter_func, bUseLoadedStockData = True, bSortByRS = False, n_day_before = -1):
     out_tickers = []
     out_stock_datas_dic = {}
 
@@ -388,8 +449,12 @@ def screening_stocks_by_func(filter_func, bUseLoadedStockData = True, bSortByRS 
     ##---------------- 조건식 -----------------------------------------------------
     search_start_time = time.time()
     selected_tickers = []
-    selected_tickers = filter_func(out_stock_datas_dic)
 
+    # 마지막 날 기준이 아닌 과거를 기준으로 데이터를 뽑고 싶은 경우 n_day_before를 사용.
+    if n_day_before == -1:
+        selected_tickers = filter_func(out_stock_datas_dic)
+    else:
+        selected_tickers = filter_func(out_stock_datas_dic, n_day_before)
 
 
     # sort
@@ -457,7 +522,8 @@ print("Select the chart type. \n \
       9: cook screening result as xlsx file. \n \
       10: MTT Index chart \n \
       11: FA50 Index chart \n \
-      12: Generate All indicators and screening result \n")
+      12: Generate All indicators and screening result \n \
+      13: Power gap histroy screen \n ")
 
 index = int(input())
 
@@ -466,9 +532,10 @@ if index == 1:
     #screen_stocks_and_show_chart(filter_stocks_MTT, True, True)
     MTT_ADR_minimum = 1
     #screen_stocks_and_show_chart(filter_stock_hope_from_bottom, True, True)
-    #screen_stocks_and_show_chart(filter_stock_ALL, True, False)
+    screen_stocks_and_show_chart(filter_stock_ALL, True, False)
     #screen_stocks_and_show_chart(filter_stock_Good_RS, True, True)
-    screen_stocks_and_show_chart(filter_stocks_high_ADR_swing, True, True)
+    #screen_stocks_and_show_chart(filter_stocks_high_ADR_swing, True, True)
+    #screen_stocks_and_show_chart(filter_stock_power_gap, True, True)
 
 elif index == 2:
     updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*3)
@@ -556,7 +623,27 @@ elif index == 12:
     first_stock_data : pd.DataFrame = stock_data[tickers[0]]
     lastday = str(first_stock_data.index[-1].date())
     sd.cook_stock_info_from_tickers(tickers, f'US_HighAdrSwing_{lastday}')
+elif index == 13:
+    daysNum = int(365)
+    stock_list = sd.getStockListFromLocalCsv()
+    out_tickers = []
+    out_stock_datas_dic = {}
+    sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, True)
+    # To get trade day easily.
+    appleData = out_stock_datas_dic['AAPL']
 
+    print("start power gap screening!")
+    power_gap_screen_list = []
+    for i in range(1, 40):
+        stock_data_dic, tickers = screening_stocks_by_func(filter_stock_power_gap, True, True, -i)
+        tradeDay = str(appleData.index[-i].date())
+        s = str.format(f"[{tradeDay}] power gap tickers: ") + str(tickers)
+        print(s)
+        power_gap_screen_list.append(s)
+
+    print("Done. print power gap screen list")
+    for s in power_gap_screen_list:
+        print(s)
 # --------------------------------------------------------------------
 
 
