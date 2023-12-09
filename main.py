@@ -108,50 +108,6 @@ def remove_local_caches():
 
 
 
-def screening_stocks_by_func(filter_func, bUseLoadedStockData = True, bSortByRS = False, n_day_before = -1):
-    out_tickers = []
-    out_stock_datas_dic = {}
-
-    daysNum = int(365)
-    stock_list = sd.getStockListFromLocalCsv()
-    sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, bUseLoadedStockData)
-
-
-    ##---------------- 조건식 -----------------------------------------------------
-    search_start_time = time.time()
-    selected_tickers = []
-
-    # 마지막 날 기준이 아닌 과거를 기준으로 데이터를 뽑고 싶은 경우 n_day_before를 사용.
-    if n_day_before == -1:
-        selected_tickers = filter_func(out_stock_datas_dic)
-    else:
-        selected_tickers = filter_func(out_stock_datas_dic, n_day_before)
-
-
-    # sort
-    if bSortByRS:
-        rs_ranks = []
-        for ticker in selected_tickers:
-            try:
-                rank = sd.get_ATRS150_exp_Ranks(ticker).iloc[-1]
-                rs_ranks.append((ticker, rank))
-            except Exception as e:
-                print(e)
-        
-        rs_ranks.sort(key=lambda x : x[1])
-        keys = [x[0] for x in rs_ranks]
-        selected_tickers = keys
-    else:
-        selected_tickers.sort()
-    
-    search_end_time = time.time()
-    execution_time = search_end_time - search_start_time
-    print(f"Search time elapsed: {execution_time}sec")
-    print('filtered by quant data: \n', selected_tickers)
-    print('selected tickers num: ', len(selected_tickers))
-
-    return out_stock_datas_dic, selected_tickers
-
 def screen_stocks_and_show_chart(filter_function, bUseLocalLoadedStockDataForScreening, bSortByRS):
     bUseLocalCache = get_yes_no_input('Do you want to see last chart data? \n It will just show your last chart data without screening. \n (y/n)')
     if bUseLocalCache:
@@ -165,10 +121,10 @@ def screen_stocks_and_show_chart(filter_function, bUseLocalLoadedStockDataForScr
         except FileNotFoundError:
             print('Can not find your last stock chart data in local.\n The chart data will be re-generated. ')
             bUseLocalCache = False
-            stock_data, tickers = screening_stocks_by_func(filter_function, bUseLocalLoadedStockDataForScreening, bSortByRS)
+            stock_data, tickers = sf.screening_stocks_by_func(filter_function, bUseLocalLoadedStockDataForScreening, bSortByRS)
 
     else:
-        stock_data, tickers = screening_stocks_by_func(filter_function, bUseLocalLoadedStockDataForScreening, bSortByRS)
+        stock_data, tickers = sf.screening_stocks_by_func(filter_function, bUseLocalLoadedStockDataForScreening, bSortByRS)
 
     # 데이터를 파일에 저장
     if not bUseLocalCache:
@@ -247,7 +203,7 @@ elif index == 8:
     sd.cook_long_term_industry_rank_scores()
     sd.cook_top10_in_industries()
 elif index == 9:
-    stock_data, tickers = screening_stocks_by_func(sf.filter_stock_hope_from_bottom, True, True)
+    stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stock_hope_from_bottom, True, True)
     sd.cook_stock_info_from_tickers(tickers, 'US_hope_from_bottom_2023-11-03')
 
     #stock_data, tickers = screening_stocks_by_func(filter_stock_hope_from_bottom, True)
@@ -280,7 +236,7 @@ elif index == 12:
     ### cook MTT stock list as xlsx.
 
     # get mtt screen list
-    stock_data, tickers = screening_stocks_by_func(sf.filter_stocks_MTT, True, True)
+    stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stocks_MTT, True, True)
     
     # Hack: get last date string from first stock data and use it for filename.
     first_stock_data : pd.DataFrame = stock_data[tickers[0]]
@@ -290,36 +246,18 @@ elif index == 12:
     sd.cook_stock_info_from_tickers(tickers, f'US_MTT_{lastday}')
 
     ### High ADR Swing
-    stock_data, tickers = screening_stocks_by_func(sf.filter_stocks_high_ADR_swing, True, True)
+    stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stocks_high_ADR_swing, True, True)
     first_stock_data : pd.DataFrame = stock_data[tickers[0]]
     lastday = str(first_stock_data.index[-1].date())
     sd.cook_stock_info_from_tickers(tickers, f'US_HighAdrSwing_{lastday}')
 
-    stock_data_dic, tickers = screening_stocks_by_func(sf.filter_stock_power_gap, True, True, -1)
+    stock_data_dic, tickers = sf.screening_stocks_by_func(sf.filter_stock_power_gap, True, True, -1)
     s = str.format(f"[{lastday}] power gap tickers: ") + str(tickers)
     print(s)
 
 elif index == 13:
-    daysNum = int(365)
-    stock_list = sd.getStockListFromLocalCsv()
-    out_tickers = []
-    out_stock_datas_dic = {}
-    sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, True)
-    # To get trade day easily.
-    appleData = out_stock_datas_dic['AAPL']
-
-    print("start power gap screening!")
-    power_gap_screen_list = []
-    for i in range(1, 40):
-        stock_data_dic, tickers = screening_stocks_by_func(sf.filter_stock_power_gap, True, True, -i)
-        tradeDay = str(appleData.index[-i].date())
-        s = str.format(f"[{tradeDay}] power gap tickers: ") + str(tickers)
-        print(s)
-        power_gap_screen_list.append(s)
-
-    print("Done. print power gap screen list")
-    for s in power_gap_screen_list:
-        print(s)
+    sf.get_power_gap_stocks_in_range(40)
+    
 # --------------------------------------------------------------------
 
 

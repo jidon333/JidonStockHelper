@@ -1,12 +1,60 @@
 
 
 from jdStockDataManager import JdStockDataManager 
+import time
 
 class JdStockFilteringManager:
     def __init__(self, inStockDataManager : JdStockDataManager):
         print("Hello JdScreenStockManager!")
         self.sd = inStockDataManager
         self.MTT_ADR_minimum = 1
+
+
+    
+
+    def screening_stocks_by_func(self, filter_func, bUseLoadedStockData = True, bSortByRS = False, n_day_before = -1):
+        out_tickers = []
+        out_stock_datas_dic = {}
+
+        daysNum = int(365)
+        stock_list = self.sd.getStockListFromLocalCsv()
+        self.sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, bUseLoadedStockData)
+
+
+        ##---------------- 조건식 -----------------------------------------------------
+        search_start_time = time.time()
+        selected_tickers = []
+
+        # 마지막 날 기준이 아닌 과거를 기준으로 데이터를 뽑고 싶은 경우 n_day_before를 사용.
+        if n_day_before == -1:
+            selected_tickers = filter_func(out_stock_datas_dic)
+        else:
+            selected_tickers = filter_func(out_stock_datas_dic, n_day_before)
+
+
+        # sort
+        if bSortByRS:
+            rs_ranks = []
+            for ticker in selected_tickers:
+                try:
+                    rank = self.sd.get_ATRS150_exp_Ranks(ticker).iloc[-1]
+                    rs_ranks.append((ticker, rank))
+                except Exception as e:
+                    print(e)
+            
+            rs_ranks.sort(key=lambda x : x[1])
+            keys = [x[0] for x in rs_ranks]
+            selected_tickers = keys
+        else:
+            selected_tickers.sort()
+        
+        search_end_time = time.time()
+        execution_time = search_end_time - search_start_time
+        print(f"Search time elapsed: {execution_time}sec")
+        print('filtered by quant data: \n', selected_tickers)
+        print('selected tickers num: ', len(selected_tickers))
+
+        return out_stock_datas_dic, selected_tickers
 
 
     # return filtered tickers
@@ -79,25 +127,25 @@ class JdStockFilteringManager:
                 
         return filtered_tickers
 
-    def filter_stocks_high_ADR_swing(self, stock_datas_dic : dict):
+    def filter_stocks_high_ADR_swing(self, stock_datas_dic : dict, n_day_before = -1):
         filtered_tickers = []
         atrs_ranking_df = self.sd.get_ATRS_Ranking_df()
         gisc_df = self.sd.get_GICS_df()
 
         for ticker, inStockData in stock_datas_dic.items():
 
-            close = inStockData['Close'].iloc[-1]
-            ma150 = inStockData['150MA'].iloc[-1]
-            ma200 = inStockData['200MA'].iloc[-1]
+            close = inStockData['Close'].iloc[n_day_before]
+            ma150 = inStockData['150MA'].iloc[n_day_before]
+            ma200 = inStockData['200MA'].iloc[n_day_before]
             bIsUpperMA_150_200 = close > ma150 and close > ma200
 
             # early rejection for optimization
             if bIsUpperMA_150_200 == False:
                 continue
         
-            ma50 = inStockData['50MA'].iloc[-1]
-            volume_ma50 = inStockData['Volume'].rolling(window=50).mean().iloc[-1]
-            ADR = inStockData['ADR'].iloc[-1]
+            ma50 = inStockData['50MA'].iloc[n_day_before]
+            volume_ma50 = inStockData['Volume'].rolling(window=50).mean().iloc[n_day_before]
+            ADR = inStockData['ADR'].iloc[n_day_before]
             bIsUpperMA = close > bIsUpperMA_150_200 and close > ma50
 
             # 설명 : 스테이지1을 포함, 단기 트레이딩을 위한 고ADR 단기 모멘텀 스크리너
@@ -165,53 +213,6 @@ class JdStockFilteringManager:
 
                 if sector == 'Energy':
                     filtered_tickers.append(ticker)
-
-            except Exception as e:
-                continue
-        
-        return filtered_tickers
-
-
-    def filter_stock_hope_from_bottom(self, stock_datas_dic : dict):
-        """
-        - ADR 2이상
-        - RS 랭킹 상위 30%
-        - 헬스케어, 에너지 섹터 제외
-        - Volume 50MA 100만 이상 and 5불 이상 주식
-        - 150SMA > 200SMA (바닥으로 추락하기전 2단계였던 주식을 보고 싶었음)
-        - 150 or 200SMA 이격도 2 ADR 미만 (장기 이평선 근처에서 횡보하는 것을 찾기 위함)
-        """
-        filtered_tickers = []
-        Mtt_tickers = self.filter_stock_ALL(stock_datas_dic)
-        atrs_ranking_df = self.sd.get_ATRS_Ranking_df()
-        gisc_df = self.sd.get_GICS_df()
-        bIsATRS_Ranking_Good = False
-        bIsNotHealthCare = False
-        bIsVolumeEnough = False
-        for ticker in Mtt_tickers:
-            stockData = stock_datas_dic[ticker]
-            try:
-                ADR = stockData['ADR'].iloc[-1]
-                volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[-1]
-                close = stockData['Close'].iloc[-1]
-                ma150 = stockData['150MA'].iloc[-1]
-                ma200 = stockData['200MA'].iloc[-1]
-                bNear150or200 = False
-
-                if abs(self.sd.get_percentage_AtoB(close, ma150)) < ADR*2 or abs(self.sd.get_percentage_AtoB(close, ma200)) < ADR*2:
-                    bNear150or200 = True
-
-                atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
-                bIsATRS_Ranking_Good = atrsRank < 2000
-                sector = gisc_df.loc[ticker]['sector']
-                bIsNotHealthCare = sector != 'Healthcare'
-                bIsNotEnergy = sector != 'Energy'
-
-                bIsVolumeEnough = (volume_ma50 >= 1000000 and close >= 5 )
-
-                if ADR > 2 and bIsATRS_Ranking_Good and bIsNotHealthCare and bIsNotEnergy and bIsVolumeEnough and bNear150or200:
-                    if ma150 > ma200:
-                        filtered_tickers.append(ticker)
 
             except Exception as e:
                 continue
@@ -302,12 +303,41 @@ class JdStockFilteringManager:
         
         return filtered_tickers
 
-    # ADR 2이상
-    # RS 랭킹 상위 15%
-    # 헬스케어, 에너지 섹터 제외
-    # Volume 50MA 100만 이상 and 5불 이상 주식
+    
 
+    def filter_stock_FA50(self, stock_datas_dic : dict, n_day_before = -1):
+        filtered_tickers = []
+        Mtt_tickers = self.filter_stock_ALL(stock_datas_dic)
+        gisc_df = self.sd.get_GICS_df()
+        bIsVolumeEnough = False
+        for ticker in Mtt_tickers:
+            stockData = stock_datas_dic[ticker]
+            try:
+                ADR = stockData['ADR'].iloc[n_day_before]
+                volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[n_day_before]
+                close = stockData['Close'].iloc[n_day_before]
+                ma50 = stockData['50MA'].iloc[n_day_before]
+
+                bIsVolumeEnough = (volume_ma50 >= 1000000 and close >= 8 )
+                bUpperThan50MA = close >= ma50
+
+                if ADR > 3 and bIsVolumeEnough and bUpperThan50MA:
+                    filtered_tickers.append(ticker)
+
+            except Exception as e:
+                continue
+        
+        return filtered_tickers
+    
+
+    
     def filter_stock_Good_RS(self, stock_datas_dic : dict):
+        """
+        - ADR 2이상
+        - RS 랭킹 상위 15%
+        - 헬스케어, 에너지 섹터 제외
+        - Volume 50MA 100만 이상 and 5불 이상 주식
+        """
         # filter stock good RS 
         filtered_tickers = []
         Mtt_tickers = self.filter_stock_ALL(stock_datas_dic)
@@ -338,28 +368,71 @@ class JdStockFilteringManager:
                 continue
         
         return filtered_tickers
-
-
-    def filter_stock_FA50(self, stock_datas_dic : dict, n_day_before = -1):
+    def filter_stock_hope_from_bottom(self, stock_datas_dic : dict):
+        """
+        - ADR 2이상
+        - RS 랭킹 상위 30%
+        - 헬스케어, 에너지 섹터 제외
+        - Volume 50MA 100만 이상 and 5불 이상 주식
+        - 150SMA > 200SMA (바닥으로 추락하기전 2단계였던 주식을 보고 싶었음)
+        - 150 or 200SMA 이격도 2 ADR 미만 (장기 이평선 근처에서 횡보하는 것을 찾기 위함)
+        """
         filtered_tickers = []
         Mtt_tickers = self.filter_stock_ALL(stock_datas_dic)
+        atrs_ranking_df = self.sd.get_ATRS_Ranking_df()
         gisc_df = self.sd.get_GICS_df()
+        bIsATRS_Ranking_Good = False
+        bIsNotHealthCare = False
         bIsVolumeEnough = False
         for ticker in Mtt_tickers:
             stockData = stock_datas_dic[ticker]
             try:
-                ADR = stockData['ADR'].iloc[n_day_before]
-                volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[n_day_before]
-                close = stockData['Close'].iloc[n_day_before]
-                ma50 = stockData['50MA'].iloc[n_day_before]
+                ADR = stockData['ADR'].iloc[-1]
+                volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[-1]
+                close = stockData['Close'].iloc[-1]
+                ma150 = stockData['150MA'].iloc[-1]
+                ma200 = stockData['200MA'].iloc[-1]
+                bNear150or200 = False
 
-                bIsVolumeEnough = (volume_ma50 >= 1000000 and close >= 8 )
-                bUpperThan50MA = close >= ma50
+                if abs(self.sd.get_percentage_AtoB(close, ma150)) < ADR*2 or abs(self.sd.get_percentage_AtoB(close, ma200)) < ADR*2:
+                    bNear150or200 = True
 
-                if ADR > 3 and bIsVolumeEnough and bUpperThan50MA:
-                    filtered_tickers.append(ticker)
+                atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
+                bIsATRS_Ranking_Good = atrsRank < 2000
+                sector = gisc_df.loc[ticker]['sector']
+                bIsNotHealthCare = sector != 'Healthcare'
+                bIsNotEnergy = sector != 'Energy'
+
+                bIsVolumeEnough = (volume_ma50 >= 1000000 and close >= 5 )
+
+                if ADR > 2 and bIsATRS_Ranking_Good and bIsNotHealthCare and bIsNotEnergy and bIsVolumeEnough and bNear150or200:
+                    if ma150 > ma200:
+                        filtered_tickers.append(ticker)
 
             except Exception as e:
                 continue
         
         return filtered_tickers
+
+
+    def get_power_gap_stocks_in_range(self, screen_range_days : int):
+        daysNum = int(365)
+        stock_list = self.sd.getStockListFromLocalCsv()
+        out_tickers = []
+        out_stock_datas_dic = {}
+        self.sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, True)
+        # To get trade day easily.
+        appleData = out_stock_datas_dic['AAPL']
+
+        print("start power gap screening!")
+        power_gap_screen_list = []
+        for i in range(1, screen_range_days):
+            stock_data_dic, tickers = self.screening_stocks_by_func(self.filter_stock_power_gap, True, True, -i)
+            tradeDay = str(appleData.index[-i].date())
+            s = str.format(f"[{tradeDay}] power gap tickers: ") + str(tickers)
+            print(s)
+            power_gap_screen_list.append(s)
+
+        print("Done. print power gap screen list")
+        for s in power_gap_screen_list:
+            print(s)
