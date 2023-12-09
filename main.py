@@ -99,6 +99,8 @@ def remove_local_caches():
     for filename in os.listdir(local_dir):
         if filename.startswith('cache_'):
             os.remove(os.path.join(local_dir, filename))
+    
+    sd.reset_caches()
 
 
 
@@ -337,36 +339,58 @@ def filter_stock_power_gap(stock_datas_dic : dict, n_day_before = -1):
     for ticker in all_tickers:
         stockData = stock_datas_dic[ticker]
         try:
+            # [Optimize] Early rejection 
+
+            # sector check
+            sector = gisc_df.loc[ticker]['sector']
+            if sector == 'Healthcare':
+                continue
+
+            # ADR check
             ADR_1d_ago = stockData['ADR'].iloc[n_day_before-1]
+            if ADR_1d_ago < 2:
+                continue
+
+            # gap check
+            open = stockData['Open'].iloc[n_day_before]
+            high_1d_ago = stockData['High'].iloc[n_day_before - 1]
+            if open <= high_1d_ago:
+                continue 
+
+
+            # change(%) check
+            close_1d_ago = stockData['Close'].iloc[n_day_before -1]
+            close = stockData['Close'].iloc[n_day_before]
+            change = sd.get_percentage_AtoB(close_1d_ago, close)
+            if change < 10.0:
+                continue
+            if change < ADR_1d_ago * 2.0:
+                continue
+
+            # above ma200 check
+            ma200 = stockData['200MA'].iloc[n_day_before]
+            if close < ma200:
+                continue 
+
             volume_ma50_1d_ago = stockData['Volume'].rolling(window=50).mean().iloc[n_day_before-1]
             volume = stockData['Volume'].iloc[n_day_before]
 
-            close = stockData['Close'].iloc[n_day_before]
-            open = stockData['Open'].iloc[n_day_before]
             high = stockData['High'].iloc[n_day_before]
             low = stockData['Low'].iloc[n_day_before]
 
-            close_1d_ago = stockData['Close'].iloc[n_day_before -1]
-            high_1d_ago = stockData['High'].iloc[n_day_before - 1]
-            ma200 = stockData['200MA'].iloc[n_day_before]
-
-            sector = gisc_df.loc[ticker]['sector']
             bIsVolumeEnough = (volume_ma50_1d_ago >= 200000 and close >= 5 ) or volume_ma50_1d_ago*close > 5000000
 
-            change = sd.get_percentage_AtoB(close_1d_ago, close)
 
             if high - low > 0:
                 DCR = (close - low) / (high - low)
             else:
                 continue
 
-            if sector == 'Healthcare':
-                continue
-            
+
             # 순서대로
             # ADR > 2, Gap Open, 10% 이상 상승, 
             #if ADR > 2 and open > high_1d_ago and change > 10 and change > ADR*2 and close > ma200 and volume > volume_ma50*2 and bIsVolumeEnough and DCR >= 0.5:
-            if ADR_1d_ago > 2 and open > high_1d_ago and change > 10 and change > ADR_1d_ago*2 and close > ma200 and volume > volume_ma50_1d_ago*2 and bIsVolumeEnough:
+            if  volume > volume_ma50_1d_ago*2 and bIsVolumeEnough:
                 filtered_tickers.append(ticker)
 
         except Exception as e:
@@ -475,7 +499,7 @@ def screening_stocks_by_func(filter_func, bUseLoadedStockData = True, bSortByRS 
     
     search_end_time = time.time()
     execution_time = search_end_time - search_start_time
-    print(f"Search tiem elapsed: {execution_time}sec")
+    print(f"Search time elapsed: {execution_time}sec")
     print('filtered by quant data: \n', selected_tickers)
     print('selected tickers num: ', len(selected_tickers))
 
@@ -623,6 +647,11 @@ elif index == 12:
     first_stock_data : pd.DataFrame = stock_data[tickers[0]]
     lastday = str(first_stock_data.index[-1].date())
     sd.cook_stock_info_from_tickers(tickers, f'US_HighAdrSwing_{lastday}')
+
+    stock_data_dic, tickers = screening_stocks_by_func(filter_stock_power_gap, True, True, -1)
+    s = str.format(f"[{lastday}] power gap tickers: ") + str(tickers)
+    print(s)
+
 elif index == 13:
     daysNum = int(365)
     stock_list = sd.getStockListFromLocalCsv()

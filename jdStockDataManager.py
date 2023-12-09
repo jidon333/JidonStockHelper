@@ -67,8 +67,6 @@ def load_from_json(filename):
     return loaded_data
 
 
-
-
 class JdStockDataManager:
     def __init__(self):
         self.index_data = fdr.DataReader('US500')
@@ -78,6 +76,15 @@ class JdStockDataManager:
         self.short_term_industry_rank_df = pd.DataFrame()
 
         self.atrs_ranking_df = pd.DataFrame()
+
+
+        # ---------- cache datas -------------#
+        self.reset_caches()
+
+    def reset_caches(self):
+        self.cache_StockListFromLocalCsv = pd.DataFrame()
+        self.cache_getStockDatasFromCsv_out_tickers = None
+        self.cache_getStockDatasFromCsv_out_stock_datas_dic = None
 
 # ------------------- private -----------------------------------------------
 
@@ -313,9 +320,16 @@ class JdStockDataManager:
                 print(f"An error occurred: {e}")
 
     def getStockListFromLocalCsv(self):
+        
+        # [Optimize] 메모리 캐시가 있으면 먼저 메모리 캐시 사용
+        if not self.cache_StockListFromLocalCsv.empty:
+            return self.cache_StockListFromLocalCsv
+
+        # [Optimize] 아니면 데이터 캐시 사용후 메모리에 적재
         try:
             with open('cache_StockListFromLocalCsv', "rb") as f:
                 all_list = pickle.load(f)
+                self.cache_StockListFromLocalCsv = all_list
                 return all_list
 
         except FileNotFoundError:
@@ -739,25 +753,41 @@ class JdStockDataManager:
 
     def getStockDatasFromCsv(self, stock_list, out_tickers : list[str], out_stock_datas_dic : dict[str, pd.DataFrame], daysNum = 365*5, bUseCacheData = False):
         """
-        Caution! : if bUseCacheData is true, just return last funciton result no matter what other parameter it is. 
+        # Caution! : if bUseCacheData is true, just return last funciton result no matter what other parameter it is. 
         """
+        # out data must be set by extend()/update() method.
+        out_tickers.clear()
+        out_stock_datas_dic.clear()
 
-        if bUseCacheData:
+        if bUseCacheData:    
             try:
-                with open('cache_getStockDatasFromCsv_out_tickers', "rb") as f:
-                    cache_data = pickle.load(f)
-                    out_tickers.extend(cache_data)
+                # [Optimize]
+                if self.cache_getStockDatasFromCsv_out_tickers != None:
+                    out_tickers.extend(self.cache_getStockDatasFromCsv_out_tickers)
+                else:
+                    with open('cache_getStockDatasFromCsv_out_tickers', "rb") as f:
+                        cache_data = pickle.load(f)
+                        out_tickers.extend(cache_data)
+                        self.cache_getStockDatasFromCsv_out_tickers = out_tickers
 
-                    
-                with open('cache_getStockDatasFromCsv_out_stock_datas_dic', "rb") as f:
-                    cache_data = pickle.load(f)
-                    out_stock_datas_dic.update(cache_data)
+                # [Optimize]
+                if self.cache_getStockDatasFromCsv_out_stock_datas_dic != None:
+                    out_stock_datas_dic.update(self.cache_getStockDatasFromCsv_out_stock_datas_dic)
+                else:
+                    with open('cache_getStockDatasFromCsv_out_stock_datas_dic', "rb") as f:
+                        cache_data = pickle.load(f)
+                        out_stock_datas_dic.update(cache_data)
+                        self.cache_getStockDatasFromCsv_out_stock_datas_dic = out_stock_datas_dic
 
                 return
 
             except FileNotFoundError as e:
                 print('Fail to get local cache data in getStockDatasFromCsv(). Normal loading process will be excuted \n', e)
 
+        # # [Optimize] no local cache
+        else:
+            self.cache_getStockDatasFromCsv_out_tickers = None
+            self.cache_getStockDatasFromCsv_out_stock_datas_dic = None
 
         print("--- getStockDatasFromCsv ---")
         i = 0
