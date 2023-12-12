@@ -6,6 +6,7 @@ metadata_folder = os.path.join(data_folder, 'MetaData')
 ui_folder = os.path.join(os.getcwd(), 'UI')
 screenshot_folder = os.path.join(metadata_folder, 'ScreenShot')
 filteredStocks_folder = os.path.join(metadata_folder, "FilteredStocks")
+profiles_folder = os.path.join(metadata_folder, "Profiles")
 
 
 

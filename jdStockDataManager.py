@@ -23,6 +23,7 @@ from jdGlobal import data_folder
 from jdGlobal import metadata_folder
 from jdGlobal import screenshot_folder
 from jdGlobal import filteredStocks_folder
+from jdGlobal import profiles_folder
 
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Color
@@ -45,6 +46,9 @@ if not os.path.exists(filteredStocks_folder):
 
 if not os.path.exists(screenshot_folder):
     os.makedirs(screenshot_folder)
+
+if not os.path.exists(profiles_folder):
+    os.makedirs(profiles_folder)
 
 
 
@@ -753,7 +757,8 @@ class JdStockDataManager:
 
     def getStockDatasFromCsv(self, stock_list, out_tickers : list[str], out_stock_datas_dic : dict[str, pd.DataFrame], daysNum = 365*5, bUseCacheData = False):
         """
-        # Caution! : if bUseCacheData is true, just return last funciton result no matter what other parameter it is. 
+        - Caution! : if bUseCacheData is true, just return last funciton result no matter what other parameter it is. 
+        - It mean that your daysNum param will affect nothing if you use cache data.
         """
         # out data must be set by extend()/update() method.
         out_tickers.clear()
@@ -1305,11 +1310,11 @@ class JdStockDataManager:
         ma20 = ma20_datas.iloc[-1]
         ma50 = ma50_datas.iloc[-1]
 
-        gap_10_20 =  abs((ma10 - ma20)/ma20) * 100
-        gap_10_50 =  abs((ma10 - ma50)/ma50) * 100
-        gap_20_50 =  abs((ma50 - ma20)/ma20) * 100
+        dist_10_20 =  abs((ma10 - ma20)/ma20) * 100
+        dist_10_50 =  abs((ma10 - ma50)/ma50) * 100
+        dist_20_50 =  abs((ma50 - ma20)/ma20) * 100
 
-        if gap_10_20 < 1.5 and gap_10_50 < 1.5 and gap_20_50 < 1.5:
+        if dist_10_20 < 1.5 and dist_10_50 < 1.5 and dist_20_50 < 1.5:
             bIsConverging = True
 
         if bIsConverging:
@@ -1333,8 +1338,8 @@ class JdStockDataManager:
         return (bIsConverging, bIsPower3, bIsPower2)
 
     
-    # check the low and close gap from the ma
-    def check_near_ma(self, inStockData: pd.DataFrame, MA_Num = 10, max_gap_pct = 1.5, bUseEMA = False):
+    # check the low or close was closed to the moving average
+    def check_near_ma(self, inStockData: pd.DataFrame, MA_Num = 10, max_error_pct = 1.5, bUseEMA = False):
 
         if bUseEMA:
             ma_datas = inStockData['Close'].ewm(span=MA_Num, adjust=False).mean()
@@ -1345,14 +1350,16 @@ class JdStockDataManager:
         close = inStockData['Close'].iloc[-1]
         ma = ma_datas.iloc[-1]
 
-        ma_gap_from_close = abs((ma - close)/close) * 100
-        ma_gap_from_low = abs((ma - low)/low) * 100
+        
 
-        return ma_gap_from_close < max_gap_pct or ma_gap_from_low < max_gap_pct
+        ma_dist_from_close = abs(self.get_percentage_AtoB(close, ma))
+        ma_dist_from_low = abs(self.get_percentage_AtoB(low, ma))
+
+        return ma_dist_from_close < max_error_pct or ma_dist_from_low < max_error_pct
    
 
-    def check_supported_by_ma(self, inStockData: pd.DataFrame, MA_Num = 10, max_gap_pct = 1.5, bUseEMA = False):
-        # print('low > ma and low and ma gap < max_gap_pct')
+    def check_supported_by_ma(self, inStockData: pd.DataFrame, MA_Num = 10, max_error_pct = 1.5, bUseEMA = False):
+        # print('low > ma and low and ma dist < max_dist_pct')
         # print('low < ma and close > ma')
 
         if bUseEMA:
@@ -1365,17 +1372,47 @@ class JdStockDataManager:
         close = inStockData['Close'].iloc[-1]
         ma = ma_datas.iloc[-1]
 
-        gap_from_close = abs((ma - close)/close) * 100
-        gap_from_low = abs((ma - low)/low) * 100
+        dist_from_close = abs(self.get_percentage_AtoB(close, ma))
+        dist_from_low = abs(self.get_percentage_AtoB(low, ma))
 
 
-        if low > ma and gap_from_low < max_gap_pct:
+        if low > ma and dist_from_low < max_error_pct:
             return True
         if low < ma and close > ma:
             return True
 
         return False
     
+
+    def check_ma_touch(self, inStockData: pd.DataFrame, MA_Num = 10, bUseEMA = False, n_day_before = -1):
+        """
+        check if the ma price is in the day's range.
+        """
+        if bUseEMA:
+            ma_datas = inStockData['Close'].ewm(span=MA_Num, adjust=False).mean()
+        else:
+            ma_datas = inStockData['Close'].rolling(window=MA_Num).mean()
+     
+        low = inStockData['Low'].iloc[n_day_before]
+        high = inStockData['High'].iloc[n_day_before]
+        ma = ma_datas.iloc[n_day_before]
+
+        if ma <= high and ma >= low:
+            return True
+        
+        return False
+
+
+    def check_undercut_price(self, inStockData: pd.DataFrame, inPrice : float, n_day_before = -1):
+        """
+        check if the day's low price undercut the {price}.
+        """
+        low = inStockData['Low'].iloc[n_day_before]
+        if low < inPrice:
+            return True
+        
+        return False
+
 
     def check_wickplay(self, inStockData: pd.DataFrame):
         bWickPlay = False
@@ -1395,13 +1432,13 @@ class JdStockDataManager:
     
 
     # open equal low
-    def check_OEL(self, inStockData: pd.DataFrame):
-        d1_ago_open, d1_ago_low = inStockData['Open'].iloc[-1], inStockData['Low'].iloc[-1]
+    def check_OEL(self, inStockData: pd.DataFrame, n_day_before = -1):
+        d1_ago_open, d1_ago_low = inStockData['Open'].iloc[n_day_before], inStockData['Low'].iloc[n_day_before]
         bOEL = d1_ago_open == d1_ago_low
         return bOEL
     
-    def check_OEH(self, inStockData: pd.DataFrame):
-        d1_ago_open, d1_ago_high = inStockData['Open'].iloc[-1], inStockData['High'].iloc[-1]
+    def check_OEH(self, inStockData: pd.DataFrame, n_day_before = -1):
+        d1_ago_open, d1_ago_high = inStockData['Open'].iloc[n_day_before], inStockData['High'].iloc[n_day_before]
         bOEH = d1_ago_open == d1_ago_high
         return bOEH
     
@@ -1487,8 +1524,8 @@ class JdStockDataManager:
         for i in range(0, days-1):
             prev_close = closes[i]
             close = closes[i+1]
-            gap_percentage = self.get_percentage_AtoB(prev_close, close)
-            if gap_percentage > 0 and abs(gap_percentage) >= ADRs[i]:
+            dist_percentage = self.get_percentage_AtoB(prev_close, close)
+            if dist_percentage > 0 and abs(dist_percentage) >= ADRs[i]:
                 cnt += 1
             
         return cnt
@@ -1502,8 +1539,8 @@ class JdStockDataManager:
         for i in range(0, days-1):
             prev_close = closes[i]
             close = closes[i+1]
-            gap_percentage = self.get_percentage_AtoB(prev_close, close)
-            if gap_percentage < 0 and abs(gap_percentage) >= ADRs[i]:
+            dist_percentage = self.get_percentage_AtoB(prev_close, close)
+            if dist_percentage < 0 and abs(dist_percentage) >= ADRs[i]:
                 cnt += 1
             
         return cnt
@@ -1528,21 +1565,21 @@ class JdStockDataManager:
         return bullishCandleCnt, bearlishCandleCnt
     
 
-    def check_20ma_gap_more_than_20ptg_cnt(self, inStockData: pd.DataFrame, days=15):
+    def check_20ma_dist_more_than_20ptg_cnt(self, inStockData: pd.DataFrame, days=15):
         closes = inStockData['Close'].iloc[-days:].tolist()
         ma20_prices = inStockData['Close'].rolling(window=20).mean().iloc[-days:].tolist()
 
-        big_gap_cnt = 0
+        big_dist_cnt = 0
         for i in range(0, days):   
             close = closes[i]
             ma20 = ma20_prices[i]
 
             if close > ma20:
-                gap_from_20ma =  abs((ma20 - close)/close) * 100
-                if gap_from_20ma > 20:
-                    big_gap_cnt += 1
+                dist_from_20ma =  abs((ma20 - close)/close) * 100
+                if dist_from_20ma > 20:
+                    big_dist_cnt += 1
 
-        return big_gap_cnt
+        return big_dist_cnt
     
 
     def check_close_equal_high_or_low_cnt(self, inStockData: pd.DataFrame, days=15):
@@ -1672,8 +1709,8 @@ class JdStockDataManager:
             adr = ADRs[i]
 
             if high > prevHigh:
-                gap_pct = self.get_percentage_AtoB(prevHigh, high)
-                if gap_pct >= adr:
+                dist_pct = self.get_percentage_AtoB(prevHigh, high)
+                if dist_pct >= adr:
                     if close < prevHigh:
                         squat_cnt += 1
 
@@ -1694,8 +1731,8 @@ class JdStockDataManager:
             adr = ADRs[i]
 
             if high > prevHigh:
-                gap_pct = self.get_percentage_AtoB(prevHigh, high)
-                if gap_pct >= adr:
+                dist_pct = self.get_percentage_AtoB(prevHigh, high)
+                if dist_pct >= adr:
                     # 스쿼트 발생!
                     if close < prevHigh:
                         # 스쿼트 발생후 3일 이내 회복 확인
@@ -2037,7 +2074,7 @@ class JdStockDataManager:
             bullish_candle_cnt, bearish_candle_cnt = self.check_bullish_bearish_candle_count_in_n_days(stockData) # good vs bad
             more_bullish_candle = 1 if bullish_candle_cnt > bearish_candle_cnt else -1
 
-            ma20_disparity_more_than_20ptg = self.check_20ma_gap_more_than_20ptg_cnt(stockData) * -1 # bad
+            ma20_disparity_more_than_20ptg = self.check_20ma_dist_more_than_20ptg_cnt(stockData) * -1 # bad
 
             close_equal_high, close_equal_low = self.check_close_equal_high_or_low_cnt(stockData) # bad, good
             close_equal_low *= -1
@@ -2157,3 +2194,11 @@ class JdStockDataManager:
         elapsedTime = cook_end_time - cook_start_time
         print('cook elapsed time: ', elapsedTime)
 
+    
+    def date_to_index(self, df : pd.DataFrame, date_str):
+        """
+        - return index from end. (-N)
+        """
+        index_position = df.index.get_loc(pd.to_datetime(date_str))
+        n_day_before_index = len(df) - index_position
+        return -n_day_before_index

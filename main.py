@@ -256,7 +256,7 @@ elif index == 12:
     print(s)
 
 elif index == 13:
-    sf.get_power_gap_stocks_in_range(40)
+    sf.cook_power_gap_profiles(240, 20, 20, 20)
     
 # --------------------------------------------------------------------
 
