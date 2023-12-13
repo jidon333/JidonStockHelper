@@ -341,7 +341,7 @@ class JdStockFilteringManager:
 
     def filter_stock_power_gap(self, stock_datas_dic : dict, n_day_before = -1):
         """
-        - ADR 2이상
+        - 갭 이전 ADR 2이상 종목
         - 갭으로 주가 상승
         - 최소 10% 이상 주가 상승
             - 2 ADR(%) 이상 상승 
@@ -353,7 +353,7 @@ class JdStockFilteringManager:
             - ADR과 마찬가지로 갭상 전날 거래량이 기준에 만족하지 못하는 것은 제외한다.
         - 헬스케어 섹터 제외(바이오 무빙 혼란하다.)
 
-        -- 이후 데이터 재가공 과정에서 갭 이후 ADR 1% 미만 주식은 제외(아마도 인수합병)
+        -- 이후 데이터 재가공 과정에서 갭 이후 ADR 1% 미만 주식은 제외(대부분 인수합병)
 
         """
         filtered_tickers = []
@@ -438,7 +438,7 @@ class JdStockFilteringManager:
         stock_list = self.sd.getStockListFromLocalCsv()
         out_tickers = []
         out_stock_datas_dic = {}
-        self.sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, True)
+        self.sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, False)
         # To get trade day easily.
         appleData = out_stock_datas_dic['AAPL']
 
@@ -461,16 +461,17 @@ class JdStockFilteringManager:
 
         return date_tickers_dic
     
-    def cook_power_gap_profiles(self, range_from : int , range_to : int , performance_period : int, profile_period : int):
+    def cook_power_gap_profiles(self, range_from : int , range_to : int, profile_period : int):
         """
         - range_from :          Screening will be started from this 'param trading day ago' ex) 40 mean that searching process start from 40 trading day ago.
         - range_to :            Screening will be ended at this 'param trading day ago' ex) 10 mean that searching process will be ended at the 10 trading day ago.
-        - performance_period:   Measures the return of the stock from the gap day to the {performance_period} trading day.
         - profile_period        profile check period for C/V check, ma touch, highest price etc ... 
 
         range_from must be bigger than range_to
 
         """
+
+        print("cook_power_gap_profiles!!")
 
         sd = self.sd
 
@@ -482,7 +483,7 @@ class JdStockFilteringManager:
                 with open('cache_gap_date_tickers_dic', "rb") as f:
                     gap_date_tickers_dic = pickle.load(f)
             except Exception as e:
-                print('no cache_gap_date_tickers_dic in local')
+                print('[Cache] no cache_gap_date_tickers_dic in local')
 
         if not gap_date_tickers_dic:
             gap_date_tickers_dic = self.get_power_gap_stocks_in_range(range_from, range_to)
@@ -504,14 +505,39 @@ class JdStockFilteringManager:
                 stockData : pd.DataFrame = all_stock_datas_dic[ticker]
                 d0_index = sd.date_to_index(stockData, gap_date)
 
-                performance_measure_day : int = d0_index + performance_period -1
-                profile_end_day : int = d0_index + profile_period -1
+                ticker_date = str(ticker) + "_" + str(gap_date)
 
-                if performance_measure_day >= 0:
-                    print("Error: performance_period is longer than last data.")
+
+
+                # d5, d10, d20, d30, d40, d50 퍼포먼스 추가하자.
+                d5_index : int = d0_index + 5 - 1
+                d5_index = d5_index if d5_index < 0 else 0
+                
+                d10_index : int = d0_index + 10 - 1
+                d10_index = d10_index if d10_index < 0 else 0
+
+                d20_index : int = d0_index + 20 - 1
+                d20_index = d20_index if d20_index < 0 else 0
+
+                d30_index : int = d0_index + 30 - 1
+                d30_index = d30_index if d30_index < 0 else 0
+
+                d40_index : int = d0_index + 40 - 1
+                d40_index = d40_index if d40_index < 0 else 0
+
+                d50_index : int = d0_index + 50 - 1
+                d50_index = d50_index if d50_index < 0 else 0
+
+                if d20_index == 0:
+                    print("Error!. To profile power gap, stock need time at least 20 days. Ticker_Date: ", ticker_date)
                     continue
 
+                day_n_indices = [d5_index, d10_index, d20_index, d30_index, d40_index, d50_index]
+                day_n_performances = []
+
                 
+                profile_end_day : int = d0_index + profile_period -1
+            
                 d0_open = stockData['Open'].iloc[d0_index]
                 d0_close = stockData['Close'].iloc[d0_index]
                 d0_low = stockData['Low'].iloc[d0_index]
@@ -522,8 +548,6 @@ class JdStockFilteringManager:
                 volume_ma50_1d_ago = stockData['Volume'].rolling(window=50).mean().iloc[d0_index-1]
                 d0_volume = stockData['Volume'].iloc[d0_index]
 
-                n_day_later_close = stockData['Close'].iloc[performance_measure_day]
-
                 # 입수합병 필터링
                 # 갭당일부터 성과측정일까지 ADR이 1% 미만으로 줄어들면 인수합병으로 본다.
                 # 애초에 ADR 2 이상의 주식이 Power gap 이후 ADR이 1로 줄어들었다면 뭔가 잘못된 것이다. 굼뱅이 주식은 필요 없다!
@@ -531,20 +555,26 @@ class JdStockFilteringManager:
                 # DR% (Daily Range)
                 daily_range_percentages = stockData['High'] / stockData['Low']
 
-                # ADR(%) since gap day close
-                n = performance_period
+                # ADR(%) 20 day later since gap
+                n = 20
                 ADRs_since_gap = daily_range_percentages.rolling(n).mean()
                 ADRs_since_gap = 100 * (ADRs_since_gap - 1)
-                adr_since_gap = ADRs_since_gap.iloc[performance_measure_day]
+                adr_since_gap = ADRs_since_gap.iloc[d20_index]
                 if adr_since_gap < 1:
-                    print("It's probabily M&A. reject this ticker from the profiles, ticker: ",  ticker)
+                    print("It's probabily M&A. reject this ticker from the profiles, ticker: ",  ticker_date)
                     continue
 
                 # [gap_date]
                 gap_date = gap_date
 
-                # [performance] N day 이후 성과
-                performance = sd.get_percentage_AtoB(d0_close, n_day_later_close)
+                # [day_n_performances] N day 이후 성과[
+                for day_n_index in day_n_indices:
+                    if day_n_index != 0:
+                        day_n_close = stockData['Close'].iloc[day_n_index]
+                        day_n_performance = sd.get_percentage_AtoB(d0_close, day_n_close)
+                        day_n_performances.append(day_n_performance)
+                    else:
+                        day_n_performances.append(0)
 
                 # [d0_close] 갭 종가($)
                 d0_close = d0_close
@@ -558,8 +588,8 @@ class JdStockFilteringManager:
                 # [d0_daily_range] Daily Range(%)
                 d0_daily_range = sd.get_percentage_AtoB(d0_low, d0_high)
 
-                # [d0_adr_multiple] (nADR%)
-                d0_adr_multiple = d0_close_change / ADR_1d_ago
+                # [d0_performance_vs_ADR] (nADR%)
+                d0_performance_vs_ADR = d0_close_change / ADR_1d_ago
 
                 
                 # [DCR](%)
@@ -661,22 +691,25 @@ class JdStockFilteringManager:
                         HVC_recovery_day_from_alpha_window_lowest = cnt_from_lowest_day
                         break
 
-                
-                gap_profile_dic[ticker] = [gap_date, performance_period, performance, d0_close, d0_open_change, d0_close_change,
-                                            d0_daily_range, d0_adr_multiple, DCR, d0_volume, d0_volume_vs_50Avg, bOEL,
+                gap_profile_dic[ticker_date] = [ticker ,
+                                           # d5, d10, d20, d30, d40, d50 퍼포먼스
+                                           gap_date, day_n_performances[0], day_n_performances[1], day_n_performances[2], day_n_performances[3], day_n_performances[4], day_n_performances[5],
+                                            d0_close, d0_open_change, d0_close_change,
+                                            d0_daily_range, d0_performance_vs_ADR, DCR, d0_volume, d0_volume_vs_50Avg, bOEL,
                                             first_ma_touch_day, d0_open_violation_day, d0_low_violation_day, HVC_violation_first_day, HVC_violation_last_day, HVC_violation_cnt,
                                             alpha_window_lowest_day, alpha_window_lowest_pct_from_HVC, alpha_window_highest_day, alpha_window_highest_pct_from_HVC,
                                               HVC_recovery_day_from_alpha_window_lowest]
 
 
         df = pd.DataFrame.from_dict(gap_profile_dic).transpose()
-        columns = ['gap_date', 'performance_period', 'performance', 'd0_close', 'd0_open_change', 'd0_close_change',
-                                            'd0_daily_range', 'd0_adr_multiple', 'DCR', 'd0_volume', 'd0_volume_vs_50Avg', 'bOEL',
-                                            'first_ma_touch_day', 'd0_open_violation_day', 'd0_low_violation_day', 'HVC_violation_first_day', 'HVC_violation_last_day', 'HVC_violation_cnt',
-                                            'alpha_window_lowest_day', 'alpha_window_lowest_pct_from_HVC', 'alpha_window_highest_day', 'alpha_window_highest_pct_from_HVC',
-                                              'HVC_recovery_day_from_alpha_window_lowest']
+        columns = ['Symbol', 'gap_date', 'd5_performance', 'd10_performance', 'd20_performance', 'd30_performance', 'd40_performance', 'd50_performance',
+                    'd0_close', 'd0_open_change', 'd0_close_change',
+                    'd0_daily_range', 'd0_performance_vs_ADR', 'DCR', 'd0_volume', 'd0_volume_vs_50Avg', 'bOEL',
+                    'first_ma_touch_day', 'd0_open_violation_day', 'd0_low_violation_day', 'HVC_violation_first_day', 'HVC_violation_last_day', 'HVC_violation_cnt',
+                    'alpha_window_lowest_day', 'alpha_window_lowest_pct_from_HVC', 'alpha_window_highest_day', 'alpha_window_highest_pct_from_HVC',
+                        'HVC_recovery_day_from_alpha_window_lowest']
         df.columns = columns
-        df.index.name = 'Symbol'
+        df.index.name = 'Symbol_Date'
 
         # fix object types to numeric.
         # 자료형이 통합되지 않은 리스트를 value로 갖는 딕셔너리를 DataFrame으로 변환하는 과정에서 모든 column이 object로 변환되는 문제가 있음.
@@ -687,8 +720,8 @@ class JdStockFilteringManager:
         try:
             #save_path = os.path.join(profiles_folder, f'power_gap.csv')
             #df.to_csv(save_path, encoding='utf-8-sig')
-            save_path = os.path.join(profiles_folder, f'power_gap_{range_from}_{range_to}_{performance_period}_{profile_period}.xlsx')
-            df.to_excel(save_path, index_label='Symbol')
+            save_path = os.path.join(profiles_folder, f'power_gap_{range_from}_{range_to}_{profile_period}.xlsx')
+            df.to_excel(save_path, index_label='Symbol_Date')
 
             print(f"{save_path}", "is saved!")
         except Exception as e:

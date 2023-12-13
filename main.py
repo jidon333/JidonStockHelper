@@ -156,10 +156,10 @@ index = int(input())
 
 if index == 1:
     sf.MTT_ADR_minimum = 3
-    screen_stocks_and_show_chart(sf.filter_stocks_MTT, True, True)
+    #screen_stocks_and_show_chart(sf.filter_stocks_MTT, True, True)
     sf.MTT_ADR_minimum = 1
     #screen_stocks_and_show_chart(filter_stock_hope_from_bottom, True, True)
-    #screen_stocks_and_show_chart(sf.filter_stock_ALL, True, False)
+    screen_stocks_and_show_chart(sf.filter_stock_ALL, True, False)
     #screen_stocks_and_show_chart(filter_stock_Good_RS, True, True)
     #screen_stocks_and_show_chart(filter_stocks_high_ADR_swing, True, True)
     #screen_stocks_and_show_chart(filter_stock_power_gap, True, True)
@@ -256,7 +256,7 @@ elif index == 12:
     print(s)
 
 elif index == 13:
-    sf.cook_power_gap_profiles(240, 20, 20, 20)
+    sf.cook_power_gap_profiles(20*12*5, 20, 20)
     
 # --------------------------------------------------------------------
 
