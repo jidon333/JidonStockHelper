@@ -538,7 +538,7 @@ class JdStockFilteringManager:
                 #print(s)
                 power_gap_screen_list.append(s)
 
-            print(f"{filter_stock_gap_func.__name__} process {i-range_to/stockNums*100:.2f}% Done")
+            print(f"{filter_stock_gap_func.__name__} process {(i-range_to)/stockNums*100:.2f}% Done")
 
         print(f"Done. print {str(filter_stock_gap_func.__name__)} screen list")
         for s in power_gap_screen_list:
