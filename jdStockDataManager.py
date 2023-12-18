@@ -199,6 +199,18 @@ class JdStockDataManager:
             atc = tc.rolling(n).mean()
             new_data['ATC'] = atc
 
+            # True Range의 합계, 최대 고가, 최소 저가 계산
+            TrueRangeSum = tr.rolling(window=n).sum()
+            TrueHighMax = new_data['High'].rolling(window=n).max()
+            TrueLowMin = new_data['Low'].rolling(window=n).min()
+
+            # Choppiness와 표준편차는 눈으로 보는게 낫다. 갭 상승, 돌파 같은 주요 모멘텀을 고려하지 않기 때문.
+            # # Choppiness Index 계산
+            # new_data['ChoppinessIndex'] = 100 * np.log10(TrueRangeSum / (TrueHighMax - TrueLowMin)) / np.log10(n)
+
+            # # 표준편차
+            # new_data['STD'] = new_data['Close'].rolling(window=14).std()
+
             new_index_data = self._CookIndexData(self.index_data, 14)
         
             # TRS(True Relative Strength)

@@ -61,9 +61,9 @@ class JdStockFilteringManager:
         
         search_end_time = time.time()
         execution_time = search_end_time - search_start_time
-        print(f"Search time elapsed: {execution_time}sec")
-        print('filtered by quant data: \n', selected_tickers)
-        print('selected tickers num: ', len(selected_tickers))
+        #print(f"Search time elapsed: {execution_time}sec")
+        #print('filtered by quant data: \n', selected_tickers)
+        #print('selected tickers num: ', len(selected_tickers))
 
         return out_stock_datas_dic, selected_tickers
 
@@ -383,7 +383,8 @@ class JdStockFilteringManager:
                     continue 
 
 
-                # change(%) check
+                # [Close > 10%]
+                # change(%) check 
                 close_1d_ago = stockData['Close'].iloc[n_day_before -1]
                 close = stockData['Close'].iloc[n_day_before]
                 change = self.sd.get_percentage_AtoB(close_1d_ago, close)
@@ -415,10 +416,83 @@ class JdStockFilteringManager:
                 continue
         
         return filtered_tickers
+    
+    
+    def filter_stock_open_gap(self, stock_datas_dic : dict, n_day_before = -1):
+        """
+        - 갭 이전 ADR 2이상 종목
+        - 갭으로 주가 상승 (3% 이상)
+        - 주가는 200MA 위에 있어야 한다.
+        - 50일 평균 거래량의 200% 이상의 거래량 증가
+            - 거래량 50일 평균 20만이상 + 5불이상 or 평균거래대금 500만불 이상
+            - (원래는 10불이상, 거래대금 1000만불 이상을 거래 기준으로 넣지만 파워 갭은 주식의 성격을 변화시키므로 조건을 완화한다.)
+            - ADR과 마찬가지로 갭상 전날 거래량이 기준에 만족하지 못하는 것은 제외한다.
+        - 헬스케어 섹터 제외(바이오 무빙 혼란하다.)
+
+        -- 이후 데이터 재가공 과정에서 갭 이후 ADR 1% 미만 주식은 제외(대부분 인수합병)
+
+        """
+        filtered_tickers = []
+        all_tickers = self.filter_stock_ALL(stock_datas_dic)
+        gisc_df = self.sd.get_GICS_df()
+        bIsNotHealthCare = False
+        bIsVolumeEnough = False
+        for ticker in all_tickers:
+            stockData = stock_datas_dic[ticker]
+            try:
+                # [Optimize] Early rejection        
+
+                # sector check
+                sector = gisc_df.loc[ticker]['sector']
+                if sector == 'Healthcare':
+                    continue
+
+                # ADR check
+                ADR_1d_ago = stockData['ADR'].iloc[n_day_before-1]
+                if ADR_1d_ago < 2:
+                    continue
+
+                # gap check
+                open = stockData['Open'].iloc[n_day_before]
+                high_1d_ago = stockData['High'].iloc[n_day_before - 1]
+                if open <= high_1d_ago:
+                    continue 
+
+                # [TEST] 승자 편향 데이터 검사를 위해 그냥 거래량 증가하면서 3% 이상 상승한거 다뽑아보자.
+                # [Open >= 3% ]
+                close_1d_ago = stockData['Close'].iloc[n_day_before -1]
+                close = stockData['Close'].iloc[n_day_before]
+                open_change = self.sd.get_percentage_AtoB(close_1d_ago, open)
+                if open_change < 3:
+                    continue
+
+                # above ma200 check
+                ma200 = stockData['200MA'].iloc[n_day_before]
+                if close < ma200:
+                    continue 
+
+                volume_ma50_1d_ago = stockData['Volume'].rolling(window=50).mean().iloc[n_day_before-1]
+                volume = stockData['Volume'].iloc[n_day_before]
+
+                high = stockData['High'].iloc[n_day_before]
+                low = stockData['Low'].iloc[n_day_before]
+
+                bIsVolumeEnough = (volume_ma50_1d_ago >= 200000 and close >= 5 ) or volume_ma50_1d_ago*close > 5000000
+
+                # 순서대로
+                # ADR > 2, Gap Open, 10% 이상 상승, 
+                #if ADR > 2 and open > high_1d_ago and change > 10 and change > ADR*2 and close > ma200 and volume > volume_ma50*2 and bIsVolumeEnough and DCR >= 0.5:
+                if  volume > volume_ma50_1d_ago*2 and bIsVolumeEnough:
+                    filtered_tickers.append(ticker)
+
+            except Exception as e:
+                continue
+        
+        return filtered_tickers
 
     
 
-    def get_power_gap_stocks_in_range(self, range_from : int , range_to : int):
+    def get_filter_gap_stocks_in_range(self, range_from : int , range_to : int, filter_stock_gap_func):
         """
         return date-tickers dictionary
         range_from :  Screening will be started from this 'param trading day ago' ex) 40 mean that searching process start from 40 trading day ago.
@@ -439,65 +513,45 @@ class JdStockFilteringManager:
         out_tickers = []
         out_stock_datas_dic = {}
         self.sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, False)
-        # To get trade day easily.
-        appleData = out_stock_datas_dic['AAPL']
 
-        print("start power gap screening!")
+        print(f"start {str(filter_stock_gap_func.__name__)} screening!")
 
         date_tickers_dic = {}
 
         power_gap_screen_list = []
+        stockNums = range_from - range_to + 1
         for i in range(range_to, range_from):
-            stock_data_dic, tickers = self.screening_stocks_by_func(self.filter_stock_power_gap, True, True, -i)
-            tradeDay = str(appleData.index[-i].date())
-            s = str.format(f"[{tradeDay}] power gap tickers: ") + str(tickers)
-            print(s)
-            power_gap_screen_list.append(s)
-            date_tickers_dic[appleData.index[-i].date()] = tickers
+            stock_data_dic, tickers = self.screening_stocks_by_func(filter_stock_gap_func, True, False, -i)
 
-        print("Done. print power gap screen list")
+            for ticker in tickers:
+                # tradeday can be difference for each stocks. (Trading halt maybe??)
+                tradeday = stock_data_dic[ticker].index[-i].date()
+
+                # add ticker to the [tradeday-ticker] dictionary.
+                if tradeday in date_tickers_dic:
+                    date_tickers_dic[tradeday].append(ticker)
+                else:
+                    date_tickers_dic[tradeday] = []
+                    date_tickers_dic[tradeday].append(ticker)
+
+                s = str.format(f"[{tradeday}] {str(filter_stock_gap_func.__name__)} ticker: ") + str(ticker)
+                #print(s)
+                power_gap_screen_list.append(s)
+
+            print(f"{filter_stock_gap_func.__name__} process {i-range_to/stockNums*100:.2f}% Done")
+
+        print(f"Done. print {str(filter_stock_gap_func.__name__)} screen list")
         for s in power_gap_screen_list:
             print(s)
 
         return date_tickers_dic
     
-    def cook_power_gap_profiles(self, range_from : int , range_to : int, profile_period : int):
+
+    def cook_gap_profiles(self, range_from : int , range_to : int, profile_period : int, all_stock_datas_dic : dict, gap_date_tickers_dic : dict):
         """
-        - range_from :          Screening will be started from this 'param trading day ago' ex) 40 mean that searching process start from 40 trading day ago.
-        - range_to :            Screening will be ended at this 'param trading day ago' ex) 10 mean that searching process will be ended at the 10 trading day ago.
-        - profile_period        profile check period for C/V check, ma touch, highest price etc ... 
-
-        range_from must be bigger than range_to
-
+        cook and return dataframe
         """
-
-        print("cook_power_gap_profiles!!")
-
         sd = self.sd
-
-        gap_date_tickers_dic = {}
-
-        bUseGapDataCache = True
-        if bUseGapDataCache:
-            try: 
-                with open('cache_gap_date_tickers_dic', "rb") as f:
-                    gap_date_tickers_dic = pickle.load(f)
-            except Exception as e:
-                print('[Cache] no cache_gap_date_tickers_dic in local')
-
-        if not gap_date_tickers_dic:
-            gap_date_tickers_dic = self.get_power_gap_stocks_in_range(range_from, range_to)
-            try:
-                with open('cache_gap_date_tickers_dic', "wb") as f:
-                    pickle.dump(gap_date_tickers_dic, f)
-            except Exception as e:
-                print(e)
-    
-        all_tickers = []
-        all_stock_datas_dic = {}
-        sd.getStockDatasFromCsv(sd.getStockListFromLocalCsv(), all_tickers, all_stock_datas_dic, 365, True)
-        gisc_df = sd.get_GICS_df()
-
         gap_profile_dic = {}
 
         for gap_date, gap_tickers in gap_date_tickers_dic.items():
@@ -585,6 +639,12 @@ class JdStockFilteringManager:
                 # [d0_close_change] 종가 상승폭 (%)
                 d0_close_change = sd.get_percentage_AtoB(close_1d_ago, d0_close)
 
+                # [d0_low_change_from_open] 시가로부터 저가까지 하락폭(%)
+                d0_low_change_from_open = sd.get_percentage_AtoB(d0_open, d0_low)
+
+                # [d0_close_change_from_open] 시가로부터 종가까지 (%)
+                d0_close_change_from_open = sd.get_percentage_AtoB(d0_open, d0_close)
+
                 # [d0_daily_range] Daily Range(%)
                 d0_daily_range = sd.get_percentage_AtoB(d0_low, d0_high)
 
@@ -603,6 +663,8 @@ class JdStockFilteringManager:
 
                 # [d0_volume_vs_50Avg] 거래량(50일 평균 대비)
                 d0_volume_vs_50Avg = d0_volume / volume_ma50_1d_ago
+
+                d0_dollar_volume = d0_volume * d0_close
 
                 # [bOEL]
                 bOEL = d0_open == d0_low
@@ -694,8 +756,8 @@ class JdStockFilteringManager:
                 gap_profile_dic[ticker_date] = [ticker ,
                                            # d5, d10, d20, d30, d40, d50 퍼포먼스
                                            gap_date, day_n_performances[0], day_n_performances[1], day_n_performances[2], day_n_performances[3], day_n_performances[4], day_n_performances[5],
-                                            d0_close, d0_open_change, d0_close_change,
-                                            d0_daily_range, d0_performance_vs_ADR, DCR, d0_volume, d0_volume_vs_50Avg, bOEL,
+                                            d0_close, d0_open_change, d0_close_change, d0_low_change_from_open, d0_close_change_from_open,
+                                            d0_daily_range, d0_performance_vs_ADR, DCR, d0_volume, d0_volume_vs_50Avg, d0_dollar_volume, bOEL,
                                             first_ma_touch_day, d0_open_violation_day, d0_low_violation_day, HVC_violation_first_day, HVC_violation_last_day, HVC_violation_cnt,
                                             alpha_window_lowest_day, alpha_window_lowest_pct_from_HVC, alpha_window_highest_day, alpha_window_highest_pct_from_HVC,
                                               HVC_recovery_day_from_alpha_window_lowest]
@@ -703,8 +765,8 @@ class JdStockFilteringManager:
 
         df = pd.DataFrame.from_dict(gap_profile_dic).transpose()
         columns = ['Symbol', 'gap_date', 'd5_performance', 'd10_performance', 'd20_performance', 'd30_performance', 'd40_performance', 'd50_performance',
-                    'd0_close', 'd0_open_change', 'd0_close_change',
-                    'd0_daily_range', 'd0_performance_vs_ADR', 'DCR', 'd0_volume', 'd0_volume_vs_50Avg', 'bOEL',
+                    'd0_close', 'd0_open_change', 'd0_close_change', 'd0_low_change_from_open', 'd0_close_change_from_open',
+                    'd0_daily_range', 'd0_performance_vs_ADR', 'DCR', 'd0_volume', 'd0_volume_vs_50Avg', 'd0_dollar_volume', 'bOEL',
                     'first_ma_touch_day', 'd0_open_violation_day', 'd0_low_violation_day', 'HVC_violation_first_day', 'HVC_violation_last_day', 'HVC_violation_cnt',
                     'alpha_window_lowest_day', 'alpha_window_lowest_pct_from_HVC', 'alpha_window_highest_day', 'alpha_window_highest_pct_from_HVC',
                         'HVC_recovery_day_from_alpha_window_lowest']
@@ -717,6 +779,50 @@ class JdStockFilteringManager:
             df[col] = pd.to_numeric(df[col], errors='ignore')
         df = df.round(2)
 
+        return df
+
+    
+    def cook_power_gap_profiles(self, range_from : int , range_to : int, profile_period : int):
+        """
+        - range_from :          Screening will be started from this 'param trading day ago' ex) 40 mean that searching process start from 40 trading day ago.
+        - range_to :            Screening will be ended at this 'param trading day ago' ex) 10 mean that searching process will be ended at the 10 trading day ago.
+        - profile_period        profile check period for C/V check, ma touch, highest price etc ... 
+
+        range_from must be bigger than range_to
+
+        """
+
+        print("cook_power_gap_profiles!!")
+
+        sd = self.sd
+
+        gap_date_tickers_dic = {}
+
+        bUseGapDataCache = True
+        if bUseGapDataCache:
+            try: 
+                with open('cache_power_gap_date_tickers_dic', "rb") as f:
+                    gap_date_tickers_dic = pickle.load(f)
+            except Exception as e:
+                print('[Cache] no cache_gap_date_tickers_dic in local')
+
+        if not gap_date_tickers_dic:
+            gap_date_tickers_dic = self.get_filter_gap_stocks_in_range(range_from, range_to, self.filter_stock_power_gap)
+            try:
+                with open('cache_power_gap_date_tickers_dic', "wb") as f:
+                    pickle.dump(gap_date_tickers_dic, f)
+            except Exception as e:
+                print(e)
+    
+        all_tickers = []
+        all_stock_datas_dic = {}
+        years = float(range_from) / 240.0
+        daysNum = int(365) + int(years * 365.0)
+        # use cache made by upper scan code
+        sd.getStockDatasFromCsv(sd.getStockListFromLocalCsv(), all_tickers, all_stock_datas_dic, daysNum, True)
+
+        df = self.cook_gap_profiles(range_from, range_to, profile_period, all_stock_datas_dic, gap_date_tickers_dic)
+
         try:
             #save_path = os.path.join(profiles_folder, f'power_gap.csv')
             #df.to_csv(save_path, encoding='utf-8-sig')
@@ -728,3 +834,51 @@ class JdStockFilteringManager:
             print(f"An error occurred: {e}")
 
     
+    def cook_open_gap_profiles(self, range_from : int , range_to : int, profile_period : int):
+        """
+        - range_from :          Screening will be started from this 'param trading day ago' ex) 40 mean that searching process start from 40 trading day ago.
+        - range_to :            Screening will be ended at this 'param trading day ago' ex) 10 mean that searching process will be ended at the 10 trading day ago.
+        - profile_period        profile check period for C/V check, ma touch, highest price etc ... 
+
+        range_from must be bigger than range_to
+
+        """
+
+        print("cook_open_gap_profiles!!")
+
+        sd = self.sd
+
+        gap_date_tickers_dic = {}
+
+        bUseGapDataCache = True
+        if bUseGapDataCache:
+            try: 
+                with open('cache_open_gap_date_tickers_dic', "rb") as f:
+                    gap_date_tickers_dic = pickle.load(f)
+            except Exception as e:
+                print('[Cache] no cache_open_gap_date_tickers_dic in local')
+
+        if not gap_date_tickers_dic:
+            gap_date_tickers_dic = self.get_filter_gap_stocks_in_range(range_from, range_to, self.filter_stock_open_gap)
+            try:
+                with open('cache_open_gap_date_tickers_dic', "wb") as f:
+                    pickle.dump(gap_date_tickers_dic, f)
+            except Exception as e:
+                print(e)
+    
+        all_tickers = []
+        all_stock_datas_dic = {}
+        years = float(range_from) / 240.0
+        daysNum = int(365) + int(years * 365.0)
+        # use cache made by upper scan code
+        sd.getStockDatasFromCsv(sd.getStockListFromLocalCsv(), all_tickers, all_stock_datas_dic, daysNum, True)
+
+        df = self.cook_gap_profiles(range_from, range_to, profile_period, all_stock_datas_dic, gap_date_tickers_dic)
+
+        try:
+            save_path = os.path.join(profiles_folder, f'open_gap_{range_from}_{range_to}_{profile_period}.xlsx')
+            df.to_excel(save_path, index_label='Symbol_Date')
+
+            print(f"{save_path}", "is saved!")
+        except Exception as e:
+            print(f"An error occurred: {e}")

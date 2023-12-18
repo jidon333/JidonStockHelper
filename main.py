@@ -256,8 +256,13 @@ elif index == 12:
     print(s)
 
 elif index == 13:
-    sf.cook_power_gap_profiles(20*12*5, 20, 20)
+
+    sf.cook_power_gap_profiles(20*12*1, 20, 20)
+    sf.cook_open_gap_profiles(20*12*1, 20, 20)
+
+
     
 # --------------------------------------------------------------------
+
 
 
