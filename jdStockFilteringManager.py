@@ -19,6 +19,7 @@ class JdStockFilteringManager:
         print("Hello JdScreenStockManager!")
         self.sd = inStockDataManager
         self.MTT_ADR_minimum = 1
+        self.LastDayMinimumVolume = 0
 
 
     
@@ -96,13 +97,15 @@ class JdStockFilteringManager:
                 ma50 = inStockData['50MA'].iloc[n_day_before]
                 volume_ma50 = inStockData['Volume'].rolling(window=50).mean().iloc[n_day_before]
                 ADR = inStockData['ADR'].iloc[n_day_before]
+                last_volume = inStockData['Volume'].iloc[n_day_before]
             except Exception as e:
                 continue
 
             # (거래량 50일 평균 20만이상 + 10불이상 or 평균거래대금 1000만불 이상)
             bIsVolumeEnough = (volume_ma50 >= 200000 and close >= 10 ) or volume_ma50*close > 10000000
-            # 마지막날 거래량 100,000주 이상
-            #bIsVolumeEnough = bIsVolumeEnough and last_volume >= 100000
+            # 마지막날 거래량 필터
+            if self.LastDayMinimumVolume > 0:
+                bIsVolumeEnough = bIsVolumeEnough and last_volume >= self.LastDayMinimumVolume
             bIsUpperMA = close > bIsUpperMA_150_200 and close > ma50
             b_150ma_upper_than_200ma = ma150 > ma200
             bMA_Slope_Plus = ma150_slope > 0 and ma200_slope > 0
@@ -136,6 +139,7 @@ class JdStockFilteringManager:
             if filterMatchNum >= 5 and bIsVolumeEnough:
                 filtered_tickers.append(ticker)
                 
+        
         return filtered_tickers
 
     def filter_stocks_high_ADR_swing(self, stock_datas_dic : dict, n_day_before = -1):
@@ -148,6 +152,8 @@ class JdStockFilteringManager:
             close = inStockData['Close'].iloc[n_day_before]
             ma150 = inStockData['150MA'].iloc[n_day_before]
             ma200 = inStockData['200MA'].iloc[n_day_before]
+            volume = inStockData['Volume'].iloc[n_day_before]
+
             bIsUpperMA_150_200 = close > ma150 and close > ma200
 
             # early rejection for optimization
@@ -167,8 +173,10 @@ class JdStockFilteringManager:
             # 5. 가격 > 50SMA
             # 6. 가격 > 200SMA
             # 7. 섹터 제외 : Health Technology
-
+            
             bIsVolumeEnough = (volume_ma50 >= 1000000 and close >= 5 )
+            if self.LastDayMinimumVolume > 0:
+                bIsVolumeEnough = bIsVolumeEnough and (volume > self.LastDayMinimumVolume)
             bADRMoreThan4 = ADR >=4.0
             bIsUpperMA
             bIsNotHealthCare = False
@@ -183,6 +191,125 @@ class JdStockFilteringManager:
 
         return filtered_tickers
 
+    def filter_stocks_Bull_Snort(self, stock_datas_dic : dict, n_day_before = -1):
+        filtered_tickers = []
+        atrs_ranking_df = self.sd.get_ATRS_Ranking_df()
+        gisc_df = self.sd.get_GICS_df()
+
+        for ticker, inStockData in stock_datas_dic.items():
+
+            close = inStockData['Close'].iloc[n_day_before]
+            volume = inStockData['Volume'].iloc[n_day_before]
+
+
+            # -Bull snort
+            # 1. 8불 이상
+            # 2. DCR 50% 이상에서 마감
+            # 3. 20일 평균 거래량대비 3배 이상의 거래량
+            # 4. 전일대비 3% 이상 상승
+            # 5. 20일 ADR(%) > 2.0
+            # 6. 50일 거래량 평균 500K 이상 (5,000,000)
+
+
+            try:
+                if close < 8:
+                    continue
+
+                DCR = self.sd.get_DCR_normalized(inStockData)
+                if DCR < 0.5:
+                    continue
+
+                
+                volume_ma20 = inStockData['Volume'].rolling(window=20).mean().iloc[n_day_before]
+                if not (volume > volume_ma20 * 3.0):
+                    continue
+
+                d1_ago_close = inStockData['Close'].iloc[n_day_before -1]
+                change_pcg = self.sd.get_percentage_AtoB(d1_ago_close, close) 
+                if change_pcg < 3:
+                    continue
+
+                
+                ADR = inStockData['ADR'].iloc[n_day_before]
+                if ADR < 2.0:
+                    continue
+            
+                
+                volume_ma50 = inStockData['Volume'].rolling(window=50).mean().iloc[n_day_before]
+                bIsVolumeEnough = (volume_ma50 >= 5000000 )
+                if not bIsVolumeEnough:
+                    continue
+            except Exception as e:
+                print(e)
+           
+            filtered_tickers.append(ticker)
+
+        return filtered_tickers
+
+    # 10일중 RS가 높은 날이 8일 이상
+    def filter_stocks_rs_8_10(self, stock_datas_dic : dict, n_day_before = -1):
+        filtered_tickers = []
+
+        for ticker, inStockData in stock_datas_dic.items():
+
+            close = inStockData['Close'].iloc[n_day_before]
+            ma200 = inStockData['200MA'].iloc[n_day_before]
+            volume = inStockData['Volume'].iloc[n_day_before]
+            TRS = inStockData['TRS']
+
+
+            # - 8/10
+            # 1. 8불 이상
+            # 2. 50일 평균 거래량 300k 이상
+            # 3. ADR(%) > 2.5%
+            # 4. close > 200sma
+            # 5. Relative Strength Days count is more than 8 days in 10 days.
+
+
+            try:
+                if close < 8:
+                    continue
+
+                volume_ma50 = inStockData['Volume'].rolling(window=50).mean().iloc[n_day_before]
+                bIsVolumeEnough = (volume_ma50 >= 3000000 )
+                if not bIsVolumeEnough:
+                    continue        
+
+                ADR = inStockData['ADR'].iloc[n_day_before]
+                if ADR < 2.5:
+                    continue
+
+                if close < ma200:
+                    continue
+
+
+                rs_strong_cnt = 0
+ 
+                index_data = self.sd.index_data
+                changes_index = (index_data['Close'] - index_data['Close'].shift(1)) / index_data['Close'].shift(1)
+                changes_ticker = (inStockData['Close'] - inStockData['Close'].shift(1)) / inStockData['Close'].shift(1)
+                for i in range(0, 10):
+                    index = n_day_before - i
+
+                    # original RS comparison (just compare the day change percentage)
+                    if changes_ticker.iloc[index] > changes_index.iloc[index]:
+                        rs_strong_cnt = rs_strong_cnt + 1
+
+                    # TRS comparison
+                    #if TRS.iloc[index] > 0:
+                    #    rs_strong_cnt = rs_strong_cnt + 1
+
+                if rs_strong_cnt < 8:
+                    continue      
+               
+            except Exception as e:
+                print(e)
+           
+            filtered_tickers.append(ticker)
+
+        return filtered_tickers
+
+
     # just return all stock's tickers
     def filter_stock_ALL(self, stock_datas_dic : dict):
         filtered_tickers = []
@@ -195,38 +322,29 @@ class JdStockFilteringManager:
     def filter_stock_Custom(self, stock_datas_dic : dict):
         # filter stock good RS 
         filtered_tickers = []
-        Mtt_tickers = self.filter_stocks_MTT(stock_datas_dic)
+        my_tickers = self.filter_stock_ALL(stock_datas_dic)
         atrs_ranking_df = self.sd.get_ATRS_Ranking_df()
         gisc_df = self.sd.get_GICS_df()
         bIsATRS_Ranking_Good = False
         bIsNotHealthCare = False
         bIsVolumeEnough = False
-        for ticker in Mtt_tickers:
-            stockData = stock_datas_dic[ticker]
-            try:
-                ADR = stockData['ADR'].iloc[-1]
-                volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[-1]
-                close = stockData['Close'].iloc[-1]
-                ma150 = stockData['150MA'].iloc[-1]
-                ma200 = stockData['200MA'].iloc[-1]
-                bNear150or200 = False
 
-                if abs(self.sd.get_percentage_AtoB(close, ma150)) < ADR*2 or abs(self.sd.get_percentage_AtoB(close, ma200)) < ADR*2:
-                    bNear150or200 = True
+        # mylist = ['ANF', 'STRL', 'COIN', 'AFRM', 'SNAP', 'DFH', 'LSEA',
+        #            'RKT', 'MARA', 'AAOI', 'S', 'MOD', 'XMTR', 'ASPN', 'CUBI',
+        #              'BLDR', 'GIII', 'ESTC', 'WIX', 'RCKT', 'RBLX',
+        #              'PLAY', 'ELF']
+        
+        mylist = ['MHO','BLDR', 'GFF', 'BVN', 'DRCT', 'ANF', 'STRL', 'TPG',
+                   'PTVE', 'COIN', 'AFRM', 'SNAP', 'DFH', 'LSEA', 'RKT',
+                     'MARA', 'AAOI', 'S', 'GPS', 'MOD', 'XMTR', 'ASPN', 'CUBI',
+                       'GIII', 'PDD', 'STNE', 'CLSK', 'ASTL', 'OSW', 'ESTC', 'WD',
+                         'WIX', 'AMD', 'FROG', 'RCKT', 'GTX', 'PLAY', 'ELF', 'JBI', 'TEAM']
 
-                # atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
-                # bIsATRS_Ranking_Good = atrsRank < 2000
-                sector = gisc_df.loc[ticker]['sector']
-                # bIsNotHealthCare = sector != 'Healthcare'
-                # bIsNotEnergy = sector == 'Energy'
+        
 
-                bIsVolumeEnough = (volume_ma50 >= 1000000 and close >= 5 )
+        filtered_tickers = set(my_tickers) & set(mylist)
 
-                if sector == 'Energy':
-                    filtered_tickers.append(ticker)
 
-            except Exception as e:
-                continue
         
         return filtered_tickers
 
@@ -258,9 +376,11 @@ class JdStockFilteringManager:
     def filter_stock_Good_RS(self, stock_datas_dic : dict):
         """
         - ADR 2이상
-        - RS 랭킹 상위 15%
+        - RS 랭킹 상위 10%
         - 헬스케어, 에너지 섹터 제외
         - Volume 50MA 100만 이상 and 5불 이상 주식
+        - 21ema 위에서 마감
+        - 마지막 거래량 20만 이상
         """
         # filter stock good RS 
         filtered_tickers = []
@@ -275,18 +395,23 @@ class JdStockFilteringManager:
             try:
                 ADR = stockData['ADR'].iloc[-1]
                 volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[-1]
+                last_volume = stockData['Volume'].iloc[-1]
+
                 close = stockData['Close'].iloc[-1]
-                
-                atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
-                bIsATRS_Ranking_Good = atrsRank < 1000
-                sector = gisc_df.loc[ticker]['sector']
-                bIsNotHealthCare = sector != 'Healthcare'
-                bIsNotEnergy = sector != 'Energy'
+                ma200 = stockData['200MA'].iloc[-1]
+                ema21 = stockData['Close'].ewm(span=20, adjust=False).mean().iloc[-1]
 
-                bIsVolumeEnough = (volume_ma50 >= 1000000 and close >= 5 )
+                if close > ma200 and close > ema21:
+                    atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
+                    bIsATRS_Ranking_Good = atrsRank < 1000
+                    sector = gisc_df.loc[ticker]['sector']
+                    bIsNotHealthCare = sector != 'Healthcare'
+                    bIsNotEnergy = sector != 'Energy'
 
-                if ADR > 2 and bIsATRS_Ranking_Good and bIsNotHealthCare and bIsNotEnergy and bIsVolumeEnough:
-                    filtered_tickers.append(ticker)
+                    bIsVolumeEnough = (volume_ma50 >= 1000000 and close >= 5 and last_volume >= self.LastDayMinimumVolume)
+
+                    if ADR > 3 and bIsATRS_Ranking_Good and bIsNotHealthCare and bIsNotEnergy and bIsVolumeEnough:
+                        filtered_tickers.append(ticker)
 
             except Exception as e:
                 continue
@@ -346,7 +471,6 @@ class JdStockFilteringManager:
         - 최소 10% 이상 주가 상승
             - 2 ADR(%) 이상 상승 
             - ADR은 갭상한 날의 거래량이 포함 안되도록 하루 전날을 기준으로 한다.
-        - 주가는 200MA 위에 있어야 한다.
         - 50일 평균 거래량의 200% 이상의 거래량 증가
             - 거래량 50일 평균 20만이상 + 5불이상 or 평균거래대금 500만불 이상
             - (원래는 10불이상, 거래대금 1000만불 이상을 거래 기준으로 넣지만 파워 갭은 주식의 성격을 변화시키므로 조건을 완화한다.)
@@ -392,12 +516,7 @@ class JdStockFilteringManager:
                     continue
                 if change < ADR_1d_ago * 2.0:
                     continue
-
-                # above ma200 check
-                ma200 = stockData['200MA'].iloc[n_day_before]
-                if close < ma200:
-                    continue 
-
+        
                 volume_ma50_1d_ago = stockData['Volume'].rolling(window=50).mean().iloc[n_day_before-1]
                 volume = stockData['Volume'].iloc[n_day_before]
 
@@ -422,8 +541,6 @@ class JdStockFilteringManager:
         """
         - 갭 이전 ADR 2이상 종목
         - 갭으로 주가 상승 (3% 이상)
-        - 주가는 200MA 위에 있어야 한다.
-        - 50일 평균 거래량의 200% 이상의 거래량 증가
             - 거래량 50일 평균 20만이상 + 5불이상 or 평균거래대금 500만불 이상
             - (원래는 10불이상, 거래대금 1000만불 이상을 거래 기준으로 넣지만 파워 갭은 주식의 성격을 변화시키므로 조건을 완화한다.)
             - ADR과 마찬가지로 갭상 전날 거래량이 기준에 만족하지 못하는 것은 제외한다.
@@ -467,9 +584,9 @@ class JdStockFilteringManager:
                     continue
 
                 # above ma200 check
-                ma200 = stockData['200MA'].iloc[n_day_before]
-                if close < ma200:
-                    continue 
+                # ma200 = stockData['200MA'].iloc[n_day_before]
+                # if close < ma200:
+                #     continue 
 
                 volume_ma50_1d_ago = stockData['Volume'].rolling(window=50).mean().iloc[n_day_before-1]
                 volume = stockData['Volume'].iloc[n_day_before]
@@ -479,10 +596,8 @@ class JdStockFilteringManager:
 
                 bIsVolumeEnough = (volume_ma50_1d_ago >= 200000 and close >= 5 ) or volume_ma50_1d_ago*close > 5000000
 
-                # 순서대로
-                # ADR > 2, Gap Open, 10% 이상 상승, 
-                #if ADR > 2 and open > high_1d_ago and change > 10 and change > ADR*2 and close > ma200 and volume > volume_ma50*2 and bIsVolumeEnough and DCR >= 0.5:
-                if  volume > volume_ma50_1d_ago*2 and bIsVolumeEnough:
+                #if  volume > volume_ma50_1d_ago*2 and bIsVolumeEnough:
+                if bIsVolumeEnough:
                     filtered_tickers.append(ticker)
 
             except Exception as e:
@@ -596,6 +711,7 @@ class JdStockFilteringManager:
                 d0_close = stockData['Close'].iloc[d0_index]
                 d0_low = stockData['Low'].iloc[d0_index]
                 d0_high = stockData['High'].iloc[d0_index]
+                d0_ma200 = stockData['200MA'].iloc[d0_index]
 
                 close_1d_ago = stockData['Close'].iloc[d0_index - 1]
                 ADR_1d_ago = stockData['ADR'].iloc[d0_index - 1]
@@ -668,6 +784,9 @@ class JdStockFilteringManager:
 
                 # [bOEL]
                 bOEL = d0_open == d0_low
+
+                # [Above 200sma]
+                bAbove200ma = d0_close > d0_ma200
                 
                 # ------------ d0 이후에 알 수 있는 것들 ------------
 
@@ -757,7 +876,7 @@ class JdStockFilteringManager:
                                            # d5, d10, d20, d30, d40, d50 퍼포먼스
                                            gap_date, day_n_performances[0], day_n_performances[1], day_n_performances[2], day_n_performances[3], day_n_performances[4], day_n_performances[5],
                                             d0_close, d0_open_change, d0_close_change, d0_low_change_from_open, d0_close_change_from_open,
-                                            d0_daily_range, d0_performance_vs_ADR, DCR, d0_volume, d0_volume_vs_50Avg, d0_dollar_volume, bOEL,
+                                            d0_daily_range, d0_performance_vs_ADR, DCR, d0_volume, d0_volume_vs_50Avg, d0_dollar_volume, bOEL, bAbove200ma,
                                             first_ma_touch_day, d0_open_violation_day, d0_low_violation_day, HVC_violation_first_day, HVC_violation_last_day, HVC_violation_cnt,
                                             alpha_window_lowest_day, alpha_window_lowest_pct_from_HVC, alpha_window_highest_day, alpha_window_highest_pct_from_HVC,
                                               HVC_recovery_day_from_alpha_window_lowest]
@@ -766,7 +885,7 @@ class JdStockFilteringManager:
         df = pd.DataFrame.from_dict(gap_profile_dic).transpose()
         columns = ['Symbol', 'gap_date', 'd5_performance', 'd10_performance', 'd20_performance', 'd30_performance', 'd40_performance', 'd50_performance',
                     'd0_close', 'd0_open_change', 'd0_close_change', 'd0_low_change_from_open', 'd0_close_change_from_open',
-                    'd0_daily_range', 'd0_performance_vs_ADR', 'DCR', 'd0_volume', 'd0_volume_vs_50Avg', 'd0_dollar_volume', 'bOEL',
+                    'd0_daily_range', 'd0_performance_vs_ADR', 'DCR', 'd0_volume', 'd0_volume_vs_50Avg', 'd0_dollar_volume', 'bOEL', 'bAbove200ma',
                     'first_ma_touch_day', 'd0_open_violation_day', 'd0_low_violation_day', 'HVC_violation_first_day', 'HVC_violation_last_day', 'HVC_violation_cnt',
                     'alpha_window_lowest_day', 'alpha_window_lowest_pct_from_HVC', 'alpha_window_highest_day', 'alpha_window_highest_pct_from_HVC',
                         'HVC_recovery_day_from_alpha_window_lowest']

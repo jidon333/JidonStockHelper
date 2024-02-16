@@ -1216,6 +1216,21 @@ class JdStockDataManager:
         res = ((priceB - priceA)/priceA) * 100
         return res
 
+
+    def get_DCR_normalized(self, inStockData: pd.DataFrame, n_day_before = -1):      
+        # [DCR](%)
+
+        d0_close = inStockData['Close'].iloc[n_day_before]
+        d0_low = inStockData['Low'].iloc[n_day_before]
+        d0_high = inStockData['High'].iloc[n_day_before]
+
+        if d0_high - d0_low > 0:
+            DCR = (d0_close - d0_low) / (d0_high - d0_low)
+        else:
+            DCR = 0.0
+
+        return DCR
+
         
 
     # cook industry ranks according to the atrs14_exp.
@@ -1993,9 +2008,9 @@ class JdStockDataManager:
                 stock_data = out_stock_datas_dic.get(ticker, pd.DataFrame())
                 if not stock_data.empty:
                     # just 200 MA check or MMT criteria
-                    bIsStage2 = self.check_stage2(stock_data, True)
-                    if bIsStage2:
-                        top10_in_industry.append(data)
+                    # bIsStage2 = self.check_stage2(stock_data, True)
+                    # if bIsStage2:
+                    top10_in_industry.append(data)
 
                     if len(top10_in_industry) == 10:
                         break
