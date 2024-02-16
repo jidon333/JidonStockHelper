@@ -264,12 +264,20 @@ elif index == 12:
     first_stock_data : pd.DataFrame = stock_data[tickers[0]]
     sd.cook_stock_info_from_tickers(tickers, f'US_RS_8_10_{lastday}')
 
+
+    ### PRINT power gap tickers
     stock_data_dic, tickers = sf.screening_stocks_by_func(sf.filter_stock_power_gap, True, True, -1)
     s = str.format(f"[{lastday}] power gap tickers: ") + str(tickers)
     print(s)
 
+    ### PRINT bull snort tickers
     stock_data_dic, tickers = sf.screening_stocks_by_func(sf.filter_stocks_Bull_Snort, True, True, -1)
     s = str.format(f"[{lastday}] bull snort tickers: ") + str(tickers)
+    print(s)
+
+    ### PRINT RS 8/10 tickers
+    stock_data_dic, tickers = sf.screening_stocks_by_func(sf.filter_stocks_rs_8_10, True, True, -1)
+    s = str.format(f"[{lastday}] RS 8/10 tickers: ") + str(tickers)
     print(s)
 
 elif index == 13:
