@@ -205,8 +205,8 @@ class JdStockDataManager:
             TrueLowMin = new_data['Low'].rolling(window=n).min()
 
             # Choppiness와 표준편차는 눈으로 보는게 낫다. 갭 상승, 돌파 같은 주요 모멘텀을 고려하지 않기 때문.
-            # # Choppiness Index 계산
-            # new_data['ChoppinessIndex'] = 100 * np.log10(TrueRangeSum / (TrueHighMax - TrueLowMin)) / np.log10(n)
+            # Choppiness Index 계산
+            #new_data['ChoppinessIndex'] = 100 * np.log10(TrueRangeSum / (TrueHighMax - TrueLowMin)) / np.log10(n)
 
             # # 표준편차
             # new_data['STD'] = new_data['Close'].rolling(window=14).std()
@@ -429,7 +429,58 @@ class JdStockDataManager:
                 outputTexts += str(ticker) + '\n'
             f.write(outputTexts)
 
-    def _getCloseChanges_df(self, stock_list, ticker, start_date, end_date):
+
+    def _getATRCondition_df(self, stock_list, ticker):
+        try:
+            save_path = os.path.join('StockData', f"{ticker}.csv")
+            data = pd.read_csv(save_path)
+            data.set_index('Date', inplace=True)
+
+            ATR = data['ATR']
+            volume_ma50 = data['Volume'].rolling(window=50).mean()
+            open = data['Open']
+            close = data['Close']
+            diff = close - open
+
+            bIsVolumeEnough = (volume_ma50 >= 2000000) & (close >= 10)
+            conditionA = bIsVolumeEnough & (diff > (1.0 * ATR))
+            conditionB = bIsVolumeEnough & (diff < (-1.5 * ATR))
+     
+        except Exception as e:
+                print(f"An error occurred: {e}")
+                name = stock_list.loc[stock_list['Symbol'] == ticker, 'Name'].values[0]
+                self.exception_ticker_list[ticker] = name
+                conditionA = pd.Series()
+                conditionB = pd.Series()
+        return conditionA, conditionB
+    
+
+    def _getUpDownConditions_df(self, stock_list):
+        l_A = []
+        l_B = []
+        for ticker in stock_list['Symbol']:
+            conditionA, conditionB = self._getATRCondition_df(stock_list, ticker)
+            l_A.append(conditionA)
+            l_B.append(conditionB)
+        
+        all_conditions_A = pd.concat(l_A, axis=1, sort=True)
+        all_conditions_B = pd.concat(l_B, axis=1, sort=True)
+        all_conditions_A.columns = all_conditions_A.columns.to_list()
+        all_conditions_B.columns = all_conditions_B.columns.to_list()
+
+        daily_changes = pd.DataFrame(index=all_conditions_A.index, columns=['conditionA', 'conditionB'])
+        daily_changes['conditionA'] = all_conditions_A.sum(axis=1)  # 조건 A를 만족하는 종목 수
+        daily_changes['conditionB'] = all_conditions_B.sum(axis=1)  # 조건 B를 만족하는 종목 수
+        daily_changes['sum'] = daily_changes['conditionA'] - daily_changes['conditionB']  # 조건 A와 B의 차이
+        daily_changes['ma200_changes'] = daily_changes['sum'].rolling(200).mean()  # 150일 이동 평균
+        daily_changes['ma50_changes'] = daily_changes['sum'].rolling(50).mean()  # 150일 이동 평균
+        daily_changes['ma20_changes'] = daily_changes['sum'].rolling(20).mean()  # 150일 이동 평균
+
+        return daily_changes
+
+
+
+    def _getCloseChanges_df(self, stock_list, ticker):
         try:
             save_path = os.path.join('StockData', f"{ticker}.csv")
             data = pd.read_csv(save_path)
@@ -444,13 +495,9 @@ class JdStockDataManager:
 
         return returns
 
-    def _getUpDownChanges_df(self, stock_list, start_date, end_date):
+    def _getUpDownChanges_df(self, stock_list):
         # 모든 종목에 대한 전일 대비 수익률 계산
-        # all_returns = pd.DataFrame()
-        # for ticker in stock_list['Symbol']:
-        #     returns = self._getCloseChanges_df(stock_list, ticker, start_date, end_date)
-        #     all_returns[ticker] = returns
-        l = [self._getCloseChanges_df(stock_list, ticker, start_date, end_date) for ticker in stock_list['Symbol']]
+        l = [self._getCloseChanges_df(stock_list, ticker) for ticker in stock_list['Symbol']]
         all_returns = pd.concat(l, axis=1, sort=True)
         all_returns.columns = all_returns.columns.to_list()
 
@@ -502,7 +549,18 @@ class JdStockDataManager:
         return fdr_stock_list
     
 
+    def cook_ATR_Expansion_Counts(self, dyasNum = 365*5):
+        out_tickers = []
+        out_stock_datas_dic = {}
+        stock_data_len = 365*5 # 기본 데이터는 든든하게 미리 챙겨두기
+        stock_list = self.getStockListFromLocalCsv()
+        self.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, stock_data_len, True)
+        up_down_condition_df = self._getUpDownConditions_df(stock_list)
+        up_down_condition_df.to_csv(os.path.join(metadata_folder, 'ATR_Expansion_Counts.csv'))
+    
+
     def cookUpDownDatas(self, daysNum = 365*5):
+
         # S&P 500 지수의 모든 종목에 대해 매일 상승/하락한 종목 수 계산
         nyse_list = self.get_fdr_stock_list('NYSE', daysNum)
         nyse_list = nyse_list[nyse_list['Symbol'].isin(self._get_csv_names())]
@@ -520,13 +578,13 @@ class JdStockDataManager:
         valid_start_date = trading_days[0]
         valid_end_date = trading_days[-1]
 
-        daily_changes_nyse_df = self._getUpDownChanges_df(nyse_list, valid_start_date, valid_end_date)
+        daily_changes_nyse_df = self._getUpDownChanges_df(nyse_list)
         daily_changes_nyse_df.to_csv(os.path.join(metadata_folder, 'up_down_nyse.csv'))
 
-        daily_changes_nasdaq_df = self._getUpDownChanges_df(nasdaq_list, valid_start_date, valid_end_date)
+        daily_changes_nasdaq_df = self._getUpDownChanges_df(nasdaq_list)
         daily_changes_nasdaq_df.to_csv(os.path.join(metadata_folder, 'up_down_nasdaq.csv'))
 
-        daily_changes_sp500_df = self._getUpDownChanges_df(sp500_list, valid_start_date, valid_end_date)
+        daily_changes_sp500_df = self._getUpDownChanges_df(sp500_list)
         daily_changes_sp500_df.to_csv(os.path.join(metadata_folder, 'up_down_sp500.csv'))
 
         with open("up_down_exception.json", "w") as outfile:
@@ -611,8 +669,6 @@ class JdStockDataManager:
             # 데이터프레임을 CSV 파일로 저장
             new_df.to_csv(save_path, encoding='utf-8-sig')
 
-
-    
     def get_count_data_from_csv(self, fileName : str, daysNum = 365*2):
             """ 
             fileName: {fileName}_Counts.csv 
@@ -2106,6 +2162,8 @@ class JdStockDataManager:
             except:
                 continue
 
+            volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[-1]
+
             lower_low_3 = -1 if self.check_lower_lows_3(stockData) else 0 # bad
             higher_high_3 = 1 if self.check_higher_highs_3(stockData) else 0 # good
 
@@ -2173,7 +2231,7 @@ class JdStockDataManager:
 
             trandingViewFormat = market + ':' + ticker + ','
 
-            stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), ADR, near_ma_list, bPower3, bPocketPivot,
+            stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), ADR, int(volume_ma50), near_ma_list, bPower3, bPocketPivot,
                                       # Volatility Contraction
                                       bInsideBar, bDoubleInsideBar, NR_x, bWickPlay,
                                       # Demand
@@ -2186,7 +2244,7 @@ class JdStockDataManager:
 
 
         df = pd.DataFrame.from_dict(stock_info_dic).transpose()
-        columns = ['Market', 'Industry', 'Industry Score', 'RS Rank','ADR(%)', 'Near MA list(1.5%)', 'Power of 3', 'Pocket Pivot',
+        columns = ['Market', 'Industry', 'Industry Score', 'RS Rank','ADR(%)', 'Volume(50avg)','Near MA list(1.5%)', 'Power of 3', 'Pocket Pivot',
                    'Inside bar', 'Double Inside bar', 'NR(x)', 'Wick Play',
                    'OEL', 'bGOEL', 'Oops up reversal', 'Failed downside wick BO',
                    'lower_low_3', 'higher_high_3', 'below_20ma_closed', 'below_50ma_closed', 'up_more_than_adr', 'down_more_than_adr', 'more_bullish_candle',
@@ -2206,18 +2264,21 @@ class JdStockDataManager:
         # 엑셀 조건수 서식 적용
         wb = openpyxl.load_workbook(save_path)
         sheet = wb['Sheet1']
-        column_range = 'H:AG'
+
+        # 컬럼 추가되면 여기 바꿔야한다. (밑에 컬럼 색깔 정하는 범위). Inside bar의 인ㄴ덱스
+        min_col_start_index = 9
+        NR_index = 13
 
         red_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')  # 연한 빨강
         green_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')  # 연한 녹색
 
-        for column in sheet.iter_cols(min_row=2, max_row=sheet.max_row, min_col=8, max_col=len(columns)):
+        for column in sheet.iter_cols(min_row=2, max_row=sheet.max_row, min_col=min_col_start_index, max_col=len(columns)):
             for cell in column:
                 if cell.value == None:
                     continue
 
                 # NR(x)
-                if cell.column == 12:
+                if cell.column == NR_index:
                     if cell.value > 3:
                         cell.fill = green_fill
                         continue

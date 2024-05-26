@@ -74,6 +74,13 @@ def DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500, bOnlyForScreenSh
     chart.init_plots_for_up_down(updown_nyse, updown_nasdaq, updown_sp500)
     chart.draw_updown_chart()
 
+def draw_atr_expansion(atr_changes_df : pd.DataFrame , bOnlyForScreenShot = False):
+    # show first element
+    chart = JdChart(sd)
+    chart.bOnlyForScreenShot = bOnlyForScreenShot
+    chart.init_plots_for_atr_up_down(atr_changes_df)
+    chart.draw_updown_ATR_chart()
+
 
 def draw_count_data_Index(mtt_cnt_df, name : str, chart_type : str, bOnlyForScreenShot = False):
     """
@@ -140,6 +147,7 @@ def screen_stocks_and_show_chart(filter_function, bUseLocalLoadedStockDataForScr
     if len(tickers) > 0:
         DrawStockDatas(stock_data, tickers, sd)
     else:
+
         print("there's no tickers to draw!")
 
 print("Select the chart type. \n \
@@ -157,11 +165,12 @@ print("Select the chart type. \n \
       12: Generate All indicators and screening result \n \
       13: Power gap histroy screen \n ")
 
+
 index = int(input())
 
 if index == 1:
     sf.MTT_ADR_minimum = 2.0
-    sf.LastDayMinimumVolume = 500000
+    sf.LastDayMinimumVolume = 2000000
     #screen_stocks_and_show_chart(sf.filter_stocks_high_ADR_swing, True, True)
 
     #screen_stocks_and_show_chart(sf.filter_stocks_MTT, True, True)
@@ -170,7 +179,7 @@ if index == 1:
 
     sf.MTT_ADR_minimum = 1
     #screen_stocks_and_show_chart(sf.filter_stock_hope_from_bottom, True, True)
-    #screen_stocks_and_show_chart(sf.filter_stock_ALL, True, False)
+    screen_stocks_and_show_chart(sf.filter_stock_ALL, True, False)
     #screen_stocks_and_show_chart(sf.filter_stock_Good_RS, True, True)
     #screen_stocks_and_show_chart(sf.filter_stocks_high_ADR_swing, True, True)
     #screen_stocks_and_show_chart(filter_stock_power_gap, True, True)
@@ -182,6 +191,7 @@ elif index == 3:
     remove_local_caches()
     sd.syncCsvFromWeb(3)
     sd.cookUpDownDatas()
+    sd.cook_ATR_Expansion_Counts()
     sd.cook_Nday_ATRS150_exp(365*2)
     sd.cook_ATRS150_exp_Ranks(365*2)
     sd.cook_short_term_industry_rank_scores()
@@ -191,6 +201,7 @@ elif index == 3:
     sd.cook_top10_in_industries()
 elif index == 4:
     sd.cookUpDownDatas()
+    sd.cook_ATR_Expansion_Counts()
 elif index == 5:
     remove_local_caches()
     sd.cookLocalStockData()
@@ -205,6 +216,10 @@ elif index == 6:
     sd.cook_top10_in_industries()
     sd.cook_filter_count_data(sf.filter_stocks_MTT, "MTT_Counts", 365*3, False)
     sd.cook_filter_count_data(sf.filter_stock_FA50, "FA50_Counts", 365*3, False)
+
+    sd.cook_filter_count_data(sf.filter_stock_ATR_plus_150, "ATR_plus150_counts", 365*3, False)
+    sd.cook_filter_count_data(sf.filter_stock_ATR_minus_200, "ATR_minus200_counts", 365*3, False)
+
 
 elif index == 7:
     sd.cook_Nday_ATRS150_exp(365*2)
@@ -227,10 +242,15 @@ elif index == 11:
     df = sd.get_count_data_from_csv("FA50", 365*3)
     draw_count_data_Index(df, "FA50", "bar")
 
+    # ATR Expansion
+    #sd.cookUpDownATR_Expansion()
+    #df = sd.get_count_data_from_csv("ATR_Expansion", 365*1)
+    #draw_atr_expansion(df)
+
 elif index == 12:
     # auto generate indicator screenshot and MTT xlsx file. #
 
-    ### MI index chart
+    ## MI index chart
     updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365*3)
     DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500, True)
 
@@ -242,7 +262,11 @@ elif index == 12:
     df = sd.get_count_data_from_csv("FA50")
     draw_count_data_Index(df, "FA50", "bar", True)
 
-    ### cook MTT stock list as xlsx.
+    ### ATR_Expansion chart
+    df = sd.get_count_data_from_csv("ATR_Expansion", 365*1)
+    draw_atr_expansion(df, True)
+
+    ## cook MTT stock list as xlsx.
 
     # get mtt screen list
     stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stocks_MTT, True, True)
@@ -252,17 +276,18 @@ elif index == 12:
     lastday = str(first_stock_data.index[-1].date())
 
     ### COOK MTT
-    sd.cook_stock_info_from_tickers(tickers, f'US_MTT_{lastday}')
+    if len(tickers) > 0:
+        sd.cook_stock_info_from_tickers(tickers, f'US_MTT_{lastday}')
 
     ### COOK High ADR Swing
     stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stocks_high_ADR_swing, True, True)
-    first_stock_data : pd.DataFrame = stock_data[tickers[0]]
-    sd.cook_stock_info_from_tickers(tickers, f'US_HighAdrSwing_{lastday}')
+    if len(tickers) > 0:
+        sd.cook_stock_info_from_tickers(tickers, f'US_HighAdrSwing_{lastday}')
 
     ### COOK RS 8/10
     stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stocks_rs_8_10, True, True)
-    first_stock_data : pd.DataFrame = stock_data[tickers[0]]
-    sd.cook_stock_info_from_tickers(tickers, f'US_RS_8_10_{lastday}')
+    if len(tickers) > 0:
+        sd.cook_stock_info_from_tickers(tickers, f'US_RS_8_10_{lastday}')
 
 
     ### PRINT power gap tickers
@@ -283,9 +308,12 @@ elif index == 12:
 elif index == 13:
 
     sf.cook_power_gap_profiles(20*12*5, 20, 20)
-    #sf.cook_open_gap_profiles(20*12*5, 20, 20)
+    sf.cook_open_gap_profiles(20*12*5, 20, 20)
     #sf.get_filter_gap_stocks_in_range(20, 0, sf.filter_stock_power_gap)
-
+elif index == 14:
+    sd.cook_ATR_Expansion_Counts()
+    df = sd.get_count_data_from_csv("ATR_Expansion", 365*1)
+    draw_atr_expansion(df, True)
 
 
     

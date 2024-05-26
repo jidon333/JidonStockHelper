@@ -103,9 +103,9 @@ class JdStockFilteringManager:
 
             # (거래량 50일 평균 20만이상 + 10불이상 or 평균거래대금 1000만불 이상)
             bIsVolumeEnough = (volume_ma50 >= 200000 and close >= 10 ) or volume_ma50*close > 10000000
-            # 마지막날 거래량 필터
+            # 마지막날 거래량 필터 (10불 이상)
             if self.LastDayMinimumVolume > 0:
-                bIsVolumeEnough = bIsVolumeEnough and last_volume >= self.LastDayMinimumVolume
+                bIsVolumeEnough = bIsVolumeEnough and last_volume >= self.LastDayMinimumVolume and close >= 10
             bIsUpperMA = close > bIsUpperMA_150_200 and close > ma50
             b_150ma_upper_than_200ma = ma150 > ma200
             bMA_Slope_Plus = ma150_slope > 0 and ma200_slope > 0
@@ -351,10 +351,10 @@ class JdStockFilteringManager:
 
     def filter_stock_FA50(self, stock_datas_dic : dict, n_day_before = -1):
         filtered_tickers = []
-        Mtt_tickers = self.filter_stock_ALL(stock_datas_dic)
+        all_tickers = self.filter_stock_ALL(stock_datas_dic)
         gisc_df = self.sd.get_GICS_df()
         bIsVolumeEnough = False
-        for ticker in Mtt_tickers:
+        for ticker in all_tickers:
             stockData = stock_datas_dic[ticker]
             try:
                 ADR = stockData['ADR'].iloc[n_day_before]
@@ -372,6 +372,28 @@ class JdStockFilteringManager:
                 continue
         
         return filtered_tickers
+    
+    def filter_stock_ATR_plus_150(self, stock_datas_dic : dict, n_day_before = -1):
+        filtered_tickers = []
+        all_tickers = self.filter_stock_ALL(stock_datas_dic)
+        for ticker in all_tickers:
+            stockData = stock_datas_dic[ticker]
+            try:
+                ATR = stockData['ATR'].iloc[n_day_before]
+                volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[n_day_before]
+                open = stockData['Open'].iloc[n_day_before]
+                close = stockData['Close'].iloc[n_day_before]
+
+                diff = close - open
+                bIsVolumeEnough = (volume_ma50 >= 2000000 and close >= 10 )
+                if bIsVolumeEnough and diff > (ATR * 1.5):
+                    filtered_tickers.append(ticker)
+
+            except Exception as e:
+                continue
+        
+        return filtered_tickers
+  
 
     def filter_stock_Good_RS(self, stock_datas_dic : dict):
         """

@@ -58,7 +58,12 @@ class JdChart:
         self.updown_nasdaq : pd.DataFrame
         self.updown_sp500 : pd.DataFrame
 
+        self.updown_atr : pd.DataFrame
+
+
         self.mtt_count_df : pd.DataFrame
+
+
 
         self.top10_in_industries : dict
         self.top10_in_industries = self.stockManager.get_top10_in_industries()
@@ -104,6 +109,13 @@ class JdChart:
 
             self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
             self.fig.canvas.mpl_connect('close_event', self.on_close)
+
+    def init_plots_for_atr_up_down(self, updown_atr : pd.DataFrame):
+        self.updown_atr = updown_atr
+        self.fig, (self.ax1) = plt.subplots(figsize=(20, 10))
+
+        self.fig.canvas.mpl_connect('motion_notify_event', self.on_move)
+        self.fig.canvas.mpl_connect('close_event', self.on_close)
 
     def init_plots_for_count_data(self, mtt_count_df : pd.DataFrame, type = "line"):
         """
@@ -506,6 +518,39 @@ class JdChart:
         if self.bOnlyForScreenShot:
             lastday = str(self.updown_sp500.index[-1].date())
             file_path = os.path.join(screenshot_folder, f'MI_Index_chart_{lastday}.png')
+            plt.savefig(file_path)
+            time.sleep(1)
+            plt.close()
+
+        while True:
+            if not plt.get_fignums():
+                break
+            plt.pause(0.01)
+
+
+    def draw_updown_ATR_chart(self):
+
+        self.bDrawingStockChart = False
+
+        # Plot sum and MA150 changes
+        self.ax1.plot(self.updown_atr.index, self.updown_atr['ma200_changes'], label='ma200_changes')
+        self.ax1.plot(self.updown_atr.index, self.updown_atr['ma50_changes'], label='ma50_changes')
+        self.ax1.plot(self.updown_atr.index, self.updown_atr['ma20_changes'], label='ma20_changes')
+
+        # Add legend, title, and grid
+        self.ax1.legend()
+        self.ax1.set_title('ATR Expansion')
+        self.ax1.grid()
+
+        # Add a horizontal line at y=0
+        self.ax1.axhline(y=0, color='black', linestyle='--')
+
+        # Show the chart and pause the execution
+        plt.draw()
+
+        if self.bOnlyForScreenShot:
+            lastday = str(self.updown_atr.index[-1].date())
+            file_path = os.path.join(screenshot_folder, f'ATR_Expansion{lastday}.png')
             plt.savefig(file_path)
             time.sleep(1)
             plt.close()
