@@ -217,9 +217,6 @@ elif index == 6:
     sd.cook_filter_count_data(sf.filter_stocks_MTT, "MTT_Counts", 365*3, False)
     sd.cook_filter_count_data(sf.filter_stock_FA50, "FA50_Counts", 365*3, False)
 
-    sd.cook_filter_count_data(sf.filter_stock_ATR_plus_150, "ATR_plus150_counts", 365*3, False)
-    sd.cook_filter_count_data(sf.filter_stock_ATR_minus_200, "ATR_minus200_counts", 365*3, False)
-
 
 elif index == 7:
     sd.cook_Nday_ATRS150_exp(365*2)
@@ -289,6 +286,11 @@ elif index == 12:
     if len(tickers) > 0:
         sd.cook_stock_info_from_tickers(tickers, f'US_RS_8_10_{lastday}')
 
+    ### COOK RS 8/10
+    stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stock_hope_from_bottom, True, True)
+    if len(tickers) > 0:
+        sd.cook_stock_info_from_tickers(tickers, f'US_hope_from_bottom_{lastday}')
+
 
     ### PRINT power gap tickers
     stock_data_dic, tickers = sf.screening_stocks_by_func(sf.filter_stock_power_gap, True, True, -1)
@@ -303,6 +305,11 @@ elif index == 12:
     ### PRINT RS 8/10 tickers
     stock_data_dic, tickers = sf.screening_stocks_by_func(sf.filter_stocks_rs_8_10, True, True, -1)
     s = str.format(f"[{lastday}] RS 8/10 tickers: ") + str(tickers)
+    print(s)
+
+    ### PRINT Hope from bottom
+    stock_data_dic, tickers = sf.screening_stocks_by_func(sf.filter_stock_hope_from_bottom, True, True, -1)
+    s = str.format(f"[{lastday}] Hope from bottom tickers: ") + str(tickers)
     print(s)
 
 elif index == 13:
