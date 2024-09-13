@@ -169,19 +169,19 @@ print("Select the chart type. \n \
 index = int(input())
 
 if index == 1:
-    sf.MTT_ADR_minimum = 2.0
-    sf.LastDayMinimumVolume = 2000000
+    sf.MTT_ADR_minimum = 2.5
+    sf.LastDayMinimumVolume = 1000000
     #screen_stocks_and_show_chart(sf.filter_stocks_high_ADR_swing, True, True)
 
     #screen_stocks_and_show_chart(sf.filter_stocks_MTT, True, True)
     #screen_stocks_and_show_chart(sf.filter_stocks_Bull_Snort, True, True)
     #screen_stocks_and_show_chart(sf.filter_stocks_rs_8_10, True, True)
 
-    sf.MTT_ADR_minimum = 1
+    sf.MTT_ADR_minimum = 2
     #screen_stocks_and_show_chart(sf.filter_stock_hope_from_bottom, True, True)
-    screen_stocks_and_show_chart(sf.filter_stock_ALL, True, False)
+    #screen_stocks_and_show_chart(sf.filter_stock_ALL, True, False)
     #screen_stocks_and_show_chart(sf.filter_stock_Good_RS, True, True)
-    #screen_stocks_and_show_chart(sf.filter_stocks_high_ADR_swing, True, True)
+    screen_stocks_and_show_chart(sf.filter_stocks_high_ADR_swing, True, True)
     #screen_stocks_and_show_chart(filter_stock_power_gap, True, True)
 
 elif index == 2:
@@ -189,7 +189,7 @@ elif index == 2:
     DrawMomentumIndex(updown_nyse, updown_nasdaq, updown_sp500)
 elif index == 3:
     remove_local_caches()
-    sd.syncCsvFromWeb(3)
+    sd.syncCsvFromWeb(5)
     sd.cookUpDownDatas()
     sd.cook_ATR_Expansion_Counts()
     sd.cook_Nday_ATRS150_exp(365*2)
@@ -286,10 +286,15 @@ elif index == 12:
     if len(tickers) > 0:
         sd.cook_stock_info_from_tickers(tickers, f'US_RS_8_10_{lastday}')
 
-    ### COOK RS 8/10
+    ### COOK Hope from bottom
     stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stock_hope_from_bottom, True, True)
     if len(tickers) > 0:
         sd.cook_stock_info_from_tickers(tickers, f'US_hope_from_bottom_{lastday}')
+
+    ### COOK High ADR Swing
+    stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stocks_high_ADR_swing, True, True)
+    if len(tickers) > 0:
+        sd.cook_stock_info_from_tickers(tickers, f'US_high_ADR_swing_{lastday}')
 
 
     ### PRINT power gap tickers
@@ -312,11 +317,15 @@ elif index == 12:
     s = str.format(f"[{lastday}] Hope from bottom tickers: ") + str(tickers)
     print(s)
 
-elif index == 13:
+    ### PRINT High ADR Swing
+    stock_data_dic, tickers = sf.screening_stocks_by_func(sf.filter_stocks_high_ADR_swing, True, True, -1)
+    s = str.format(f"[{lastday}] High ADR Swing tickers: ") + str(tickers)
+    print(s)
 
+elif index == 13:
     sf.cook_power_gap_profiles(20*12*5, 20, 20)
     sf.cook_open_gap_profiles(20*12*5, 20, 20)
-    #sf.get_filter_gap_stocks_in_range(20, 0, sf.filter_stock_power_gap)
+    sf.get_filter_gap_stocks_in_range(20, 0, sf.filter_stock_power_gap)
 elif index == 14:
     sd.cook_ATR_Expansion_Counts()
     df = sd.get_count_data_from_csv("ATR_Expansion", 365*1)

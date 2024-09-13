@@ -184,7 +184,8 @@ class JdStockFilteringManager:
                 sector = gisc_df.loc[ticker]['sector']
                 bIsNotHealthCare = sector != 'Healthcare'
             except Exception as e:
-                print('Can\'t find GISC for ',e)
+                #print('Can\'t find GICS for ',e)
+                errorMsg = e
 
             if bIsVolumeEnough and bADRMoreThan4 and bIsUpperMA and bIsNotHealthCare:
                 filtered_tickers.append(ticker)

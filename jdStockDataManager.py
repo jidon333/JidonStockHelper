@@ -269,20 +269,31 @@ class JdStockDataManager:
         retry_delay = 5  # seconds
 
         for ticker in stock_list['Symbol']:
-            stock_data = fdr.DataReader(ticker, trading_days[0]) 
-
-            if stock_data.empty:
+            try:
+                stock_data = fdr.DataReader(ticker, trading_days[0])
+            except Exception as e:
+                print(f'fdr.DataReader({ticker}) failed: {e}')
                 for retryCnt in range(max_retries):
-                    print('fdr.DataReader({}) request failed. Retry request {} seconds later. '.format(ticker, retry_delay * (retryCnt+1)))
-                    time.sleep(retry_delay * (retryCnt+1))
-                    stock_data = fdr.DataReader(ticker, trading_days[0])
-                    if stock_data.empty != True:
-                        print('fdr.DataReader({}) request success!'.format(ticker))
-                        break         
-            
-            stock_data['Symbol'] = ticker
-            stock_data['Name'] = stock_list.loc[stock_list['Symbol'] == ticker, 'Name'].values[0]
-            stock_data['Industry'] = stock_list.loc[stock_list['Symbol'] == ticker, 'Industry'].values[0]
+                    print(f'Retrying in {retry_delay * (retryCnt + 1)} seconds...')
+                    time.sleep(retry_delay * (retryCnt + 1))
+                    try:
+                        stock_data = fdr.DataReader(ticker, trading_days[0])
+                        if not stock_data.empty:
+                            print(f'fdr.DataReader({ticker}) request success!')
+                            break
+                    except Exception as e:
+                        print(f' fdr.DataReader({ticker}, {trading_days[0]}) failed {e} \n Retry cnt: {retryCnt + 1}')
+                else:
+                    stock_data = pd.DataFrame()
+
+            if not stock_data.empty:
+                stock_data.reset_index(inplace=True)
+                stock_data.rename(columns={'index': 'Date'}, inplace=True)
+                stock_data.set_index('Date', inplace=True)
+                stock_data['Symbol'] = ticker
+                stock_data['Name'] = stock_list.loc[stock_list['Symbol'] == ticker, 'Name'].values[0]
+                stock_data['Industry'] = stock_list.loc[stock_list['Symbol'] == ticker, 'Industry'].values[0]
+
 
             try:
                 stock_data = self._CookStockData(stock_data)
