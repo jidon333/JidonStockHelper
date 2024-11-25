@@ -259,6 +259,7 @@ class JdStockFilteringManager:
             TRS = inStockData['TRS']
 
 
+            # 10일중 RS가 높은 날이 8일 이상
             # - 8/10
             # 1. 8불 이상
             # 2. 50일 평균 거래량 300k 이상
@@ -302,6 +303,57 @@ class JdStockFilteringManager:
 
                 if rs_strong_cnt < 8:
                     continue      
+               
+            except Exception as e:
+                print(e)
+           
+            filtered_tickers.append(ticker)
+
+        return filtered_tickers
+    
+
+    def filter_stocks_young(self, stock_datas_dic : dict, n_day_before = -1):
+        """
+        - IPO 이후 200일 미만 주식
+        - 마지막 거래량 100만주 이상
+        - 10불 이상
+        - RS 1000등 이상
+        """
+        filtered_tickers = []
+
+        for ticker, inStockData in stock_datas_dic.items():
+
+            close = inStockData['Close'].iloc[n_day_before]
+            ma200 = inStockData['200MA'].iloc[n_day_before]
+            volume = inStockData['Volume'].iloc[n_day_before]
+            atrs_ranking_df = self.sd.get_ATRS_Ranking_df()
+
+
+            bNo_ma200 = pd.isna(ma200)
+
+            bIsATRS_Ranking_Good = False
+            try:
+                atrsRank = atrs_ranking_df.loc[ticker].iloc[n_day_before]
+                bIsATRS_Ranking_Good = atrsRank < 1000
+            except Exception as e:
+                print(e)
+                bIsATRS_Ranking_Good = False
+
+
+            try:
+
+                if bIsATRS_Ranking_Good == False:
+                    continue
+
+                if bNo_ma200 == False:
+                    continue
+
+                if close < 10:
+                    continue
+
+                bIsVolumeEnough = (volume >= 1000000 )
+                if not bIsVolumeEnough:
+                    continue        
                
             except Exception as e:
                 print(e)

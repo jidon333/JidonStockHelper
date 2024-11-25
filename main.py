@@ -174,6 +174,8 @@ if index == 1:
     #screen_stocks_and_show_chart(sf.filter_stocks_high_ADR_swing, True, True)
 
     #screen_stocks_and_show_chart(sf.filter_stocks_MTT, True, True)
+    screen_stocks_and_show_chart(sf.filter_stocks_young, True, True)
+
     #screen_stocks_and_show_chart(sf.filter_stocks_Bull_Snort, True, True)
     #screen_stocks_and_show_chart(sf.filter_stocks_rs_8_10, True, True)
 
@@ -181,7 +183,7 @@ if index == 1:
     #screen_stocks_and_show_chart(sf.filter_stock_hope_from_bottom, True, True)
     #screen_stocks_and_show_chart(sf.filter_stock_ALL, True, False)
     #screen_stocks_and_show_chart(sf.filter_stock_Good_RS, True, True)
-    screen_stocks_and_show_chart(sf.filter_stocks_high_ADR_swing, True, True)
+    #screen_stocks_and_show_chart(sf.filter_stocks_high_ADR_swing, True, True)
     #screen_stocks_and_show_chart(filter_stock_power_gap, True, True)
 
 elif index == 2:
@@ -297,6 +299,11 @@ elif index == 12:
         sd.cook_stock_info_from_tickers(tickers, f'US_high_ADR_swing_{lastday}')
 
 
+    ### COOK Young
+    stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stocks_young, True, True)
+    if len(tickers) > 0:
+        sd.cook_stock_info_from_tickers(tickers, f'US_Young_{lastday}')
+
     ### PRINT power gap tickers
     stock_data_dic, tickers = sf.screening_stocks_by_func(sf.filter_stock_power_gap, True, True, -1)
     s = str.format(f"[{lastday}] power gap tickers: ") + str(tickers)
@@ -320,6 +327,11 @@ elif index == 12:
     ### PRINT High ADR Swing
     stock_data_dic, tickers = sf.screening_stocks_by_func(sf.filter_stocks_high_ADR_swing, True, True, -1)
     s = str.format(f"[{lastday}] High ADR Swing tickers: ") + str(tickers)
+    print(s)
+
+    ### PRINT Young
+    stock_data_dic, tickers = sf.screening_stocks_by_func(sf.filter_stocks_young, True, True, -1)
+    s = str.format(f"[{lastday}] Young Stock tickers: ") + str(tickers)
     print(s)
 
 elif index == 13:
