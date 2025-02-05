@@ -317,7 +317,7 @@ class JdStockFilteringManager:
         - IPO 이후 200일 미만 주식
         - 마지막 거래량 100만주 이상
         - 10불 이상
-        - RS 1000등 이상
+        - RS 1000등 이상 (상장후 꼴아박기만 하는 주식 x)
         """
         filtered_tickers = []
 

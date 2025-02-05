@@ -17,6 +17,9 @@ import os
 import json
 import datetime as dt
 import time
+import random
+import concurrent.futures
+
 
 from jdGlobal import get_yes_no_input
 from jdGlobal import data_folder
@@ -259,62 +262,131 @@ class JdStockDataManager:
             raise
 
         return new_data
+    
+    # fetch_data_with_timeout_process는 executor를 인자로 받아 실행하도록 합니다.
+    def fetch_data_with_timeout_process(self, executor, ticker, start_date, timeout_sec=10):
+        """
+        Calls fdr.DataReader for the given ticker and start_date in a separate process using the provided executor.
+        If no response is received within timeout_sec seconds,
+        returns (None, True) indicating a timeout.
+        If another exception occurs, returns (None, False).
+        Otherwise, returns (data, False).
+        """
+        future = executor.submit(fdr.DataReader, ticker, start_date)
+        try:
+            data = future.result(timeout=timeout_sec)
+            return data, False
+        except concurrent.futures.TimeoutError:
+            print(f"[Timeout] {ticker} data request did not complete within {timeout_sec} seconds.")
+            return None, True
+        except Exception as e:
+            print(f"[Exception] An error occurred while requesting data for {ticker}: {e}")
+            return None, False
+
+    def get_stock_data_with_retries(self, executor, ticker, trading_day, 
+                                    timeout_sec=10, max_retries=3, retry_delay=5, long_wait=300):
+        """
+        Attempts to fetch data for a ticker with retries.
+        Initially uses the provided executor.
+        If the call fails, then:
+        - If the failure was due to a timeout, it shuts down the current executor and creates a new one.
+        - Returns a tuple: (stock_data, is_timeout, executor)
+        """
+        # First attempt.
+        stock_data, is_timeout = self.fetch_data_with_timeout_process(executor, ticker, trading_day, timeout_sec)
+        if stock_data is not None and not stock_data.empty:
+            return stock_data, is_timeout, executor
+
+        print(f"{ticker} initial call failed. Starting retries.")
+        for retryCnt in range(max_retries):
+
+            # 만약 이전 호출이 타임아웃이었다면, 기존 executor가 hang 상태일 가능성이 있으므로 새 executor 생성.
+            if is_timeout:
+                print(f"[{ticker}] Timeout detected. Replacing the executor.")
+                executor.shutdown(wait=False)
+                executor = concurrent.futures.ProcessPoolExecutor(max_workers=1)
+
+                # 타임아웃이면 wait_time = long_wait
+                wait_time = long_wait
+            else:
+                # 타임아웃이 아니면 wait_time = retry_delay * (retryCnt+1)
+                wait_time = retry_delay * (retryCnt + 1)
+            
+            print(f"[{ticker}] Retry {retryCnt+1}/{max_retries} - waiting {wait_time} seconds before retrying...")
+            time.sleep(wait_time)
+
+            # 재시도: 새 executor(또는 기존 executor)를 사용하여 다시 호출.
+            stock_data, is_timeout = self.fetch_data_with_timeout_process(executor, ticker, trading_day, timeout_sec)
+
+            if is_timeout:
+                # 또 타임아웃이면 executor 재성성하고 빈 DataFrame 반환
+                print(f"[{ticker}] Timeout detected Again!!!. Replacing the executor.")
+                executor.shutdown(wait=False)
+                executor = concurrent.futures.ProcessPoolExecutor(max_workers=1)
+                return pd.DataFrame(), is_timeout, executor
+
+            elif stock_data is not None and not stock_data.empty:
+                # 정상적으로 값을 얻었다면 종료
+                print(f"{ticker} retry successful!")
+                return stock_data, is_timeout, executor
+            else:
+                # 타임아웃은 아니지만 데이터를 못얻었다면 그냥 빈 DataFrame 반환
+                print(f"{ticker} data call failed. Assigning an empty DataFrame.")
+                return pd.DataFrame(), is_timeout, executor
 
     def _getDatasFromWeb(self, stock_list, trading_days, out_data_dic):
-        # 모든 주식에 대해 해당 기간의 가격 데이터 가져오기
         i = 0
         stockNums = stock_list.shape[0]
 
+        # 설정 값들.
         max_retries = 3
-        retry_delay = 5  # seconds
+        retry_delay = 5   # Base retry delay in seconds.
+        long_wait = 300   # If a timeout occurs, wait 300 seconds (5 minutes) on the first retry.
 
-        for ticker in stock_list['Symbol']:
-            try:
-                stock_data = fdr.DataReader(ticker, trading_days[0])
-            except Exception as e:
-                print(f'fdr.DataReader({ticker}) failed: {e}')
-                for retryCnt in range(max_retries):
-                    print(f'Retrying in {retry_delay * (retryCnt + 1)} seconds...')
-                    time.sleep(retry_delay * (retryCnt + 1))
-                    try:
-                        stock_data = fdr.DataReader(ticker, trading_days[0])
-                        if not stock_data.empty:
-                            print(f'fdr.DataReader({ticker}) request success!')
-                            break
-                    except Exception as e:
-                        print(f' fdr.DataReader({ticker}, {trading_days[0]}) failed {e} \n Retry cnt: {retryCnt + 1}')
-                else:
-                    stock_data = pd.DataFrame()
+        exception_ticker_list = {}
 
-            if not stock_data.empty:
-                stock_data.reset_index(inplace=True)
-                stock_data.rename(columns={'index': 'Date'}, inplace=True)
-                stock_data.set_index('Date', inplace=True)
-                stock_data['Symbol'] = ticker
-                stock_data['Name'] = stock_list.loc[stock_list['Symbol'] == ticker, 'Name'].values[0]
-                stock_data['Industry'] = stock_list.loc[stock_list['Symbol'] == ticker, 'Industry'].values[0]
-
-
-            try:
-                stock_data = self._CookStockData(stock_data)
-
-                # 딕셔너리에 데이터 추가
-                out_data_dic[ticker] = stock_data
-                i = i+1
-                print(f"{i/stockNums*100:.2f}% Done")
+        # 기본으로 사용할 executor를 먼저 생성
+        executor = concurrent.futures.ProcessPoolExecutor(max_workers=1)
+        try:
+            for ticker in stock_list['Symbol']:
+                print(ticker, trading_days[0])
                 
-                if i > stockIterateLimit:
-                    break
+                # get_stock_data_with_retries를 호출할 때, 현재 executor를 전달
+                # 그리고 반환값으로 executor를 다시 받는다. (함수 내부에서 갱신될 수 있음)
+                stock_data, is_timeout, executor = self.get_stock_data_with_retries(
+                    executor, ticker, trading_days[0],
+                    timeout_sec=10,
+                    max_retries=max_retries,
+                    retry_delay=retry_delay,
+                    long_wait=long_wait
+                )
+                
+                if not stock_data.empty:
+                    stock_data.reset_index(inplace=True)
+                    stock_data.rename(columns={'index': 'Date'}, inplace=True)
+                    stock_data.set_index('Date', inplace=True)
+                    stock_data['Symbol'] = ticker
+                    stock_data['Name'] = stock_list.loc[stock_list['Symbol'] == ticker, 'Name'].values[0]
+                    stock_data['Industry'] = stock_list.loc[stock_list['Symbol'] == ticker, 'Industry'].values[0]
 
-
-            except Exception as e:
-                print(f"An error occurred: {e}")
-                name = stock_list.loc[stock_list['Symbol'] == ticker, 'Name'].values[0]
-                exception_ticker_list[ticker] = name
+                try:
+                    stock_data = self._CookStockData(stock_data)
+                    out_data_dic[ticker] = stock_data
+                    i += 1
+                    print(f"{i/stockNums*100:.2f}% Done")
+                    if i > stockIterateLimit:
+                        break
+                except Exception as e:
+                    print(f"An error occurred while processing data for {ticker}: {e}")
+                    name = stock_list.loc[stock_list['Symbol'] == ticker, 'Name'].values[0]
+                    exception_ticker_list[ticker] = name
+        finally:
+            # 반드시 executor를 종료
+            executor.shutdown(wait=False)
 
         with open("DataReader_exception.json", "w") as outfile:
             json.dump(exception_ticker_list, outfile)
-
+   
     def _getAllDatasFromWeb(self, daysNum = 5*365, all_list = pd.DataFrame()):
         print("--- getAllDatasFromWeb ---")
 
@@ -2174,6 +2246,8 @@ class JdStockDataManager:
                 continue
 
             volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[-1]
+            if pd.isna(volume_ma50):
+                volume_ma50 = stockData['Volume'].iloc[-1]
 
             lower_low_3 = -1 if self.check_lower_lows_3(stockData) else 0 # bad
             higher_high_3 = 1 if self.check_higher_highs_3(stockData) else 0 # good
@@ -2242,17 +2316,21 @@ class JdStockDataManager:
 
             trandingViewFormat = market + ':' + ticker + ','
 
-            stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), ADR, int(volume_ma50), near_ma_list, bPower3, bPocketPivot,
-                                      # Volatility Contraction
-                                      bInsideBar, bDoubleInsideBar, NR_x, bWickPlay,
-                                      # Demand
-                                      bOEL, bGOEL, bOopsUpReversal, bFailedDownsideWickBO,
-                                      # C/V factors
-                                      lower_low_3, higher_high_3, below_20ma_closed, below_50ma_closed, up_more_than_adr, down_more_than_adr, more_bullish_candle,
-                                      ma20_disparity_more_than_20ptg, close_equal_low, close_equal_high, open_equal_high, open_equal_low, oops_up_reversal,
-                                      squat, squat_recovery, rs_new_high, rs_new_low, pocket_pivot_cnt, CV_total_cnt,
-                                      trandingViewFormat]
+            try:
 
+                stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), ADR, int(volume_ma50), near_ma_list, bPower3, bPocketPivot,
+                                        # Volatility Contraction
+                                        bInsideBar, bDoubleInsideBar, NR_x, bWickPlay,
+                                        # Demand
+                                        bOEL, bGOEL, bOopsUpReversal, bFailedDownsideWickBO,
+                                        # C/V factors
+                                        lower_low_3, higher_high_3, below_20ma_closed, below_50ma_closed, up_more_than_adr, down_more_than_adr, more_bullish_candle,
+                                        ma20_disparity_more_than_20ptg, close_equal_low, close_equal_high, open_equal_high, open_equal_low, oops_up_reversal,
+                                        squat, squat_recovery, rs_new_high, rs_new_low, pocket_pivot_cnt, CV_total_cnt,
+                                        trandingViewFormat]
+            except:
+                print("Fail to convert dictionary data from cooked properties, ticker: ", ticker)
+                continue
 
         df = pd.DataFrame.from_dict(stock_info_dic).transpose()
         columns = ['Market', 'Industry', 'Industry Score', 'RS Rank','ADR(%)', 'Volume(50avg)','Near MA list(1.5%)', 'Power of 3', 'Pocket Pivot',
