@@ -142,18 +142,18 @@ class JdStockFilteringManager:
         filtered_tickers = []
         atrs_ranking_df = self.sd.get_ATRS_Ranking_df()
 
-        for ticker, inStockData in stock_datas_dic.items():
+        for ticker, stock_data in stock_datas_dic.items():
 
             ### Check for required columns before extracting
-            if not has_required_data(inStockData, n_day_before, ['Close', '150MA', '200MA']):
+            if not has_required_data(stock_data, n_day_before, ['Close', '150MA', '200MA']):
                 continue
 
 
             # (1) Early check: close > 150MA & 200MA
             try:
-                close = inStockData['Close'].iloc[n_day_before]
-                ma150 = inStockData['150MA'].iloc[n_day_before]
-                ma200 = inStockData['200MA'].iloc[n_day_before]
+                close = stock_data['Close'].iloc[n_day_before]
+                ma150 = stock_data['150MA'].iloc[n_day_before]
+                ma200 = stock_data['200MA'].iloc[n_day_before]
             except Exception:
                 continue
 
@@ -163,12 +163,12 @@ class JdStockFilteringManager:
 
             # Gather remaining data
             try:
-                ma150_slope = inStockData['MA150_Slope'].iloc[n_day_before]  # for #8
-                ma200_slope = inStockData['MA200_Slope'].iloc[n_day_before]  # for #8
-                ma50 = inStockData['50MA'].iloc[n_day_before]                # for #2, #3
-                volume_ma50 = inStockData['Volume'].rolling(window=50).mean().iloc[n_day_before]  # for #4, #6
-                ADR = inStockData['ADR'].iloc[n_day_before]                  # for #10
-                last_volume = inStockData['Volume'].iloc[n_day_before]       # for #9
+                ma150_slope = stock_data['MA150_Slope'].iloc[n_day_before]  # for #8
+                ma200_slope = stock_data['MA200_Slope'].iloc[n_day_before]  # for #8
+                ma50 = stock_data['50MA'].iloc[n_day_before]                # for #2, #3
+                volume_ma50 = stock_data['Volume'].rolling(window=50).mean().iloc[n_day_before]  # for #4, #6
+                ADR = stock_data['ADR'].iloc[n_day_before]                  # for #10
+                last_volume = stock_data['Volume'].iloc[n_day_before]       # for #9
             except Exception:
                 continue
 
@@ -182,7 +182,7 @@ class JdStockFilteringManager:
             #  - 50-day avg volume >= 200,000
             #  - close >= 10
             is_50day_volume_close_ok = check_50day_volume_and_close_price(
-                inStockData,
+                stock_data,
                 n_day_before,
                 min_avg_volume=200000,
                 min_close_price=10
@@ -245,20 +245,20 @@ class JdStockFilteringManager:
         filtered_tickers = []
         gisc_df = self.sd.get_GICS_df()
 
-        for ticker, inStockData in stock_datas_dic.items():
+        for ticker, stock_data in stock_datas_dic.items():
 
             ### Check for required columns
-            if not has_required_data(inStockData, n_day_before, ['200MA','ADR']):
+            if not has_required_data(stock_data, n_day_before, ['200MA','ADR']):
                 continue
 
 
             try:
-                close = inStockData['Close'].iloc[n_day_before]
-                ma200 = inStockData['200MA'].iloc[n_day_before]
-                ma50 = inStockData['50MA'].iloc[n_day_before]
-                last_volume = inStockData['Volume'].iloc[n_day_before]
-                volume_ma50 = inStockData['Volume'].rolling(window=50).mean().iloc[n_day_before]
-                ADR = inStockData['ADR'].iloc[n_day_before]
+                close = stock_data['Close'].iloc[n_day_before]
+                ma200 = stock_data['200MA'].iloc[n_day_before]
+                ma50 = stock_data['50MA'].iloc[n_day_before]
+                last_volume = stock_data['Volume'].iloc[n_day_before]
+                volume_ma50 = stock_data['Volume'].rolling(window=50).mean().iloc[n_day_before]
+                ADR = stock_data['ADR'].iloc[n_day_before]
             except Exception:
                 continue
 
@@ -321,16 +321,16 @@ class JdStockFilteringManager:
 
         filtered_tickers = []
 
-        for ticker, inStockData in stock_datas_dic.items():
+        for ticker, stock_data in stock_datas_dic.items():
 
-            if not has_required_data(inStockData, n_day_before, ['Close','Volume']):
+            if not has_required_data(stock_data, n_day_before, ['Close','Volume']):
                 continue
 
             try:
-                close = inStockData['Close'].iloc[n_day_before]
-                volume = inStockData['Volume'].iloc[n_day_before]
-                volume_ma20 = inStockData['Volume'].rolling(window=20).mean().iloc[n_day_before]
-                volume_ma50 = inStockData['Volume'].rolling(window=50).mean().iloc[n_day_before]
+                close = stock_data['Close'].iloc[n_day_before]
+                volume = stock_data['Volume'].iloc[n_day_before]
+                volume_ma20 = stock_data['Volume'].rolling(window=20).mean().iloc[n_day_before]
+                volume_ma50 = stock_data['Volume'].rolling(window=50).mean().iloc[n_day_before]
             except Exception as e:
                 print(e)
                 continue
@@ -340,7 +340,7 @@ class JdStockFilteringManager:
                 continue
 
             # 2) DCR >= 0.5
-            DCR = self.sd.get_DCR_normalized(inStockData, n_day_before)  # n_day_before might be used
+            DCR = self.sd.get_DCR_normalized(stock_data, n_day_before)  # n_day_before might be used
             if DCR < 0.5:
                 continue
 
@@ -351,7 +351,7 @@ class JdStockFilteringManager:
 
             # 4) Price up >= 3% from previous close
             try:
-                prev_close = inStockData['Close'].iloc[n_day_before - 1]
+                prev_close = stock_data['Close'].iloc[n_day_before - 1]
                 change_pct = self.sd.get_percentage_AtoB(prev_close, close)
                 if change_pct < 3:
                     continue
@@ -361,7 +361,7 @@ class JdStockFilteringManager:
 
             # 5) 20-day ADR >= 2.0
             try:
-                ADR = inStockData['ADR'].iloc[n_day_before]
+                ADR = stock_data['ADR'].iloc[n_day_before]
                 if ADR < 2.0:
                     continue
             except Exception:
@@ -391,16 +391,16 @@ class JdStockFilteringManager:
 
         filtered_tickers = []
 
-        for ticker, inStockData in stock_datas_dic.items():
+        for ticker, stock_data in stock_datas_dic.items():
 
-            if not has_required_data(inStockData, n_day_before, ['200MA','ADR']):
+            if not has_required_data(stock_data, n_day_before, ['200MA','ADR']):
                 continue
 
             try:
-                close = inStockData['Close'].iloc[n_day_before]
-                ma200 = inStockData['200MA'].iloc[n_day_before]
-                volume_ma50 = inStockData['Volume'].rolling(window=50).mean().iloc[n_day_before]
-                ADR = inStockData['ADR'].iloc[n_day_before]
+                close = stock_data['Close'].iloc[n_day_before]
+                ma200 = stock_data['200MA'].iloc[n_day_before]
+                volume_ma50 = stock_data['Volume'].rolling(window=50).mean().iloc[n_day_before]
+                ADR = stock_data['ADR'].iloc[n_day_before]
 
             except Exception:
                 continue
@@ -426,7 +426,7 @@ class JdStockFilteringManager:
             try:
                 index_data = self.sd.index_data
                 changes_index = (index_data['Close'] - index_data['Close'].shift(1)) / index_data['Close'].shift(1)
-                changes_ticker = (inStockData['Close'] - inStockData['Close'].shift(1)) / inStockData['Close'].shift(1)
+                changes_ticker = (stock_data['Close'] - stock_data['Close'].shift(1)) / stock_data['Close'].shift(1)
                 rs_strong_cnt = 0
                 for i in range(10):
                     day_idx = n_day_before - i
@@ -457,15 +457,15 @@ class JdStockFilteringManager:
         atrs_ranking_df = self.sd.get_ATRS_Ranking_df()
 
 
-        for ticker, inStockData in stock_datas_dic.items():
+        for ticker, stock_data in stock_datas_dic.items():
 
-            if not has_required_data(inStockData, n_day_before, ['Close','200MA','Volume']):
+            if not has_required_data(stock_data, n_day_before, ['Close','200MA','Volume']):
                 continue
 
             try:
-                close = inStockData['Close'].iloc[n_day_before]
-                ma200 = inStockData['200MA'].iloc[n_day_before]
-                volume = inStockData['Volume'].iloc[n_day_before]
+                close = stock_data['Close'].iloc[n_day_before]
+                ma200 = stock_data['200MA'].iloc[n_day_before]
+                volume = stock_data['Volume'].iloc[n_day_before]
             except Exception:
                 continue
 
@@ -544,17 +544,19 @@ class JdStockFilteringManager:
         all_tickers = self.filter_stock_ALL(stock_datas_dic)
 
         for ticker in all_tickers:
+            stock_data = stock_datas_dic[ticker]
 
-            if not has_required_data(stockData, n_day_before, ['ADR','50MA']):
+
+            if not has_required_data(stock_data, n_day_before, ['ADR','50MA']):
                 continue
 
 
-            stockData = stock_datas_dic[ticker]
+            stock_data = stock_datas_dic[ticker]
             try:
-                ADR = stockData['ADR'].iloc[n_day_before]
-                volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[n_day_before]
-                close = stockData['Close'].iloc[n_day_before]
-                ma50 = stockData['50MA'].iloc[n_day_before]
+                ADR = stock_data['ADR'].iloc[n_day_before]
+                volume_ma50 = stock_data['Volume'].rolling(window=50).mean().iloc[n_day_before]
+                close = stock_data['Close'].iloc[n_day_before]
+                ma50 = stock_data['50MA'].iloc[n_day_before]
             except Exception:
                 continue
 
@@ -586,18 +588,18 @@ class JdStockFilteringManager:
         all_tickers = self.filter_stock_ALL(stock_datas_dic)
 
         for ticker in all_tickers:
-            stockData = stock_datas_dic[ticker]
+            stock_data = stock_datas_dic[ticker]
 
 
-            if not has_required_data(stockData, n_day_before, ['ATR']):
+            if not has_required_data(stock_data, n_day_before, ['ATR']):
                 continue
 
 
             try:
-                ATR = stockData['ATR'].iloc[n_day_before]
-                volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[n_day_before]
-                open_ = stockData['Open'].iloc[n_day_before]
-                close = stockData['Close'].iloc[n_day_before]
+                ATR = stock_data['ATR'].iloc[n_day_before]
+                volume_ma50 = stock_data['Volume'].rolling(window=50).mean().iloc[n_day_before]
+                open_ = stock_data['Open'].iloc[n_day_before]
+                close = stock_data['Close'].iloc[n_day_before]
             except Exception:
                 continue
 
@@ -633,19 +635,19 @@ class JdStockFilteringManager:
         gisc_df = self.sd.get_GICS_df()
 
         for ticker in Mtt_tickers:
-            stockData = stock_datas_dic[ticker]
+            stock_data = stock_datas_dic[ticker]
 
-            if not has_required_data(stockData, n_day_before, ['ADR','200MA']):
+            if not has_required_data(stock_data, n_day_before, ['ADR','200MA']):
                 continue
 
 
             try:
-                ADR = stockData['ADR'].iloc[n_day_before]
-                volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[n_day_before]
-                last_volume = stockData['Volume'].iloc[n_day_before]
-                close = stockData['Close'].iloc[n_day_before]
-                ma200 = stockData['200MA'].iloc[n_day_before]
-                ema21 = stockData['Close'].ewm(span=20, adjust=False).mean().iloc[n_day_before]
+                ADR = stock_data['ADR'].iloc[n_day_before]
+                volume_ma50 = stock_data['Volume'].rolling(window=50).mean().iloc[n_day_before]
+                last_volume = stock_data['Volume'].iloc[n_day_before]
+                close = stock_data['Close'].iloc[n_day_before]
+                ma200 = stock_data['200MA'].iloc[n_day_before]
+                ema21 = stock_data['Close'].ewm(span=20, adjust=False).mean().iloc[n_day_before]
             except Exception:
                 continue
 
@@ -711,17 +713,17 @@ class JdStockFilteringManager:
         gisc_df = self.sd.get_GICS_df()
 
         for ticker in Mtt_tickers:
-            stockData = stock_datas_dic[ticker]
+            stock_data = stock_datas_dic[ticker]
 
-            if not has_required_data(stockData, n_day_before, ['ADR','150MA','200MA']):
+            if not has_required_data(stock_data, n_day_before, ['ADR','150MA','200MA']):
                 continue
 
             try:
-                ADR = stockData['ADR'].iloc[n_day_before]
-                volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[n_day_before]
-                close = stockData['Close'].iloc[n_day_before]
-                ma150 = stockData['150MA'].iloc[n_day_before]
-                ma200 = stockData['200MA'].iloc[n_day_before]
+                ADR = stock_data['ADR'].iloc[n_day_before]
+                volume_ma50 = stock_data['Volume'].rolling(window=50).mean().iloc[n_day_before]
+                close = stock_data['Close'].iloc[n_day_before]
+                ma150 = stock_data['150MA'].iloc[n_day_before]
+                ma200 = stock_data['200MA'].iloc[n_day_before]
             except Exception:
                 continue
 
@@ -786,9 +788,9 @@ class JdStockFilteringManager:
         gisc_df = self.sd.get_GICS_df()
 
         for ticker in all_tickers:
-            stockData = stock_datas_dic[ticker]
+            stock_data = stock_datas_dic[ticker]
 
-            if not has_required_data(stockData, n_day_before - 1, ['ADR']):
+            if not has_required_data(stock_data, n_day_before - 1, ['ADR']):
                 continue
 
 
@@ -797,11 +799,11 @@ class JdStockFilteringManager:
                 if sector == 'Healthcare':
                     continue
 
-                ADR_1d_ago = stockData['ADR'].iloc[n_day_before - 1]
-                open_ = stockData['Open'].iloc[n_day_before]
-                high_1d_ago = stockData['High'].iloc[n_day_before - 1]
-                close_1d_ago = stockData['Close'].iloc[n_day_before - 1]
-                close_ = stockData['Close'].iloc[n_day_before]
+                ADR_1d_ago = stock_data['ADR'].iloc[n_day_before - 1]
+                open_ = stock_data['Open'].iloc[n_day_before]
+                high_1d_ago = stock_data['High'].iloc[n_day_before - 1]
+                close_1d_ago = stock_data['Close'].iloc[n_day_before - 1]
+                close_ = stock_data['Close'].iloc[n_day_before]
             except Exception:
                 continue
 
@@ -821,8 +823,8 @@ class JdStockFilteringManager:
                 continue
 
             try:
-                volume_ma50_1d_ago = stockData['Volume'].rolling(window=50).mean().iloc[n_day_before - 1]
-                volume_ = stockData['Volume'].iloc[n_day_before]
+                volume_ma50_1d_ago = stock_data['Volume'].rolling(window=50).mean().iloc[n_day_before - 1]
+                volume_ = stock_data['Volume'].iloc[n_day_before]
             except Exception:
                 continue
 
@@ -857,10 +859,10 @@ class JdStockFilteringManager:
         gisc_df = self.sd.get_GICS_df()
 
         for ticker in all_tickers:
-            stockData = stock_datas_dic[ticker]
+            stock_data = stock_datas_dic[ticker]
 
 
-            if not has_required_data(stockData, n_day_before - 1, ['ADR']):
+            if not has_required_data(stock_data, n_day_before - 1, ['ADR']):
                 continue
 
             try:
@@ -868,11 +870,11 @@ class JdStockFilteringManager:
                 if sector == 'Healthcare':
                     continue
 
-                ADR_1d_ago = stockData['ADR'].iloc[n_day_before - 1]
-                open_ = stockData['Open'].iloc[n_day_before]
-                high_1d_ago = stockData['High'].iloc[n_day_before - 1]
-                close_1d_ago = stockData['Close'].iloc[n_day_before - 1]
-                close_ = stockData['Close'].iloc[n_day_before]
+                ADR_1d_ago = stock_data['ADR'].iloc[n_day_before - 1]
+                open_ = stock_data['Open'].iloc[n_day_before]
+                high_1d_ago = stock_data['High'].iloc[n_day_before - 1]
+                close_1d_ago = stock_data['Close'].iloc[n_day_before - 1]
+                close_ = stock_data['Close'].iloc[n_day_before]
             except Exception:
                 continue
 
@@ -890,8 +892,8 @@ class JdStockFilteringManager:
                 continue
 
             try:
-                volume_ma50_1d_ago = stockData['Volume'].rolling(window=50).mean().iloc[n_day_before - 1]
-                volume_ = stockData['Volume'].iloc[n_day_before]
+                volume_ma50_1d_ago = stock_data['Volume'].rolling(window=50).mean().iloc[n_day_before - 1]
+                volume_ = stock_data['Volume'].iloc[n_day_before]
             except Exception:
                 continue
 
@@ -976,8 +978,8 @@ class JdStockFilteringManager:
 
         for gap_date, gap_tickers in gap_date_tickers_dic.items():
             for ticker in gap_tickers:
-                stockData : pd.DataFrame = all_stock_datas_dic[ticker]
-                d0_index = sd.date_to_index(stockData, gap_date)
+                stock_data : pd.DataFrame = all_stock_datas_dic[ticker]
+                d0_index = sd.date_to_index(stock_data, gap_date)
                 ticker_date = f"{ticker}_{gap_date}"
 
                 # Calculate day indices
@@ -996,20 +998,20 @@ class JdStockFilteringManager:
                 day_n_performances = []
                 profile_end_day = d0_index + profile_period -1
             
-                d0_open = stockData['Open'].iloc[d0_index]
-                d0_close = stockData['Close'].iloc[d0_index]
-                d0_low = stockData['Low'].iloc[d0_index]
-                d0_high = stockData['High'].iloc[d0_index]
-                d0_ma200 = stockData['200MA'].iloc[d0_index]
+                d0_open = stock_data['Open'].iloc[d0_index]
+                d0_close = stock_data['Close'].iloc[d0_index]
+                d0_low = stock_data['Low'].iloc[d0_index]
+                d0_high = stock_data['High'].iloc[d0_index]
+                d0_ma200 = stock_data['200MA'].iloc[d0_index]
 
-                close_1d_ago = stockData['Close'].iloc[d0_index - 1]
-                ADR_1d_ago = stockData['ADR'].iloc[d0_index - 1]
-                volume_ma50_1d_ago = stockData['Volume'].rolling(window=50).mean().iloc[d0_index-1]
-                d0_volume = stockData['Volume'].iloc[d0_index]
+                close_1d_ago = stock_data['Close'].iloc[d0_index - 1]
+                ADR_1d_ago = stock_data['ADR'].iloc[d0_index - 1]
+                volume_ma50_1d_ago = stock_data['Volume'].rolling(window=50).mean().iloc[d0_index-1]
+                d0_volume = stock_data['Volume'].iloc[d0_index]
 
                 
                 # DR% (Daily Range)
-                daily_range_percentages = stockData['High'] / stockData['Low']
+                daily_range_percentages = stock_data['High'] / stock_data['Low']
 
                 # ADR(%) 20 day later since gap
                 # 입수합병 필터링
@@ -1027,7 +1029,7 @@ class JdStockFilteringManager:
                 # [day_n_performances] N day 이후 성과[
                 for day_n_index in day_n_indices:
                     if day_n_index != 0:
-                        day_n_close = stockData['Close'].iloc[day_n_index]
+                        day_n_close = stock_data['Close'].iloc[day_n_index]
                         day_n_performance = sd.get_percentage_AtoB(d0_close, day_n_close)
                         day_n_performances.append(day_n_performance)
                     else:
@@ -1080,7 +1082,7 @@ class JdStockFilteringManager:
                 # [first_ma_touch_day]
                 first_ma_touch_day = profile_period
                 for i in range(1, profile_period):
-                    if sd.check_ma_touch(stockData, 10, True, d0_index + i):
+                    if sd.check_ma_touch(stock_data, 10, True, d0_index + i):
                         first_ma_touch_day = i
                         break
 
@@ -1088,21 +1090,21 @@ class JdStockFilteringManager:
                 # [d0_open_violation_day]
                 d0_open_violation_day = profile_period
                 for i in range(1, profile_period):
-                    if sd.check_undercut_price(stockData, d0_open, d0_index + i):
+                    if sd.check_undercut_price(stock_data, d0_open, d0_index + i):
                         d0_open_violation_day = i
                         break
 
                 # [d0_low_violation_day]
                 d0_low_violation_day = profile_period
                 for i in range(1, profile_period):
-                    if sd.check_undercut_price(stockData, d0_low, d0_index + i):
+                    if sd.check_undercut_price(stock_data, d0_low, d0_index + i):
                         d0_low_violation_day = i
                         break
 
                 # [HVC_violation_first_day]
                 HVC_violation_first_day = profile_period
                 for i in range(1, profile_period):
-                    if sd.check_undercut_price(stockData, d0_close, d0_index + i):
+                    if sd.check_undercut_price(stock_data, d0_close, d0_index + i):
                         HVC_violation_first_day = i
                         break
 
@@ -1112,7 +1114,7 @@ class JdStockFilteringManager:
                 HVC_violation_last_day = profile_period
                 HVC_violation_cnt = 0
                 for i in range(1, profile_period):
-                    if sd.check_undercut_price(stockData, d0_close, d0_index + i):
+                    if sd.check_undercut_price(stock_data, d0_close, d0_index + i):
                         HVC_violation_last_day = i
                         HVC_violation_cnt = HVC_violation_cnt + 1
                         
@@ -1124,26 +1126,26 @@ class JdStockFilteringManager:
                 # start_pos는 시작 위치입니다. 예를 들어, 0은 데이터프레임의 첫 번째 행입니다.
                 start_pos = d0_index + 1
                 # 5일간의 가장 낮은 가격의 위치를 구합니다.
-                lowest_price_pos = stockData['Low'].iloc[start_pos:start_pos + 5].idxmin()
+                lowest_price_pos = stock_data['Low'].iloc[start_pos:start_pos + 5].idxmin()
                 # 실제 위치를 얻기 위해 데이터프레임의 인덱스와 비교합니다.
-                lowest_index_pos = stockData.index.get_loc(lowest_price_pos)
+                lowest_index_pos = stock_data.index.get_loc(lowest_price_pos)
                 # 계속해서 사용하는 인덱스는 마이너스(-) 인덱스임.
-                lowest_index_pos = lowest_index_pos - len(stockData)
+                lowest_index_pos = lowest_index_pos - len(stock_data)
                 alpha_window_lowest_day = lowest_index_pos - d0_index
 
                 # [alpha_window_lowest_pct_from_HVC]
-                alpha_window_lowest_price = stockData['Low'].iloc[lowest_index_pos]
+                alpha_window_lowest_price = stock_data['Low'].iloc[lowest_index_pos]
                 alpha_window_lowest_pct_from_HVC = sd.get_percentage_AtoB(d0_close, alpha_window_lowest_price)
 
                 # [alpha_window_highest_day]
                 start_pos = d0_index + 1
-                highest_price_pos = stockData['High'].iloc[start_pos:start_pos + 5].idxmax()
-                highest_index_pos = stockData.index.get_loc(highest_price_pos)
-                highest_index_pos = highest_index_pos - len(stockData)
+                highest_price_pos = stock_data['High'].iloc[start_pos:start_pos + 5].idxmax()
+                highest_index_pos = stock_data.index.get_loc(highest_price_pos)
+                highest_index_pos = highest_index_pos - len(stock_data)
                 alpha_window_highest_day = highest_index_pos - d0_index
 
                 # [alpha_window_highest_pct_from_HVC]
-                alpha_window_highest_price = stockData['High'].iloc[highest_index_pos]
+                alpha_window_highest_price = stock_data['High'].iloc[highest_index_pos]
                 alpha_window_highest_pct_from_HVC = sd.get_percentage_AtoB(d0_close, alpha_window_highest_price)
 
                 # [HVC_recovery_day_from_alpha_window_lowest]
@@ -1154,7 +1156,7 @@ class JdStockFilteringManager:
                 HVC_recovery_day_from_alpha_window_lowest = profile_period
                 for i in range(lowest_index_pos, profile_end_day + 1):
                     cnt_from_lowest_day = i - lowest_index_pos
-                    c = stockData['Close'].iloc[i]
+                    c = stock_data['Close'].iloc[i]
                     if c > d0_close:
                         HVC_recovery_day_from_alpha_window_lowest = cnt_from_lowest_day
                         break
