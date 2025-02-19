@@ -299,6 +299,10 @@ class JdStockFilteringManager:
 
             if is_healthcare:
                 continue
+                        
+                        
+            filtered_tickers.append(ticker)
+
 
         return filtered_tickers
 
@@ -459,7 +463,7 @@ class JdStockFilteringManager:
 
         for ticker, stock_data in stock_datas_dic.items():
 
-            if not has_required_data(stock_data, n_day_before, ['Close','200MA','Volume']):
+            if not has_required_data(stock_data, n_day_before, ['Close','Volume']):
                 continue
 
             try:
