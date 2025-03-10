@@ -1,12 +1,12 @@
 
 import os
 
-data_folder = os.path.join(os.getcwd(), 'StockData')
-metadata_folder = os.path.join(data_folder, 'MetaData')
-ui_folder = os.path.join(os.getcwd(), 'UI')
-screenshot_folder = os.path.join(metadata_folder, 'ScreenShot')
-filteredStocks_folder = os.path.join(metadata_folder, "FilteredStocks")
-profiles_folder = os.path.join(metadata_folder, "Profiles")
+DATA_FOLDER = os.path.join(os.getcwd(), 'StockData')
+METADATA_FOLDER = os.path.join(DATA_FOLDER, 'MetaData')
+UI_FOLDER = os.path.join(os.getcwd(), 'UI')
+SCREENSHOT_FOLDER = os.path.join(METADATA_FOLDER, 'ScreenShot')
+FILTERED_STOCKS_FOLDER = os.path.join(METADATA_FOLDER, "FilteredStocks")
+PROFILES_FOLDER = os.path.join(METADATA_FOLDER, "Profiles")
 
 
 

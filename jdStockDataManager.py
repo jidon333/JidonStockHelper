@@ -20,72 +20,65 @@ import time
 import random
 import concurrent.futures
 
-
-from jdGlobal import get_yes_no_input
-from jdGlobal import data_folder
-from jdGlobal import metadata_folder
-from jdGlobal import screenshot_folder
-from jdGlobal import filteredStocks_folder
-from jdGlobal import profiles_folder
-
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Color
 
 
+from jdGlobal import get_yes_no_input
+from jdGlobal import (
+    DATA_FOLDER,
+    METADATA_FOLDER,
+    FILTERED_STOCKS_FOLDER,
+    SCREENSHOT_FOLDER,
+    PROFILES_FOLDER
+)
+
+from jd_io_utils import (
+    ensure_directories_exist,
+    load_csv_with_date_index,
+    save_df_to_csv,
+    save_to_json,
+    load_from_json,
+    save_pickle,
+    load_pickle
+)
+
+# ----------------------------
+# 미국 시장 달력
+# ----------------------------
 nyse = mcal.get_calendar('NYSE')
 
-
+# ----------------------------
+# 전역 리스트/딕셔너리
+# ----------------------------
 exception_ticker_list = {}
 sync_fail_ticker_list = []
-
-if not os.path.exists(data_folder):
-    os.makedirs(data_folder)
-
-if not os.path.exists(metadata_folder):
-    os.makedirs(metadata_folder)
-
-if not os.path.exists(filteredStocks_folder):
-    os.makedirs(filteredStocks_folder)
-
-if not os.path.exists(screenshot_folder):
-    os.makedirs(screenshot_folder)
-
-if not os.path.exists(profiles_folder):
-    os.makedirs(profiles_folder)
-
 
 
 # for test
 stockIterateLimit = 99999
 
-# 딕셔너리를 JSON 파일로 저장
-def save_to_json(data, filename):
-    full_path = os.path.join(metadata_folder, f'{filename}.json')
-    with open(full_path, 'w', encoding='utf-8') as file:
-        json.dump(data, file, indent=4, ensure_ascii=False)
-    print(f"dictionary data is saved as {full_path} ")
-
-# JSON 파일을 딕셔너리로 로드
-def load_from_json(filename):
-    full_path = os.path.join(metadata_folder, f'{filename}.json')
-
-    with open(full_path, 'r', encoding='utf-8') as file:
-        loaded_data = json.load(file)
-    return loaded_data
-
 
 class JdStockDataManager:
     def __init__(self):
+        """
+        생성자에서 ensure_directories_exist()를 호출해
+        모든 폴더(DATA_FOLDER, METADATA_FOLDER 등)가 존재하는지 확인하고,
+        없으면 생성.
+        """
+
+        ensure_directories_exist()
+
+        # S&P500 지수 데이터(기본값)
         self.index_data = fdr.DataReader('US500')
         self.stock_GICS_df = pd.DataFrame()
 
         self.long_term_industry_rank_df = pd.DataFrame()
         self.short_term_industry_rank_df = pd.DataFrame()
-
         self.atrs_ranking_df = pd.DataFrame()
 
 
-        # ---------- cache datas -------------#
+        # Cache
         self.reset_caches()
 
     def reset_caches(self):
@@ -93,15 +86,26 @@ class JdStockDataManager:
         self.cache_getStockDatasFromCsv_out_tickers = None
         self.cache_getStockDatasFromCsv_out_stock_datas_dic = None
 
-# ------------------- private -----------------------------------------------
+
+
+    # ------------------------------------------------
+    # [ Private ]: 내부 함수들
+    # ------------------------------------------------
 
     def _get_csv_names(self):
-        csv_names =[os.path.splitext(f)[0] for f in os.listdir(data_folder) if f.endswith('.csv')]
+        """
+        data 폴더 내 모든 .csv 파일명을 ticker 리스트로 반환
+        예: SPY.csv -> 'SPY'
+        """
+        csv_names =[os.path.splitext(f)[0] for f in os.listdir(DATA_FOLDER) if f.endswith('.csv')]
         return csv_names
 
 
 
     def _CookIndexData(self, index_data, n = 14):
+        """
+        S&P500 (index_data)에 ATR, TC, ATC 컬럼을 추가
+        """
         index_new_data = index_data
 
         # TR(True Range) 계산
@@ -131,7 +135,10 @@ class JdStockDataManager:
         return index_new_data
 
     def _CookStockData(self, stock_data : pd.DataFrame):
-
+        """
+        종목별 주가 데이터를 받아서
+        RS, MA, ATR, TRS, ATRS 등 각종 지표를 추가
+        """
         new_data = stock_data
 
         try:
@@ -207,13 +214,6 @@ class JdStockDataManager:
             TrueHighMax = new_data['High'].rolling(window=n).max()
             TrueLowMin = new_data['Low'].rolling(window=n).min()
 
-            # Choppiness와 표준편차는 눈으로 보는게 낫다. 갭 상승, 돌파 같은 주요 모멘텀을 고려하지 않기 때문.
-            # Choppiness Index 계산
-            #new_data['ChoppinessIndex'] = 100 * np.log10(TrueRangeSum / (TrueHighMax - TrueLowMin)) / np.log10(n)
-
-            # # 표준편차
-            # new_data['STD'] = new_data['Close'].rolling(window=14).std()
-
             new_index_data = self._CookIndexData(self.index_data, 14)
         
             # TRS(True Relative Strength)
@@ -263,7 +263,7 @@ class JdStockDataManager:
 
         return new_data
     
-    # fetch_data_with_timeout_process는 executor를 인자로 받아 실행하도록 합니다.
+    # fetch_data_with_timeout_process는 executor를 인자로 받아 실행
     def fetch_data_with_timeout_process(self, executor, ticker, start_date, timeout_sec=10):
         """
         Calls fdr.DataReader for the given ticker and start_date in a separate process using the provided executor.
@@ -384,10 +384,14 @@ class JdStockDataManager:
             # 반드시 executor를 종료
             executor.shutdown(wait=False)
 
-        with open("DataReader_exception.json", "w") as outfile:
-            json.dump(exception_ticker_list, outfile)
+
+        save_to_json(exception_ticker_list, "DataReader_exception")
+
    
     def _getAllDatasFromWeb(self, daysNum = 5*365, all_list = pd.DataFrame()):
+        """
+        NYSE+NASDAQ 리스트 전체(또는 주어진 all_list)에 대해 웹에서 데이터를 가져옴.
+        """
         print("--- getAllDatasFromWeb ---")
 
         if all_list.empty:
@@ -408,114 +412,25 @@ class JdStockDataManager:
         return out_data_dic
 
     def _ExportDatasToCsv(self, data_dic):
+        """
+        딕셔너리 {ticker: DataFrame}을 각각 CSV로 저장.
+        """
         i = 0
-        for ticker, data in data_dic.items():
-            try:
-                save_path = os.path.join('StockData', f"{ticker}.csv")
-                data.to_csv(save_path, encoding='utf-8-sig')
-                i = i+1
-                print(f"{ticker}.csv", "is saved! {}/{}".format(i, len(data_dic.items())))
-            except Exception as e:
-                print(f"An error occurred: {e}")
-
-    def getStockListFromLocalCsv(self):
-        
-        # [Optimize] 메모리 캐시가 있으면 먼저 메모리 캐시 사용
-        if not self.cache_StockListFromLocalCsv.empty:
-            return self.cache_StockListFromLocalCsv
-
-        # [Optimize] 아니면 데이터 캐시 사용후 메모리에 적재
-        try:
-            with open('cache_StockListFromLocalCsv', "rb") as f:
-                all_list = pickle.load(f)
-                self.cache_StockListFromLocalCsv = all_list
-                return all_list
-
-        except FileNotFoundError:
-            nyse_list = self.get_fdr_stock_list('NYSE')
-            nasdaq_list = self.get_fdr_stock_list('NASDAQ')
-            all_list = pd.concat([nyse_list, nasdaq_list])
-
-            # all_list에서 Symbol이 csv_names에 있는 경우만 추려냄
-            all_list = all_list[all_list['Symbol'].isin(self._get_csv_names())]
-
-            # 결과 로컬에 캐싱.(가끔 전체 주식 리스트 업데이트할때 캐시 지울 필요가 있따.)
-            with open('cache_StockListFromLocalCsv', "wb") as f:
-                pickle.dump(all_list, f)
-
-        return all_list
-
-    def _SyncStockDatas(self, daysToSync = 14):
-        print("-------------------SyncStockDatas-----------------\n ") 
-
-        all_list = self.getStockListFromLocalCsv()
-        
-        sync_data_dic = {}
-
-        stock_datas_fromWeb = self._getAllDatasFromWeb(daysToSync, all_list)
-
-        tickers = []
-        stock_datas_fromCsv = {}
-        self.getStockDatasFromCsv(all_list, tickers, stock_datas_fromCsv)
+        total_len = len(data_dic.items())
+        for ticker, df in data_dic.items():
+            save_df_to_csv(df, ticker)
+            i = i+1
+            print(f"{ticker}.csv is saved! {i}/{total_len}")
 
 
-        i = 0
-        tickerNum = len(tickers)
 
-        # tickers를 csv 파일 리스트로부터 가져오기 때문에 최근 상장한 주식은 포함하지 못하는 단점이 있다.
-        # 이건 주기적으로 전체 데이터를 받거나 해야될듯?
-        for ticker in tickers:
-            csvData = stock_datas_fromCsv.get(ticker, pd.DataFrame())
-            webData = stock_datas_fromWeb.get(ticker, pd.DataFrame())
-
-            if csvData.empty or webData.empty:
-                sync_fail_ticker_list.append(ticker)
-                continue
-
-            # 새로운 데이터프레임을 생성하여 webData_copy에 할당합니다.
-            webData_copy = webData.copy()
-
-            # IsOriginData_NaN 레이블을 추가하고, 기본값으로 False를 할당합니다.
-            csvData['IsOriginData_NaN'] = False
-            webData_copy['IsOriginData_NaN'] = False
-
-            # forward fill을 사용하여 NaN값을 이전 값으로 대체하면서, IsOriginData_NaN 레이블을 변경합니다.
-            #webData_copy.fillna(method='ffill', inplace=True)
-            webData_copy.ffill(inplace=True)
-            webData_copy.loc[webData['Open'].isnull(), 'IsOriginData_NaN'] = True
-
-            webData = webData_copy
-
-            # remove duplicate index from csvData.
-            csvData = csvData[~csvData.index.isin(webData.index)]
-
-
-            try:
-                # concatenate the two dataframes
-                df = pd.concat([csvData, webData])
-                df = self._CookStockData(df)
-                sync_data_dic[ticker] = df
-
-                i = i+1
-                print(ticker, ' sync Done. {}/{}'.format(i, tickerNum))
-
-            except Exception as e:
-                print(f"An error occurred during sync: {e}")
-                name = webData.loc[webData['Symbol'] == ticker, 'Name'].values[0]
-                exception_ticker_list[ticker] = name
-
-        self._ExportDatasToCsv(sync_data_dic)
-
-        with open('sync_fail_list.txt', 'w') as f:
-            outputTexts = str()
-            for ticker in sync_fail_ticker_list:
-                outputTexts += str(ticker) + '\n'
-            f.write(outputTexts)
-
-
+    
     def _getATRCondition_df(self, stock_list, ticker):
+        """
+        ATR 기반으로 condition A/B를 계산.
+        """
         try:
-            save_path = os.path.join('StockData', f"{ticker}.csv")
+            save_path = os.path.join(DATA_FOLDER, f"{ticker}.csv")
             data = pd.read_csv(save_path)
             data.set_index('Date', inplace=True)
 
@@ -565,7 +480,7 @@ class JdStockDataManager:
 
     def _getCloseChanges_df(self, stock_list, ticker):
         try:
-            save_path = os.path.join('StockData', f"{ticker}.csv")
+            save_path = os.path.join(DATA_FOLDER, f"{ticker}.csv")
             data = pd.read_csv(save_path)
             data.set_index('Date', inplace=True)
             returns = (data['Close'] - data['Close'].shift(1)) / data['Close'].shift(1)
@@ -595,25 +510,144 @@ class JdStockDataManager:
         daily_changes['ma150_changes'] = daily_changes['sum'].rolling(150).mean()
 
         return daily_changes
+    
+
+    
+    def _SyncStockDatas(self, daysToSync = 14):
+        """
+        로컬 CSV에 있는 각 종목별 데이터와, 웹에서 가져온 최근 N일 데이터를 합쳐서
+        CSV를 갱신합니다(중복 제거, 지표 재계산).
+        """
+
+        print("-------------------SyncStockDatas-----------------\n ") 
+
+        all_list = self.getStockListFromLocalCsv()
+        sync_data_dic = {}
+        stock_datas_fromWeb = self._getAllDatasFromWeb(daysToSync, all_list)
+
+        tickers = []
+        stock_datas_fromCsv = {}
+        self.getStockDatasFromCsv(all_list, tickers, stock_datas_fromCsv)
 
 
-# ------------------- public -----------------------------------------------
+        i = 0
+        tickerNum = len(tickers)
+
+        # tickers를 csv 파일 리스트로부터 가져오기 때문에 최근 상장한 주식은 포함하지 못하는 단점이 있다.
+        # 이건 주기적으로 전체 데이터를 받거나 해야될듯?
+        for ticker in tickers:
+            csvData = stock_datas_fromCsv.get(ticker, pd.DataFrame())
+            webData = stock_datas_fromWeb.get(ticker, pd.DataFrame())
+
+            if csvData.empty or webData.empty:
+                sync_fail_ticker_list.append(ticker)
+                continue
+
+            # 새로운 데이터프레임을 생성하여 webData_copy에 할당
+            webData_copy = webData.copy()
+
+            # IsOriginData_NaN 레이블을 추가하고, 기본값으로 False를 할당
+            csvData['IsOriginData_NaN'] = False
+            webData_copy['IsOriginData_NaN'] = False
+
+            # forward fill을 사용하여 NaN값을 이전 값으로 대체하면서, IsOriginData_NaN 레이블을 변경
+            #webData_copy.fillna(method='ffill', inplace=True)
+            webData_copy.ffill(inplace=True)
+            webData_copy.loc[webData['Open'].isnull(), 'IsOriginData_NaN'] = True
+
+            webData = webData_copy
+
+            # remove duplicate index from csvData.
+            csvData = csvData[~csvData.index.isin(webData.index)]
+
+
+            try:
+                # concatenate the two dataframes
+                df = pd.concat([csvData, webData])
+                df = self._CookStockData(df)
+                sync_data_dic[ticker] = df
+
+                i = i+1
+                print(f"{ticker} sync Done. {i}/{tickerNum}")
+
+            except Exception as e:
+                print(f"An error occurred during sync: {e}")
+                name = webData.loc[webData['Symbol'] == ticker, 'Name'].values[0]
+                exception_ticker_list[ticker] = name
+
+        self._ExportDatasToCsv(sync_data_dic)
+
+        with open('sync_fail_list.txt', 'w') as f:
+            outputTexts = str()
+            for ticker in sync_fail_ticker_list:
+                outputTexts += str(ticker) + '\n'
+            f.write(outputTexts)
+
+
+
+    # ------------------------------------------------
+    # [ Public Methods ]
+    # ------------------------------------------------
+
+
+    def getStockListFromLocalCsv(self):
+        
+        """
+        NYSE / NASDAQ 목록 중에서 local CSV(StockData 폴더)에 실제로 존재하는 티커들만
+        DataFrame 형태로 반환.
+        """
+
+        # [Optimize] 메모리 캐시가 있으면 먼저 메모리 캐시 사용
+        if not self.cache_StockListFromLocalCsv.empty:
+            return self.cache_StockListFromLocalCsv
+        
+
+        try:
+            # pickle 캐시 시도
+            cache_data = load_pickle('cache_StockListFromLocalCsv', folder=METADATA_FOLDER)
+            if cache_data is not None:
+                self.cache_StockListFromLocalCsv = cache_data
+                return cache_data
+        except:
+            pass
+
+
+        # cache 없으면 직접 데이터 수집
+        nyse_list = self.get_fdr_stock_list('NYSE')
+        nasdaq_list = self.get_fdr_stock_list('NASDAQ')
+        all_list = pd.concat([nyse_list, nasdaq_list])
+
+        csv_names = self._get_csv_names()
+        all_list = all_list[all_list['Symbol'].isin(csv_names)]
+
+        # pickle로 로컬 캐싱
+        save_pickle(all_list, 'cache_StockListFromLocalCsv', folder=METADATA_FOLDER)
+
+        self.cache_StockListFromLocalCsv = all_list
+        return all_list
+
+
+
 
     def get_fdr_stock_list(self, market : str, daysNum = 365*5, bIgnore_no_local_tickers = True):
         """
-        bIgnore_no_local_tickers: Set False if you want to get all stock list from web when you have no local stock data.
+        fdr.StockListing(market)을 호출하여 종목 리스트를 가져오되,
+        bIgnore_no_local_tickers=True 시 현재 CSV 폴더에 없는 티커는 제외.
         """
+
         fdr_stock_list = pd.DataFrame()
         bHaveCache = False 
         cacheFileName = f"cache_fdr_{market}_list"
 
-        if market != 'NASDAQ' and market != 'NYSE' and market != 'S&P500':
-            print(f'get_fdr_stock_list(), invalid market type {0}!', market)
+        if market not in ['NASDAQ', 'NYSE', 'S&P500']:
+            print(f"get_fdr_stock_list(), invalid market type {market}!")
             return fdr_stock_list
 
         try:
-            with open(cacheFileName, "rb") as f:
-                fdr_stock_list = pickle.load(f)
+            # pickle 로드
+            loaded_data = load_pickle(cacheFileName, folder=METADATA_FOLDER)
+            if loaded_data is not None:
+                fdr_stock_list = loaded_data
                 bHaveCache = True
         except Exception as e:
             print(e)
@@ -623,11 +657,12 @@ class JdStockDataManager:
         if not bHaveCache:
             fdr_stock_list = fdr.StockListing(market)
             if bIgnore_no_local_tickers:
-                fdr_stock_list = fdr_stock_list[fdr_stock_list['Symbol'].isin(self._get_csv_names())]
+                csv_names = self._get_csv_names()
+                fdr_stock_list = fdr_stock_list[fdr_stock_list['Symbol'].isin(csv_names)]
+
 
             print('there\'s no cache. save the result newly.')
-            with open(cacheFileName, "wb") as f:
-                pickle.dump(fdr_stock_list, f)
+            save_pickle(fdr_stock_list, cacheFileName, folder=METADATA_FOLDER)
 
         return fdr_stock_list
     
@@ -639,7 +674,7 @@ class JdStockDataManager:
         stock_list = self.getStockListFromLocalCsv()
         self.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, stock_data_len, True)
         up_down_condition_df = self._getUpDownConditions_df(stock_list)
-        up_down_condition_df.to_csv(os.path.join(metadata_folder, 'ATR_Expansion_Counts.csv'))
+        up_down_condition_df.to_csv(os.path.join(METADATA_FOLDER, 'ATR_Expansion_Counts.csv'))
     
 
     def cookUpDownDatas(self, daysNum = 365*5):
@@ -662,13 +697,13 @@ class JdStockDataManager:
         valid_end_date = trading_days[-1]
 
         daily_changes_nyse_df = self._getUpDownChanges_df(nyse_list)
-        daily_changes_nyse_df.to_csv(os.path.join(metadata_folder, 'up_down_nyse.csv'))
+        daily_changes_nyse_df.to_csv(os.path.join(METADATA_FOLDER, 'up_down_nyse.csv'))
 
         daily_changes_nasdaq_df = self._getUpDownChanges_df(nasdaq_list)
-        daily_changes_nasdaq_df.to_csv(os.path.join(metadata_folder, 'up_down_nasdaq.csv'))
+        daily_changes_nasdaq_df.to_csv(os.path.join(METADATA_FOLDER, 'up_down_nasdaq.csv'))
 
         daily_changes_sp500_df = self._getUpDownChanges_df(sp500_list)
-        daily_changes_sp500_df.to_csv(os.path.join(metadata_folder, 'up_down_sp500.csv'))
+        daily_changes_sp500_df.to_csv(os.path.join(METADATA_FOLDER, 'up_down_sp500.csv'))
 
         with open("up_down_exception.json", "w") as outfile:
                 json.dump(exception_ticker_list, outfile, indent = 4)
@@ -736,7 +771,7 @@ class JdStockDataManager:
         new_df = pd.DataFrame(data)
         new_df['Date'] = pd.to_datetime(data['Date'])
         new_df.set_index('Date', inplace=True)
-        save_path = os.path.join(metadata_folder, f'{fileName}.csv')
+        save_path = os.path.join(METADATA_FOLDER, f'{fileName}.csv')
         if bAccumulateToExistingData:
             local_df = pd.read_csv(save_path)
             local_df['Date'] = pd.to_datetime(local_df['Date'])
@@ -757,7 +792,11 @@ class JdStockDataManager:
             fileName: {fileName}_Counts.csv 
             """
             # ------------ nyse -------------------
-            data_path = os.path.join(metadata_folder, f"{fileName}_Counts.csv")
+            data_path = os.path.join(METADATA_FOLDER, f"{fileName}_Counts.csv")
+            if not os.path.exists(data_path):
+                print(f"No file: {data_path}")
+                return pd.DataFrame()
+            
             data = pd.read_csv(data_path)
 
             # 문자열을 datetime 객체로 변경
@@ -858,7 +897,7 @@ class JdStockDataManager:
         updown_sp500 = pd.DataFrame()
 
         # ------------ nyse -------------------
-        nyse_file_path = os.path.join(metadata_folder, "up_down_nyse.csv")
+        nyse_file_path = os.path.join(METADATA_FOLDER, "up_down_nyse.csv")
         data = pd.read_csv(nyse_file_path)
 
         # 문자열을 datetime 객체로 변경
@@ -879,7 +918,7 @@ class JdStockDataManager:
 
 
         # ------------ nasdaq -------------------
-        nasdaq_file_path = os.path.join(metadata_folder, "up_down_nasdaq.csv")
+        nasdaq_file_path = os.path.join(METADATA_FOLDER, "up_down_nasdaq.csv")
         data = pd.read_csv(nasdaq_file_path)
 
         # 문자열을 datetime 객체로 변경
@@ -892,7 +931,7 @@ class JdStockDataManager:
         updown_nasdaq = data
 
         # ------------ sp500 -------------------
-        sp500_file_path = os.path.join(metadata_folder, "up_down_sp500.csv")
+        sp500_file_path = os.path.join(METADATA_FOLDER, "up_down_sp500.csv")
         data = pd.read_csv(sp500_file_path)
 
         # 문자열을 datetime 객체로 변경
@@ -906,7 +945,7 @@ class JdStockDataManager:
 
         return updown_nyse, updown_nasdaq, updown_sp500
 
-    def getStockDatasFromCsv(self, stock_list, out_tickers : list[str], out_stock_datas_dic : dict[str, pd.DataFrame], daysNum = 365*5, bUseCacheData = False):
+    def getStockDatasFromCsv(self, stock_list : pd.DataFrame, out_tickers : list[str], out_stock_datas_dic : dict[str, pd.DataFrame], daysNum = 365*5, bUseCacheData = False):
         """
         - Caution! : if bUseCacheData is true, just return last funciton result no matter what other parameter it is. 
         - It mean that your daysNum param will affect nothing if you use cache data.
@@ -921,20 +960,19 @@ class JdStockDataManager:
                 if self.cache_getStockDatasFromCsv_out_tickers != None:
                     out_tickers.extend(self.cache_getStockDatasFromCsv_out_tickers)
                 else:
-                    with open('cache_getStockDatasFromCsv_out_tickers', "rb") as f:
-                        cache_data = pickle.load(f)
+                    cache_data = load_pickle('cache_getStockDatasFromCsv_out_tickers', folder=METADATA_FOLDER)
+                    if cache_data is not None:
                         out_tickers.extend(cache_data)
-                        self.cache_getStockDatasFromCsv_out_tickers = out_tickers
+                        self.cache_getStockDatasFromCsv_out_tickers = cache_data
 
                 # [Optimize]
                 if self.cache_getStockDatasFromCsv_out_stock_datas_dic != None:
                     out_stock_datas_dic.update(self.cache_getStockDatasFromCsv_out_stock_datas_dic)
                 else:
-                    with open('cache_getStockDatasFromCsv_out_stock_datas_dic', "rb") as f:
-                        cache_data = pickle.load(f)
+                    cache_data = load_pickle('cache_getStockDatasFromCsv_out_stock_datas_dic', folder=METADATA_FOLDER)
+                    if cache_data is not None:
                         out_stock_datas_dic.update(cache_data)
-                        self.cache_getStockDatasFromCsv_out_stock_datas_dic = out_stock_datas_dic
-
+                        self.cache_getStockDatasFromCsv_out_stock_datas_dic = cache_data
                 return
 
             except FileNotFoundError as e:
@@ -947,39 +985,37 @@ class JdStockDataManager:
 
         print("--- getStockDatasFromCsv ---")
         i = 0
+
+
+        # 날짜 범위 세팅
+        today_date = dt.date.today()
+        startDay = today_date - dt.timedelta(days=daysNum)
+        endDay = today_date
+
         stockNums = len(stock_list)
         for ticker in stock_list['Symbol']:
-            try:               
-                csv_path = os.path.join('StockData', f"{ticker}.csv")
-                data = pd.read_csv(csv_path)
 
-                # 문자열을 datetime 객체로 변경
-                data['Date'] = pd.to_datetime(data['Date'])
+            df = load_csv_with_date_index(ticker, data_dir=DATA_FOLDER, start_date=startDay, end_date=endDay)
+            if df.empty:
+                print(f"[getStockDatasFromCsv] Empty or error DF for {ticker}")
+                try:
+                    name = stock_list.loc[stock_list['Symbol'] == ticker, 'Name'].values[0]
+                    exception_ticker_list[ticker] = name
+                except:
+                    pass
+                continue
+            
+            out_stock_datas_dic[ticker] = df
+            out_tickers.append(ticker)
 
-                # Date 행을 인덱스로 설정
-                data.set_index('Date', inplace=True)
-                startDay = dt.date.today() - dt.timedelta(days=daysNum)
-                endDay = dt.date.today()
-                # 시작일부터 종료일까지 가져오기
-                data = data[startDay:endDay]
-                
-                out_stock_datas_dic[ticker] = data
-                out_tickers.append(ticker)
-
-                i = i+1
-                print(f"{i/stockNums*100:.2f}% Done")
-
-            except Exception as e:
-                print(f"An error occurred: {e}")
-                name = stock_list.loc[stock_list['Symbol'] == ticker, 'Name'].values[0]
-                exception_ticker_list[ticker] = name
+            i = i+1
+            print(f"{i/stockNums*100:.2f}% Done")
 
 
         # cache the result
-        with open('cache_getStockDatasFromCsv_out_tickers', "wb") as f:
-            pickle.dump(out_tickers, f)
-        with open('cache_getStockDatasFromCsv_out_stock_datas_dic', "wb") as f:
-            pickle.dump(out_stock_datas_dic, f)
+        save_pickle(out_tickers, 'cache_getStockDatasFromCsv_out_tickers', folder=METADATA_FOLDER)
+        save_pickle(out_stock_datas_dic, 'cache_getStockDatasFromCsv_out_stock_datas_dic', folder=METADATA_FOLDER)
+
 
     def remove_acquisition_tickers(self):
         all_list = self.getStockListFromLocalCsv()
@@ -1011,7 +1047,7 @@ class JdStockDataManager:
 
 
         for ticker in removeTargetTickers:
-            file_path = os.path.join(data_folder, ticker + '.csv')
+            file_path = os.path.join(DATA_FOLDER, ticker + '.csv')
             if os.path.exists(file_path):
                 os.remove(file_path)
                 print(file_path, 'is removed from local directory!')
@@ -1045,7 +1081,7 @@ class JdStockDataManager:
         atrs_df = atrs_df.set_index('Date')
         atrs_df = atrs_df.T # transpose
 
-        save_path = os.path.join(metadata_folder, f'{N}day_{propertyName}.csv')
+        save_path = os.path.join(METADATA_FOLDER, f'{N}day_{propertyName}.csv')
         atrs_df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
 
         return atrs_df
@@ -1054,7 +1090,7 @@ class JdStockDataManager:
 
         propertyName = 'ATRS150_Exp'
 
-        csv_path = os.path.join(metadata_folder, f'{N}day_{propertyName}.csv')
+        csv_path = os.path.join(METADATA_FOLDER, f'{N}day_{propertyName}.csv')
         data = pd.read_csv(csv_path)
         data = data.set_index('Symbol')
 
@@ -1062,7 +1098,7 @@ class JdStockDataManager:
 
         rank_df = rank_df
 
-        save_path = os.path.join(metadata_folder, f'{propertyName}_Ranking.csv')
+        save_path = os.path.join(METADATA_FOLDER, f'{propertyName}_Ranking.csv')
         rank_df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
 
     def get_ATRS150_exp_Ranks_Normalized(self, Symbol):
@@ -1106,7 +1142,7 @@ class JdStockDataManager:
 
         try:
             if self.atrs_ranking_df.empty == True:
-                csv_path = os.path.join(metadata_folder, f'{propertyName}_Ranking.csv')
+                csv_path = os.path.join(METADATA_FOLDER, f'{propertyName}_Ranking.csv')
                 rank_df = pd.read_csv(csv_path)
                 rank_df = rank_df.set_index('Symbol')
                 self.atrs_ranking_df = rank_df
@@ -1207,7 +1243,7 @@ class JdStockDataManager:
         result_df = result_df.loc[~result_df.index.duplicated()]
         
         result_df.index.name = 'Symbol'
-        result_df.to_csv(os.path.join(metadata_folder, 'Stock_GICS.csv'), encoding='utf-8-sig')
+        result_df.to_csv(os.path.join(METADATA_FOLDER, 'Stock_GICS.csv'), encoding='utf-8-sig')
 
         print('Error Tickers: ', errorTickers)
 
@@ -1218,7 +1254,7 @@ class JdStockDataManager:
     def get_GICS_df(self):
         if self.stock_GICS_df.empty:
             # TODO: 예외처리 추가
-            csv_path = os.path.join(metadata_folder, "Stock_GICS.csv")
+            csv_path = os.path.join(METADATA_FOLDER, "Stock_GICS.csv")
             self.stock_GICS_df = pd.read_csv(csv_path)
             self.stock_GICS_df = self.stock_GICS_df.set_index('Symbol')
         
@@ -1274,7 +1310,7 @@ class JdStockDataManager:
     def cook_long_term_industry_rank_scores(self):
         print('cook_long_term_industry_rank_scores')
         ATRS_Ranks_df = self.get_ATRS_Ranking_df()
-        csv_path = os.path.join(metadata_folder, "Stock_GICS.csv")
+        csv_path = os.path.join(METADATA_FOLDER, "Stock_GICS.csv")
         stock_GICS_df = pd.read_csv(csv_path)
 
 
@@ -1318,7 +1354,7 @@ class JdStockDataManager:
         rank_history_df = rank_history_df.sort_values(by=last_col_name, ascending=False)
 
 
-        save_path = os.path.join(metadata_folder, "long_term_industry_rank_scores.csv")
+        save_path = os.path.join(METADATA_FOLDER, "long_term_industry_rank_scores.csv")
         rank_history_df.index.name = 'industry'
         rank_history_df.to_csv(save_path, encoding='utf-8-sig')
         print('long_term_industry_rank_scores.csv cooked!')
@@ -1381,7 +1417,7 @@ class JdStockDataManager:
         out_stock_data_dic = {}
         self.getStockDatasFromCsv(all_list, out_tickers, out_stock_data_dic, 365, True)
 
-        csv_path = os.path.join(metadata_folder, "Stock_GICS.csv")
+        csv_path = os.path.join(METADATA_FOLDER, "Stock_GICS.csv")
         stock_GICS_df = pd.read_csv(csv_path)
 
 
@@ -1425,7 +1461,7 @@ class JdStockDataManager:
         last_col_name = rank_history_df.columns[-1]
         rank_history_df = rank_history_df.sort_values(by=last_col_name, ascending=False)
 
-        save_path = os.path.join(metadata_folder, "short_term_industry_rank_scores.csv")
+        save_path = os.path.join(METADATA_FOLDER, "short_term_industry_rank_scores.csv")
         rank_history_df.to_csv(save_path, encoding='utf-8-sig')
         print('short_term_industry_rank_scores.csv cooked!')
 
@@ -2130,7 +2166,7 @@ class JdStockDataManager:
 
     def cook_top10_in_industries(self):
         ATRS_Ranks_df = self.get_ATRS_Ranking_df()
-        csv_path = os.path.join(metadata_folder, "Stock_GICS.csv")
+        csv_path = os.path.join(METADATA_FOLDER, "Stock_GICS.csv")
         stock_GICS_df = pd.read_csv(csv_path)
         ranks_in_industries = self.get_ranks_in_industries(ATRS_Ranks_df, stock_GICS_df)
         out_tickers = []
@@ -2161,7 +2197,7 @@ class JdStockDataManager:
 
     def get_long_term_industry_rank_scores_df(self):
         if self.long_term_industry_rank_df.empty:
-            csv_path = os.path.join(metadata_folder, "long_term_industry_rank_scores.csv")
+            csv_path = os.path.join(METADATA_FOLDER, "long_term_industry_rank_scores.csv")
             self.long_term_industry_rank_df = pd.read_csv(csv_path)
             self.long_term_industry_rank_df = self.long_term_industry_rank_df.set_index('industry')
 
@@ -2180,7 +2216,7 @@ class JdStockDataManager:
 
     def get_short_term_industry_rank_scores_df(self):
         if self.short_term_industry_rank_df.empty:
-            csv_path = os.path.join(metadata_folder, "short_term_industry_rank_scores.csv")
+            csv_path = os.path.join(METADATA_FOLDER, "short_term_industry_rank_scores.csv")
             self.short_term_industry_rank_df = pd.read_csv(csv_path)
             self.short_term_industry_rank_df = self.short_term_industry_rank_df.set_index('industry')
 
@@ -2344,7 +2380,7 @@ class JdStockDataManager:
         df.index.name = 'Symbol'
 
 
-        save_path = os.path.join(filteredStocks_folder, f'{fileName}.xlsx')
+        save_path = os.path.join(FILTERED_STOCKS_FOLDER, f'{fileName}.xlsx')
         
         df.to_excel(save_path, index_label='Symbol')
         print(f'{fileName}.xlsx', 'is saved!')

@@ -23,8 +23,8 @@ import matplotlib.ticker as tk
 
 
 from jdStockDataManager import JdStockDataManager 
-from jdGlobal import ui_folder
-from jdGlobal import screenshot_folder
+from jdGlobal import UI_FOLDER
+from jdGlobal import SCREENSHOT_FOLDER
 
 plt.switch_backend('Qt5Agg')
 
@@ -318,7 +318,7 @@ class JdChart:
         curr_rank = self.stockManager.get_ATRS150_exp_Ranks(ticker).iloc[-1]
 
         name = currStockData['Name'].iloc[0]
-        font_path = os.path.join(ui_folder, 'NanumGothic.ttf')
+        font_path = os.path.join(UI_FOLDER, 'NanumGothic.ttf')
         fontprop = fm.FontProperties(fname=font_path, size=30)
         industryKor = currStockData['Industry'].iloc[0]
         try:
@@ -517,7 +517,7 @@ class JdChart:
 
         if self.bOnlyForScreenShot:
             lastday = str(self.updown_sp500.index[-1].date())
-            file_path = os.path.join(screenshot_folder, f'MI_Index_chart_{lastday}.png')
+            file_path = os.path.join(SCREENSHOT_FOLDER, f'MI_Index_chart_{lastday}.png')
             plt.savefig(file_path)
             time.sleep(1)
             plt.close()
@@ -550,7 +550,7 @@ class JdChart:
 
         if self.bOnlyForScreenShot:
             lastday = str(self.updown_atr.index[-1].date())
-            file_path = os.path.join(screenshot_folder, f'ATR_Expansion{lastday}.png')
+            file_path = os.path.join(SCREENSHOT_FOLDER, f'ATR_Expansion{lastday}.png')
             plt.savefig(file_path)
             time.sleep(1)
             plt.close()
@@ -613,7 +613,7 @@ class JdChart:
 
         if self.bOnlyForScreenShot:
             lastday = str(temp_df.index[-1].date())
-            file_path = os.path.join(screenshot_folder, f'{name}_chart_{lastday}.png')
+            file_path = os.path.join(SCREENSHOT_FOLDER, f'{name}_chart_{lastday}.png')
             plt.savefig(file_path)
             time.sleep(1)
             plt.close()

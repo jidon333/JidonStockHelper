@@ -19,8 +19,8 @@ import pickle
 from jdStockDataManager import JdStockDataManager 
 from jdChart import JdChart
 from jdGlobal import get_yes_no_input
-from jdGlobal import data_folder
-from jdGlobal import metadata_folder
+from jdGlobal import DATA_FOLDER
+from jdGlobal import METADATA_FOLDER
 
 from qtWindow import JdWindowClass
 
@@ -141,7 +141,7 @@ def remove_outdated_tickers():
     with open("DataReader_exception.json", "r") as outfile:
         data = json.load(outfile)
         for key in data.keys():
-            file_path = os.path.join(data_folder, key + '.csv')
+            file_path = os.path.join(DATA_FOLDER, key + '.csv')
             if os.path.exists(file_path):
                 os.remove(file_path)
                 print(f"{file_path} is removed!")
@@ -207,6 +207,8 @@ def run_stock_data_chart():
     sf.MTT_ADR_minimum = 2.5
     sf.LastDayMinimumVolume = 1000000
     screen_stocks_and_show_chart(sf.filter_stocks_MTT, True, True)
+    #screen_stocks_and_show_chart(sf.filter_stock_power_gap, True, True)
+    #screen_stocks_and_show_chart(sf.filter_stocks_young, True, True)
 
     #screen_stocks_and_show_chart(sf.filter_stocks_high_ADR_swing, True, True)
     #screen_stocks_and_show_chart(sf.filter_stocks_young, True, True)

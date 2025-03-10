@@ -9,10 +9,10 @@ import time
 import os
 import pickle
 
-from jdGlobal import profiles_folder
+from jdGlobal import PROFILES_FOLDER
 
-if not os.path.exists(profiles_folder):
-    os.makedirs(profiles_folder)
+if not os.path.exists(PROFILES_FOLDER):
+    os.makedirs(PROFILES_FOLDER)
 
 # -------------------------------------------------------------------------
 # Helper function for 50-day volume & close check
@@ -1235,7 +1235,7 @@ class JdStockFilteringManager:
         df = self.cook_gap_profiles(range_from, range_to, profile_period, all_stock_datas_dic, gap_date_tickers_dic)
 
         try:
-            save_path = os.path.join(profiles_folder, f'power_gap_{range_from}_{range_to}_{profile_period}.xlsx')
+            save_path = os.path.join(PROFILES_FOLDER, f'power_gap_{range_from}_{range_to}_{profile_period}.xlsx')
             df.to_excel(save_path, index_label='Symbol_Date')
             print(f"{save_path}", "is saved!")
         except Exception as e:
@@ -1283,7 +1283,7 @@ class JdStockFilteringManager:
         df = self.cook_gap_profiles(range_from, range_to, profile_period, all_stock_datas_dic, gap_date_tickers_dic)
 
         try:
-            save_path = os.path.join(profiles_folder, f'open_gap_{range_from}_{range_to}_{profile_period}.xlsx')
+            save_path = os.path.join(PROFILES_FOLDER, f'open_gap_{range_from}_{range_to}_{profile_period}.xlsx')
             df.to_excel(save_path, index_label='Symbol_Date')
 
             print(f"{save_path}", "is saved!")

@@ -12,9 +12,9 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
 from jdChart import JdChart
-from jdGlobal import ui_folder
+from jdGlobal import UI_FOLDER
 
-ui_path = os.path.join(ui_folder, 'qtWindow.ui')
+ui_path = os.path.join(UI_FOLDER, 'qtWindow.ui')
 
 form_class = uic.loadUiType(ui_path)[0]
 
