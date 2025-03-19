@@ -8,7 +8,11 @@ SCREENSHOT_FOLDER = os.path.join(METADATA_FOLDER, 'ScreenShot')
 FILTERED_STOCKS_FOLDER = os.path.join(METADATA_FOLDER, "FilteredStocks")
 PROFILES_FOLDER = os.path.join(METADATA_FOLDER, "Profiles")
 
-
+# ----------------------------
+# 전역 리스트/딕셔너리
+# ----------------------------
+exception_ticker_list = {}
+sync_fail_ticker_list = []
 
 def get_yes_no_input(qustionString):
     while(True):
@@ -21,4 +25,11 @@ def get_yes_no_input(qustionString):
         else:
             print('input \'y\' or \'n\' to continue...')
 
-            
+import logging
+
+# 예: jdDataGetter.py 파일 상단 또는 메인 실행 스크립트에서 설정
+logging.basicConfig(
+    filename='JidonStockHelper.log',
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] [%(filename)s:%(lineno)d %(funcName)s()] %(message)s'
+)

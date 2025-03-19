@@ -9,6 +9,8 @@ import time
 import os
 import pickle
 
+import logging
+
 from jdGlobal import PROFILES_FOLDER
 
 if not os.path.exists(PROFILES_FOLDER):
@@ -75,12 +77,11 @@ class JdStockFilteringManager:
         """
         Loads stock data, applies a given filter function, and optionally sorts by RS rank.
         """
-        out_tickers = []
-        out_stock_datas_dic = {}
 
         daysNum = int(365)
-        stock_list = self.sd.getStockListFromLocalCsv()
-        self.sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, bUseLoadedStockData)
+        stock_list = self.sd.get_local_stock_list()
+        out_stock_datas_dic = self.sd.get_stock_datas_from_csv(stock_list, daysNum, bUseLoadedStockData)
+        out_tickers = list(out_stock_datas_dic.keys())
 
 
         search_start_time = time.time()
@@ -936,10 +937,9 @@ class JdStockFilteringManager:
 
         years = float(range_from) / 240.0
         daysNum = int(365) + int(years * 365.0)
-        stock_list = self.sd.getStockListFromLocalCsv()
-        out_tickers = []
-        out_stock_datas_dic = {}
-        self.sd.getStockDatasFromCsv(stock_list, out_tickers, out_stock_datas_dic, daysNum, False)
+        stock_list = self.sd.get_local_stock_list()
+        out_stock_datas_dic = self.sd.get_stock_datas_from_csv(stock_list, daysNum, False)
+        out_tickers = list(out_stock_datas_dic.keys())
 
         print(f"start {str(filter_stock_gap_func.__name__)} screening!")
         date_tickers_dic = {}
@@ -1225,12 +1225,10 @@ class JdStockFilteringManager:
             except Exception as e:
                 print(e)
     
-        all_tickers = []
-        all_stock_datas_dic = {}
         years = float(range_from) / 240.0
         daysNum = int(365) + int(years * 365.0)
         # use cache made by upper scan code
-        sd.getStockDatasFromCsv(sd.getStockListFromLocalCsv(), all_tickers, all_stock_datas_dic, daysNum, True)
+        all_stock_datas_dic = sd.get_stock_datas_from_csv(sd.get_local_stock_list(), daysNum, True)
 
         df = self.cook_gap_profiles(range_from, range_to, profile_period, all_stock_datas_dic, gap_date_tickers_dic)
 
@@ -1273,12 +1271,10 @@ class JdStockFilteringManager:
             except Exception as e:
                 print(e)
     
-        all_tickers = []
-        all_stock_datas_dic = {}
         years = float(range_from) / 240.0
         daysNum = int(365) + int(years * 365.0)
         # use cache made by upper scan code
-        sd.getStockDatasFromCsv(sd.getStockListFromLocalCsv(), all_tickers, all_stock_datas_dic, daysNum, True)
+        all_stock_datas_dic = sd.get_stock_datas_from_csv(sd.get_local_stock_list(), daysNum, True)
 
         df = self.cook_gap_profiles(range_from, range_to, profile_period, all_stock_datas_dic, gap_date_tickers_dic)
 

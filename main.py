@@ -151,7 +151,7 @@ def remove_local_caches():
     """
     Removes all local cache files that start with 'cache_' and resets the stock manager's caches.
     """
-    local_dir = os.getcwd()
+    local_dir = METADATA_FOLDER
     for filename in os.listdir(local_dir):
         if filename.startswith('cache_'):
             os.remove(os.path.join(local_dir, filename))
@@ -232,7 +232,7 @@ def run_sync_csv_and_generate_metadata():
               (e.g., up_down, RS, industry, MTT count, etc.)
     """
     remove_local_caches()
-    sd.syncCsvFromWeb(5)
+    sd.sync_csv_from_web(5)
     sd.cookUpDownDatas()
     sd.cook_ATR_Expansion_Counts()
     sd.cook_Nday_ATRS150_exp(365 * 2)
@@ -263,7 +263,7 @@ def run_download_stock_data():
     (This may take a long time.)
     """
     remove_local_caches()
-    sd.downloadStockDatasFromWeb(365 * 6, False)
+    sd.download_stock_datas_from_web(365 * 6, False)
     remove_outdated_tickers()
     sd.remove_acquisition_tickers()
     sd.cook_Stock_GICS_df()

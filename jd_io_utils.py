@@ -11,6 +11,8 @@ import json
 import pickle
 import pandas as pd
 
+import logging
+
 # -----------------------------------------------------------------------------
 # 폴더 경로 설정
 # -----------------------------------------------------------------------------
@@ -85,9 +87,9 @@ def save_df_to_csv(
     save_path = os.path.join(data_dir, f"{ticker}.csv")
     try:
         df.to_csv(save_path, encoding=encoding)
-        print(f"{ticker}.csv saved to {save_path}")
+        logging.info(f"{ticker}.csv saved to {save_path}")
     except Exception as e:
-        print(f"[save_df_to_csv] An error occurred: {e}")
+        logging.info(f"[save_df_to_csv] An error occurred: {e}")
 
 # -----------------------------------------------------------------------------
 # JSON 입출력
