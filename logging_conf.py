@@ -1,5 +1,6 @@
 import logging, sys, os, datetime
 from logging.handlers import RotatingFileHandler
+from rich.logging import RichHandler 
 
 # Directory that stores all log files
 LOG_DIR = "logs"
@@ -31,9 +32,17 @@ file_handler.setFormatter(formatter)
 file_handler.addFilter(MyProjectFilter())
 
 # Console handler (same format and filter)
-console_handler = logging.StreamHandler(sys.stdout)
+#console_handler = logging.StreamHandler(sys.stdout)
+
+# 기존 console_handler 대신 교체
+console_handler = RichHandler(
+    rich_tracebacks=True,               # Traceback을 Rich 스타일로
+    show_time=False                     # 이미 포맷터에 시간이 있으므로
+)
+
 console_handler.setFormatter(formatter)
 console_handler.addFilter(MyProjectFilter())
+console_handler.setLevel(logging.DEBUG) # DEBUG 이상 로그는 모두 터미널에도 출력
 
 # Root logger configuration
 logging.basicConfig(

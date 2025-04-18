@@ -387,9 +387,12 @@ def main():
     """
 
 
-    print(__name__)
-    logging.info("main()")
-    
+    logging.debug("main() -- DEBUG")
+    logging.info("main() -- INFO ")
+    logging.warning("main()-- WARNING")
+    logging.error("main() -- ERROR")
+    logging.critical("main() -- CRITICAL")
+
 
     global sd, sf
     sd = JdStockDataManager()
