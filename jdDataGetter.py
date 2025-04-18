@@ -16,6 +16,7 @@ import pandas as pd
 import FinanceDataReader as fdr
 import pandas_market_calendars as mcal
 
+import logging
 
 
 # io_utils.py에서 폴더 상수와 CSV/JSON/Pickle I/O 함수를 import

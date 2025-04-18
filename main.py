@@ -35,6 +35,14 @@ from matplotlib.figure import Figure
 import pandas as pd
 import jdStockFilteringManager
 
+
+
+import logging
+import logging_conf  # 전역 로깅 설정 로드
+import datetime
+
+
+
 # Global variables (initialized in main)
 sd = None
 sf = None
@@ -377,6 +385,11 @@ def main():
       - Initializes the JdStockDataManager and JdStockFilteringManager,
       - Executes the corresponding function based on the user's menu selection.
     """
+
+
+    print(__name__)
+    logging.info("main()")
+    
 
     global sd, sf
     sd = JdStockDataManager()

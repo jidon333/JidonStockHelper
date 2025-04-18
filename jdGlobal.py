@@ -24,12 +24,3 @@ def get_yes_no_input(qustionString):
             return False
         else:
             print('input \'y\' or \'n\' to continue...')
-
-import logging
-
-# 예: jdDataGetter.py 파일 상단 또는 메인 실행 스크립트에서 설정
-logging.basicConfig(
-    filename='JidonStockHelper.log',
-    level=logging.DEBUG,
-    format='%(asctime)s [%(levelname)s] [%(filename)s:%(lineno)d %(funcName)s()] %(message)s'
-)
