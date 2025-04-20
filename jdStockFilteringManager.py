@@ -429,7 +429,7 @@ class JdStockFilteringManager:
 
             # 5) In last 10 days, ticker outperformed index on 8 days
             try:
-                index_data = self.sd.index_data
+                index_data = self.sd.us500_data
                 changes_index = (index_data['Close'] - index_data['Close'].shift(1)) / index_data['Close'].shift(1)
                 changes_ticker = (stock_data['Close'] - stock_data['Close'].shift(1)) / stock_data['Close'].shift(1)
                 rs_strong_cnt = 0

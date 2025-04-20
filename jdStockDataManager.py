@@ -25,7 +25,6 @@ from openpyxl.styles import PatternFill, Font, Color
 
 import logging
 
-
 from jdGlobal import get_yes_no_input
 from jdGlobal import (
     DATA_FOLDER,
@@ -48,6 +47,9 @@ from jd_io_utils import (
 )
 
 from jdDataGetter import JdDataGetter
+
+import jdIndicator as jdi
+
 
 
 # ----------------------------
@@ -75,7 +77,7 @@ class JdStockDataManager:
         ensure_directories_exist()
 
         # S&P500 지수 데이터(기본값)
-        self.index_data = fdr.DataReader('US500')
+        self.us500_data = fdr.DataReader('US500')
         self.stock_GICS_df = pd.DataFrame()
 
         self.long_term_industry_rank_df = pd.DataFrame()
@@ -117,19 +119,10 @@ class JdStockDataManager:
         index_new_data = index_data
 
         # TR(True Range) 계산
-        high = index_new_data['High']
-        low = index_new_data['Low']
-        prev_close = index_new_data['Close'].shift(1)
-
-        d1 = high - low
-        d2 = np.abs(high - prev_close)
-        d3 = np.abs(low - prev_close)
-        
-        tr = np.maximum(d1, d2)
-        tr = np.maximum(tr, d3)
+        tr = jdi.true_range(index_new_data)
 
         # ATR(Average True Range)
-        atr = tr.rolling(n).mean()
+        atr = jdi.atr(index_new_data)
         index_new_data['ATR'] = atr
 
         # TC(True Change) 계산
@@ -152,7 +145,7 @@ class JdStockDataManager:
         try:
             # MRS 계산
             n = 20
-            rs = (stock_data['Close'] / self.index_data['Close']) * 100
+            rs = (stock_data['Close'] / self.us500_data['Close']) * 100
             rs_ma = rs.rolling(n).mean()
             mrs = ((rs / rs_ma) - 1) * 100
 
@@ -160,16 +153,13 @@ class JdStockDataManager:
             new_data['RS'] = mrs
 
             # 50MA
-            ma50 = stock_data['Close'].rolling(window=50).mean()
-            new_data['50MA'] = ma50
+            new_data['50MA'] = jdi.sma(stock_data['Close'], 50)
 
             # 150MA
-            ma150 = stock_data['Close'].rolling(window=150).mean()
-            new_data['150MA'] = ma150
+            new_data['150MA'] = jdi.sma(stock_data['Close'], 150)
 
             # 200MA
-            ma200 = stock_data['Close'].rolling(window=200).mean()
-            new_data['200MA'] = ma200
+            new_data['200MA'] = jdi.sma(stock_data['Close'], 200)
 
             # 150MA Slope
             ma_diff = stock_data['150MA'].diff()
@@ -181,32 +171,13 @@ class JdStockDataManager:
 
 
             # TR 계산
-            high = stock_data['High']
-            low = stock_data['Low']
-            prev_close = stock_data['Close'].shift(1)
+            new_data['TR'] = jdi.true_range(stock_data)
 
-            d1 = high - low
-            d2 = np.abs(high - prev_close)
-            d3 = np.abs(low - prev_close)
-            
-            tr = np.maximum(d1, d2)
-            tr = np.maximum(tr, d3)
-
-            new_data['TR'] = tr
-
-            # DR% (Daily Range)
-            daily_range_percentages = high / low
-
-            # ADR% (20-days)
-            n = 20
-            adr = daily_range_percentages.rolling(n).mean()
-            adr = 100 * (adr - 1)
-            new_data['ADR'] = adr
-
+            # ADR(%)
+            new_data['ADR'] = jdi.adr(stock_data, 20)
 
             # ATR 계산
-            n = 14
-            atr = tr.rolling(n).mean()
+            atr = jdi.atr(stock_data, 14)
             new_data['ATR'] = atr
 
             # TC(True Change) 계산
@@ -217,12 +188,7 @@ class JdStockDataManager:
             atc = tc.rolling(n).mean()
             new_data['ATC'] = atc
 
-            # True Range의 합계, 최대 고가, 최소 저가 계산
-            TrueRangeSum = tr.rolling(window=n).sum()
-            TrueHighMax = new_data['High'].rolling(window=n).max()
-            TrueLowMin = new_data['Low'].rolling(window=n).min()
-
-            new_index_data = self._CookIndexData(self.index_data, 14)
+            new_index_data = self._CookIndexData(self.us500_data, 14)
         
             # TRS(True Relative Strength)
             sp500_tc = new_index_data['TC']
@@ -247,11 +213,9 @@ class JdStockDataManager:
                 atrs150 = trs.rolling(n).mean()
                 new_data['ATRS150'] = atrs150
 
-            # EMA 
-            if len(new_data) < n:
-                new_data['ATRS150_Exp'] = trs.ewm(span=len(new_data), adjust=False).mean()
-            else:
-                new_data['ATRS150_Exp'] = trs.ewm(span=n, adjust=False).mean()
+            # ATRS150_Exp 
+            span = len(new_data) if len(new_data) < n else n
+            new_data["ATRS150_Exp"] = jdi.ema(trs, span)
 
 
             new_data = new_data.reindex(columns=['Symbol', 'Name', 'Industry',
