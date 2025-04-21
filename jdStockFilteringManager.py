@@ -13,6 +13,8 @@ import logging
 
 from jdGlobal import PROFILES_FOLDER
 
+from jd_filter_utils import precheck 
+
 if not os.path.exists(PROFILES_FOLDER):
     os.makedirs(PROFILES_FOLDER)
 
@@ -111,8 +113,6 @@ class JdStockFilteringManager:
             selected_tickers.sort()
         
         search_end_time = time.time()
-        #execution_time = search_end_time - search_start_time
-        #print(f"Func {str(filter_func)} Search time: {execution_time:.2f}s")
 
         return out_stock_datas_dic, selected_tickers
 
@@ -121,6 +121,12 @@ class JdStockFilteringManager:
     # -------------------------------------------------------------------------
     # 1) filter_stocks_MTT
     # -------------------------------------------------------------------------
+    @precheck(
+        cols=["Close", "150MA", "200MA", "MA150_Slope", "MA200_Slope", "ADR"],
+        min_volume=200_000,
+        min_price=10,
+        vol_window=50
+    )
     def filter_stocks_MTT(self, stock_datas_dic: dict, n_day_before=-1):
         """
         Filters tickers that meet the following conditions (MTT criteria):
@@ -145,83 +151,37 @@ class JdStockFilteringManager:
 
         for ticker, stock_data in stock_datas_dic.items():
 
-            ### Check for required columns before extracting
-            if not has_required_data(stock_data, n_day_before, ['Close', '150MA', '200MA']):
-                continue
+            # (1) precheck를 통해 데코레이터가 통과시킨 dict 만 오므로 NaN 검사 진행 x
+            close  = stock_data['Close'].iloc[n_day_before]
+            ma50   = stock_data['50MA'].iloc[n_day_before]
+            ma150  = stock_data['150MA'].iloc[n_day_before]
+            ma200  = stock_data['200MA'].iloc[n_day_before]
+            ma150_slope = stock_data['MA150_Slope'].iloc[n_day_before]
+            ma200_slope = stock_data['MA200_Slope'].iloc[n_day_before]
+            volume_ma50 = stock_data['Volume'].rolling(50).mean().iloc[n_day_before]
+            ADR    = stock_data['ADR'].iloc[n_day_before]
+            last_volume = stock_data['Volume'].iloc[n_day_before]
 
-
-            # (1) Early check: close > 150MA & 200MA
-            try:
-                close = stock_data['Close'].iloc[n_day_before]
-                ma150 = stock_data['150MA'].iloc[n_day_before]
-                ma200 = stock_data['200MA'].iloc[n_day_before]
-            except Exception:
-                continue
 
             if not (close > ma150 and close > ma200):
-                # Condition #1 not met
+                continue
+            if not (close > ma50):
+                continue
+            if not (ma50 > ma150 > ma200):
+                continue
+            if volume_ma50 * close < 10_000_000:         # 6)
+                continue
+            if ma150_slope <= 0 or ma200_slope <= 0:     # 8)
+                continue
+            atrs_rank = atrs_ranking_df.loc[ticker].iloc[n_day_before]
+            if atrs_rank >= 1000:                        # 7)
+                continue
+            if last_volume < self.LastDayMinimumVolume:  # 9)
+                continue
+            if ADR < self.MTT_ADR_minimum:               # 10)
                 continue
 
-            # Gather remaining data
-            try:
-                ma150_slope = stock_data['MA150_Slope'].iloc[n_day_before]  # for #8
-                ma200_slope = stock_data['MA200_Slope'].iloc[n_day_before]  # for #8
-                ma50 = stock_data['50MA'].iloc[n_day_before]                # for #2, #3
-                volume_ma50 = stock_data['Volume'].rolling(window=50).mean().iloc[n_day_before]  # for #4, #6
-                ADR = stock_data['ADR'].iloc[n_day_before]                  # for #10
-                last_volume = stock_data['Volume'].iloc[n_day_before]       # for #9
-            except Exception:
-                continue
-
-            # (2) close > 50SMA
-            is_upper_50ma = (close > ma50)
-
-            # (3) 50SMA > 150SMA > 200SMA
-            is_50ma_above_150_200 = (ma50 > ma150 and ma150 > ma200)
-
-            # (4) & (5)  => check_50day_volume_and_close_price
-            #  - 50-day avg volume >= 200,000
-            #  - close >= 10
-            is_50day_volume_close_ok = check_50day_volume_and_close_price(
-                stock_data,
-                n_day_before,
-                min_avg_volume=200000,
-                min_close_price=10
-            )
-
-            # (6) 50-day avg dollar volume >= 10,000,000
-            is_dollar_volume_enough = (volume_ma50 * close >= 10_000_000)
-
-            # (7) ATRS rank < 1000
-            is_ATRS_ranking_good = False
-            try:
-                atrs_rank = atrs_ranking_df.loc[ticker].iloc[n_day_before]
-                is_ATRS_ranking_good = (atrs_rank < 1000)
-            except Exception as e:
-                print(e)  # or logging.warning(f"{ticker} ATRS rank not found: {e}")
-                is_ATRS_ranking_good = False
-
-            # (8) 150SMA slope > 0 and 200SMA slope > 0
-            is_ma_slope_plus = (ma150_slope > 0 and ma200_slope > 0)
-
-            # (9) last day's volume > self.LastDayMinimumVolume
-            is_last_volume_enough = (last_volume >= self.LastDayMinimumVolume)
-
-            # (10)  ADR > self.MTT_ADR_minimum
-            is_ADR_enough = (ADR > self.MTT_ADR_minimum)
-
-            # Combine conditions (#2 ~ #10) along with the early #1 check
-            if (
-                is_upper_50ma
-                and is_50ma_above_150_200
-                and is_50day_volume_close_ok
-                and is_dollar_volume_enough
-                and is_ATRS_ranking_good
-                and is_ma_slope_plus
-                and is_last_volume_enough
-                and is_ADR_enough
-            ):
-                filtered_tickers.append(ticker)
+            filtered_tickers.append(ticker)
 
         return filtered_tickers
 
