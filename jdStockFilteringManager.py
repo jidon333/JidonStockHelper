@@ -196,6 +196,12 @@ class JdStockFilteringManager:
     # -------------------------------------------------------------------------
     # 2) filter_stocks_high_ADR_swing
     # -------------------------------------------------------------------------
+    @precheck(
+        cols=["Close", "50MA", "200MA", "ADR"],
+        min_volume=1_000_000,
+        min_price=5,
+        vol_window=50
+    )
     def filter_stocks_high_ADR_swing(self, stock_datas_dic : dict, n_day_before = -1):
         """
         High ADR short-term momentum filter:
@@ -215,24 +221,11 @@ class JdStockFilteringManager:
 
         for ticker, stock_data in stock_datas_dic.items():
 
-            ### Check for required columns
-            if not has_required_data(stock_data, n_day_before, ['200MA','ADR']):
-                continue
-
-
-            try:
-                close = stock_data['Close'].iloc[n_day_before]
-                ma200 = stock_data['200MA'].iloc[n_day_before]
-                ma50 = stock_data['50MA'].iloc[n_day_before]
-                last_volume = stock_data['Volume'].iloc[n_day_before]
-                volume_ma50 = stock_data['Volume'].rolling(window=50).mean().iloc[n_day_before]
-                ADR = stock_data['ADR'].iloc[n_day_before]
-            except Exception:
-                continue
-
-            # 1) Price >= 5
-            if close < 5:
-                continue
+            close = stock_data['Close'].iloc[n_day_before]
+            ma200 = stock_data['200MA'].iloc[n_day_before]
+            ma50 = stock_data['50MA'].iloc[n_day_before]
+            last_volume = stock_data['Volume'].iloc[n_day_before]
+            ADR = stock_data['ADR'].iloc[n_day_before]
 
 
             # 2) 20-day ADR >= 4.0
@@ -240,10 +233,6 @@ class JdStockFilteringManager:
             if ADR < 4.0:
                 continue
 
-            # 3) 50-day average volume >= 1,000,000
-            # also LastDayMinimumVolume if needed
-            if volume_ma50 < 1_000_000:
-                continue
             if last_volume < self.LastDayMinimumVolume:
                 continue
 
