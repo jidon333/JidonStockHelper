@@ -2,6 +2,8 @@
 from functools import wraps
 from typing import Callable, Dict, List, Any, Optional
 import pandas as pd, numpy as np
+import logging
+
 
 # ── 기본값 (필요하면 여기만 수정) ──────────────────────────────
 DEFAULT_VOL_WINDOW = 50
@@ -37,18 +39,26 @@ def precheck(
 
             for tic, df in stock_dic.items():
 
-                # 1) 컬럼 존재 & NaN 체크
-                if any(c not in df or pd.isna(df[c].iloc[n]) for c in cols):
-                    continue
-
-                # 2) 거래량 체크
-                if min_volume is not None:
-                    vol_ma = df["Volume"].rolling(vol_window).mean().iloc[n]
-                    if np.isnan(vol_ma) or vol_ma < min_volume:
+                try:
+                    # 데이터 길이 부족하면 건너뜀
+                    if abs(n) >= len(df):
                         continue
 
-                # 3) 종가 체크
-                if min_price is not None and df["Close"].iloc[n] < min_price:
+                    # 1) 컬럼 존재 & NaN 체크
+                    if any(c not in df or pd.isna(df[c].iloc[n]) for c in cols):
+                        continue
+
+                    # 2) 거래량 체크
+                    if min_volume is not None:
+                        vol_ma = df["Volume"].rolling(vol_window).mean().iloc[n]
+                        if np.isnan(vol_ma) or vol_ma < min_volume:
+                            continue
+
+                    # 3) 종가 체크
+                    if min_price is not None and df["Close"].iloc[n] < min_price:
+                        continue
+                except Exception as e:
+                    logging.info(f"[DEBUG] IndexError @ ticker={tic} | len={len(df)} | requested n={n}")
                     continue
 
                 passed[tic] = df

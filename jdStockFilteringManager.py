@@ -173,7 +173,14 @@ class JdStockFilteringManager:
                 continue
             if ma150_slope <= 0 or ma200_slope <= 0:     # 8)
                 continue
-            atrs_rank = atrs_ranking_df.loc[ticker].iloc[n_day_before]
+            try:
+                atrs_rank = atrs_ranking_df.loc[ticker].iloc[n_day_before]
+            except KeyError:
+                logging.debug(f"[filter_stocks_MTT] {ticker}: not in ATRS df")
+                continue
+            except IndexError as e:
+                logging.debug(f"[filter_stocks_MTT] {ticker}: IndexErr {e}")
+                continue
             if atrs_rank >= 1000:                        # 7)
                 continue
             if last_volume < self.LastDayMinimumVolume:  # 9)

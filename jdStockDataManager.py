@@ -11,6 +11,7 @@ import math
 import numpy as np
 import pandas as pd
 import pandas_market_calendars as mcal
+from pandas import Timestamp, DatetimeIndex
 
 
 import os
@@ -19,6 +20,7 @@ import datetime as dt
 import time
 import random
 import concurrent.futures
+from zoneinfo import ZoneInfo
 
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Color
@@ -51,6 +53,68 @@ from jdDataGetter import JdDataGetter
 import jdIndicator as jdi
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# 📌 QUICK REFERENCE — Date-Time & Time-Zone Helpers
+#
+# 1️⃣ 객체 종류
+# ────────────────────────────────────────────────────────────────────────────
+# • pd.Timestamp
+#     단일 시점(“time point”)
+#       예) pd.Timestamp("2025-05-06 09:30")
+#
+# • pd.DatetimeIndex
+#     날짜·시간 값이 “여러 개” 모여 있는 인덱스(일종의 리스트)
+#       예) pd.date_range("2025-05-01", periods=3)  # 5/1, 5/2, 5/3 세 날짜가 들어감
+#
+# 2️⃣ tz-naive  vs  tz-aware
+# ────────────────────────────────────────────────────────────────────────────
+# • tz-naive  : 타임존 정보(tzinfo)가 없음
+#       예) Timestamp('2025-05-06 09:30')
+#
+# • tz-aware  : 타임존 정보가 붙어 있음 → ‘어느 지역 시간’인지 명확
+#       예) Timestamp('2025-05-06 09:30:00+00:00', tz='UTC')
+#       예) Timestamp('2025-05-06 09:30:00-04:00', tz='America/New_York')
+#
+#   ⚠️ pandas는 tz가 다른 두 객체를 직접 비교·연산하면
+#      TypeError(“Cannot compare tz-naive and tz-aware …”) 를 던진다.
+#
+# 3️⃣ 타임존 처리 메서드
+# ────────────────────────────────────────────────────────────────────────────
+# • tz_localize("UTC")
+#       tz-naive  ➜  tz-aware(UTC)  │  *라벨만 부여* (값은 그대로)
+#       예) "2025-05-06 09:30"  ➜  "2025-05-06 09:30+00:00"
+#
+# • tz_convert("UTC")
+#       tz-aware ➜  다른 타임존(UTC) │  *값을 변환*
+#       예) "2025-05-06 09:30-04:00(NY)" ➜ "2025-05-06 13:30+00:00"
+#
+# 4️⃣ 헬퍼 함수 (아래 정의)
+# ────────────────────────────────────────────────────────────────────────────
+# • to_utc_ts(ts: Timestamp)        →  항상 tz-aware(UTC) Timestamp 반환
+# • to_utc_idx(idx: DatetimeIndex)  →  항상 tz-aware(UTC) DatetimeIndex 반환
+#
+#   사용 예)
+#       naive_ts  = pd.Timestamp("2025-05-06 09:30")                   # naive
+#       aware_ts  = pd.Timestamp("2025-05-06 09:30", tz="US/Eastern")  # aware
+#
+#       utc_ts1 = to_utc_ts(naive_ts)   # 2025-05-06 09:30+00:00
+#       utc_ts2 = to_utc_ts(aware_ts)   # 2025-05-06 13:30+00:00
+#
+#       idx     = pd.date_range("2025-05-01", periods=3)              # naive idx
+#       utc_idx = to_utc_idx(idx)   # DatetimeIndex(['2025-05-01 00:00+00:00', …])
+#
+#   이렇게 변환해 두면 서로 간 비교·필터링·머지 시 안전하다.
+# ──────────────────────────────────────────────────────────────────────────────
+
+def to_utc_ts(ts: Timestamp) -> Timestamp:
+    """Timestamp → tz-aware(UTC) 로 강제 변환."""
+    return ts.tz_localize("UTC") if ts.tz is None else ts.tz_convert("UTC")
+
+def to_utc_idx(idx: DatetimeIndex) -> DatetimeIndex:
+    """DatetimeIndex → tz-aware(UTC) 로 강제 변환."""
+    return idx.tz_localize("UTC") if idx.tz is None else idx.tz_convert("UTC")
+
+
 
 # ----------------------------
 # 미국 시장 달력
@@ -62,6 +126,8 @@ nyse = mcal.get_calendar('NYSE')
 
 # for test
 stockIterateLimit = 99999
+
+
 
 
 
@@ -382,80 +448,87 @@ class JdStockDataManager:
                 json.dump(exception_ticker_list, outfile, indent = 4)
 
         return daily_changes_nyse_df, daily_changes_nasdaq_df, daily_changes_sp500_df
+    
+    
+    def _get_last_completed_trading_day(self, cal: mcal.MarketCalendar) -> pd.Timestamp:
+        """
+        NYSE 기준 ‘이미 마감된’ 가장 최근 거래일을 tz-aware(UTC) Timestamp 로 반환.
+            · 오늘이 휴장       → 직전 거래일
+            · 오늘이 장중       → 직전 거래일
+            · 오늘이 장마감 이후 → 오늘
+        """
+        now_et = dt.datetime.now(ZoneInfo("America/New_York"))
+        today_sched = cal.schedule(now_et.date(), now_et.date())
 
+        # 오늘이 거래일이고 장이 완전히 끝난 경우 → 오늘
+        if (not today_sched.empty) and now_et >= today_sched.iloc[0]["market_close"]:
+            return to_utc_ts(today_sched.index[0])
 
-    def cook_filter_count_data(self, filter_func, fileName : str, daysNum = 365, bAccumulateToExistingData = True):
+        # 그 외(휴일·장중) → 직전 거래일
+        prev_sched = cal.schedule(
+            start_date=now_et.date() - dt.timedelta(days=10),
+            end_date=now_et.date() - dt.timedelta(days=1)
+        )
+        return to_utc_ts(prev_sched.index[-1])
 
-        stock_data_len = 365*5 # 기본 데이터는 든든하게 미리 챙겨두기
-        stock_list = self.get_local_stock_list()
-        stock_datas_from_csv = self.get_stock_datas_from_csv(stock_list, stock_data_len, bAccumulateToExistingData)
-        
+    def cook_filter_count_data(
+        self,
+        filter_func,
+        fileName: str,
+        daysNum: int = 365,
+        bAccumulateToExistingData: bool = True,
+    ):
+        """
+        · filter_func(stock_dic: dict[str, DataFrame], offset: int) -> list[str]
+            offset = -1 → 어제, -2 → 그저께 …
+        · fileName : '{fileName}.csv' 로 저장
+        · daysNum  : 마지막 완료 세션으로부터 N 일 전까지 계산
+        """
+        # 1) 데이터 준비 --------------------------------------------------------
+        stock_list        = self.get_local_stock_list()
+        stock_data_len    = 365 * 5
+        stock_dic         = self.get_stock_datas_from_csv(stock_list, stock_data_len, bAccumulateToExistingData)
 
-        # 뭔가 내부 함수 에러나면 라이브러리 업그레이드부터 할 것 =ㅅ=;
-        nyse = mcal.get_calendar('NYSE')
-        trading_days = nyse.schedule(start_date=dt.date.today() - dt.timedelta(days=daysNum), end_date=dt.date.today()).index
-        valid_start_date = trading_days[0]
+        # 2) 거래일 & 마지막 완료 세션 -----------------------------------------
+        nyse          = mcal.get_calendar("NYSE")
+        trading_days  = nyse.valid_days(
+        start_date=dt.date.today() - dt.timedelta(days=daysNum),
+        end_date  =dt.date.today(),
+        )
 
+        trading_days  = to_utc_idx(trading_days) # tz-aware(UTC)
 
-        today_str = dt.date.today()
-        today_schedule = nyse.schedule(start_date=today_str, end_date=today_str)
+        last_completed = self._get_last_completed_trading_day(nyse)
+        completed_days = trading_days[trading_days <= last_completed]
 
-        
-        # 오늘이 거래일이라면 -2가 마지막 거래일
-        end_date_index = 2
-        filter_index_offset = 1
-
-        # 오늘이 휴일인경우 -1이 마지막 거래일 맞음
-        if today_schedule.empty:
-            end_date_index = 1
-            filter_index_offset = 0
-
-
-
-        valid_end_date = trading_days[-end_date_index] # 어제가 마지막 거래일. trading_days[-1]은 오늘이고 trading_days[-2]가 어제다. (오늘이 거래일이라면)
-
-
-        days = []
-        cnts = []
-        trading_days_num = len(trading_days)
-
-
-        for i in range(end_date_index, trading_days_num):
-            day = trading_days[-i]
-            search_start_time = time.time()
-            selected_tickers = []
-            selected_tickers = filter_func(stock_datas_from_csv, -i + filter_index_offset) # filter_func[-1]은 어제이고 filter_func[-2]은 어저깨다. 1 더해줘야한다. (오늘이 거래일이라면)
-            cnt = len(selected_tickers)
-
-            #search_end_time = time.time()
-            #execution_time = search_end_time - search_start_time
-            #print(f"Search time elapsed: {execution_time}sec")
+        # 3) 필터 루프 ----------------------------------------------------------
+        days, cnts = [], []
+        for off, day in enumerate(completed_days[::-1], start=1):
+            tickers = filter_func(stock_dic, -off)
             days.append(day)
-            cnts.append(cnt)
-            print(f'{fileName} cnt of {day}: {cnt}')
+            cnts.append(len(tickers))
+            print(f"{fileName}: {day.date()} → {len(tickers)}")
 
-        # days와 cnts 리스트로 데이터프레임 생성
-        days.reverse()
-        cnts.reverse()
-        data = {'Date': days, 'Count': cnts}
-        new_df = pd.DataFrame(data)
-        new_df['Date'] = pd.to_datetime(data['Date'])
-        new_df.set_index('Date', inplace=True)
-        save_path = os.path.join(METADATA_FOLDER, f'{fileName}.csv')
-        if bAccumulateToExistingData:
-            local_df = pd.read_csv(save_path)
-            local_df['Date'] = pd.to_datetime(local_df['Date'])
-            local_df.set_index('Date', inplace=True)
+        result_df = (pd.DataFrame({"Date": days[::-1], "Count": cnts[::-1]})
+                    .set_index("Date"))                       # tz-aware(UTC)
 
-            # 중복 인덱스 제거
-            local_df = local_df[~local_df.index.isin(new_df.index)]
+        # 4) 파일 병합 ----------------------------------------------------------
+        save_path = os.path.join(METADATA_FOLDER, f"{fileName}.csv")
 
-            concat_df = pd.concat([local_df, new_df])
-            concat_df.to_csv(save_path, encoding='utf-8-sig')
+        if bAccumulateToExistingData and os.path.exists(save_path):
+            local = pd.read_csv(save_path, index_col="Date", parse_dates=["Date"])
+            # 과거 CSV는 tz-naive → UTC 로 통일
+            local.index = to_utc_idx(local.index)
+            result_df   = pd.concat([local[~local.index.isin(result_df.index)],
+                                    result_df])
 
-        else:
-            # 데이터프레임을 CSV 파일로 저장
-            new_df.to_csv(save_path, encoding='utf-8-sig')
+        # 5) 저장: 사람이 보기 좋도록 tz 정보 제거 -----------------------------
+        export_df = result_df.copy()
+        if export_df.index.tz is not None:           # tz-aware → tz-naive
+            export_df.index = export_df.index.tz_localize(None)
+
+        export_df.to_csv(save_path, encoding="utf-8-sig")
+
 
     def get_count_data_from_csv(self, fileName : str, daysNum = 365*2):
             """ 
