@@ -335,7 +335,7 @@ class JdStockDataManager:
             conditionB = bIsVolumeEnough & (diff < (-1.5 * ATR))
      
         except Exception as e:
-                print(f"An error occurred: {e}")
+                print(f"[_getATRCondition_df] An error occurred: {e} for ticker {ticker}")
                 name = stock_list.loc[stock_list['Symbol'] == ticker, 'Name'].values[0]
                 exception_ticker_list[ticker] = name
                 conditionA = pd.Series()
@@ -364,6 +364,18 @@ class JdStockDataManager:
         daily_changes['ma50_changes'] = daily_changes['sum'].rolling(50).mean()  # 150일 이동 평균
         daily_changes['ma20_changes'] = daily_changes['sum'].rolling(20).mean()  # 150일 이동 평균
 
+        daily_changes['conditionA'] = pd.to_numeric(daily_changes['conditionA'], errors='coerce').astype('Int64')
+        daily_changes['conditionB'] = pd.to_numeric(daily_changes['conditionB'], errors='coerce').astype('Int64')
+        daily_changes['sum']        = pd.to_numeric(daily_changes['sum'],        errors='coerce').astype('Int64')
+        daily_changes['ma200_changes'] = pd.to_numeric(daily_changes['ma200_changes'], errors='coerce').astype('float64')
+        daily_changes['ma50_changes']  = pd.to_numeric(daily_changes['ma50_changes'],  errors='coerce').astype('float64')
+        daily_changes['ma20_changes']  = pd.to_numeric(daily_changes['ma20_changes'],  errors='coerce').astype('float64')
+
+
+        # ✅ 인덱스를 날짜로 확정 + 이름을 'Date'로 지정 → CSV 첫 열 헤더가 항상 'Date'
+        daily_changes.index = pd.to_datetime(daily_changes.index)
+        daily_changes.index.name = 'Date'
+
         return daily_changes
 
 
@@ -375,7 +387,7 @@ class JdStockDataManager:
             data.set_index('Date', inplace=True)
             returns = (data['Close'] - data['Close'].shift(1)) / data['Close'].shift(1)
         except Exception as e:
-            print(f"An error occurred: {e}")
+            print(f"[_getCloseChanges_df] An error occurred: {e} for ticker {ticker}")
             name = stock_list.loc[stock_list['Symbol'] == ticker, 'Name'].values[0]
             exception_ticker_list[ticker] = name
             returns = pd.Series()
@@ -398,6 +410,17 @@ class JdStockDataManager:
         daily_changes['down'] = (all_returns < 0).sum(axis=1)
         daily_changes['sum'] = daily_changes['up'] - daily_changes['down']
         daily_changes['ma150_changes'] = daily_changes['sum'].rolling(150).mean()
+
+        # ✅ 숫자 dtype 고정 (엑셀에서 텍스트 오인 방지)
+        daily_changes['up']   = pd.to_numeric(daily_changes['up'],   errors='coerce').astype('Int64')
+        daily_changes['down'] = pd.to_numeric(daily_changes['down'], errors='coerce').astype('Int64')
+        daily_changes['sum']  = pd.to_numeric(daily_changes['sum'],  errors='coerce').astype('Int64')
+        daily_changes['ma150_changes'] = pd.to_numeric(daily_changes['ma150_changes'], errors='coerce').astype('float64')
+
+        # ✅ 인덱스를 날짜형으로 확정 + 이름을 'Date'로 지정
+        daily_changes.index = pd.to_datetime(daily_changes.index)
+        daily_changes.index.name = 'Date'   # ← 이 한 줄로 CSV 첫 열 헤더가 항상 'Date'
+
 
         return daily_changes
 
@@ -2086,7 +2109,7 @@ class JdStockDataManager:
         wb = openpyxl.load_workbook(save_path)
         sheet = wb['Sheet1']
 
-        # 컬럼 추가되면 여기 바꿔야한다. (밑에 컬럼 색깔 정하는 범위). Inside bar의 인ㄴ덱스
+        # 컬럼 추가되면 여기 바꿔야한다. (밑에 컬럼 색깔 정하는 범위). Inside bar의 인덱스
         min_col_start_index = 9
         NR_index = 13
 

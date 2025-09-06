@@ -27,7 +27,7 @@ def precheck(
     """
     cols = cols or []
 
-    # ── 원본 함수를 받아 래퍼를 만들어 주는 '진짜 데코레이터' ──
+    # ── 원본 함수를 받아 래퍼를 만들어 주는 '데코레이터'
     def decorator(fn: Callable) -> Callable:
         # 메타데이터 복사
         @wraps(fn)  

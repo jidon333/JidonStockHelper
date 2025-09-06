@@ -217,6 +217,7 @@ def run_stock_data_chart():
     screen_stocks_and_show_chart(sf.filter_stocks_MTT, True, True)
     #screen_stocks_and_show_chart(sf.filter_stock_power_gap, True, True)
     #screen_stocks_and_show_chart(sf.filter_stocks_young, True, True)
+    
 
     #screen_stocks_and_show_chart(sf.filter_stocks_high_ADR_swing, True, True)
     #screen_stocks_and_show_chart(sf.filter_stocks_young, True, True)
@@ -224,7 +225,7 @@ def run_stock_data_chart():
     #screen_stocks_and_show_chart(sf.filter_stocks_rs_8_10, True, True)
     #screen_stocks_and_show_chart(sf.filter_stock_hope_from_bottom, True, True)
     #screen_stocks_and_show_chart(sf.filter_stock_ALL, True, False)
-    #screen_stocks_and_show_chart(sf.filter_stock_Good_RS, True, True)
+    #screen_stocks_and_show_chart(sf.filter_stock_Good_RS, True, True)3
     #screen_stocks_and_show_chart(sf.filter_stocks_high_ADR_swing, True, True)
     #screen_stocks_and_show_chart(sf.filter_stock_power_gap, True, True)
 
@@ -235,12 +236,12 @@ def run_momentum_index_chart():
 
 
 def run_sync_csv_and_generate_metadata():
-    """
+    """3
     Option 3: Sync local CSV data from the web and generate metadata 
               (e.g., up_down, RS, industry, MTT count, etc.)
     """
     remove_local_caches()
-    sd.sync_csv_from_web(5)
+    sd.sync_csv_from_web(10)
     sd.cookUpDownDatas()
     sd.cook_ATR_Expansion_Counts()
     sd.cook_Nday_ATRS150_exp(365 * 2)
@@ -271,7 +272,8 @@ def run_download_stock_data():
     (This may take a long time.)
     """
     remove_local_caches()
-    sd.download_stock_datas_from_web(365 * 6, False)
+    # [TODO] 10년치 데이터가 실제로 확보되지 않는 이슈. 아래 인자로 실행시 2020년부터 데이터가 존재함. 확인 필요...!
+    sd.download_stock_datas_from_web(365 * 10, False)
     remove_outdated_tickers()
     sd.remove_acquisition_tickers()
     sd.cook_Stock_GICS_df()
