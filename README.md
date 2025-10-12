@@ -1,5 +1,5 @@
-# JidonStockHelper
-US Stock helper. It provides useful technical indicators, chart graph and stock screener. 
+﻿# JidonStockHelper
+US Stock helper. It provides useful technical indicators, chart graphs, and stock screeners.
 
 ![chart sample](https://github.com/jidon333/JidonStockHelper/assets/16080882/57839f25-2acc-4887-81f0-e0ddb0cf1c43)
 
@@ -9,7 +9,7 @@ US Stock helper. It provides useful technical indicators, chart graph and stock 
 
 **Overview**
 - Stock data toolkit for US markets: indicators, screeners, and charts (PyQt5 + Matplotlib).
-- Works with local CSVs under `StockData/`, with metadata in `StockData/MetaData/`.
+- Works with local CSVs under StockData/, with metadata in StockData/MetaData/.
 - If a requested symbol has no local CSV (e.g., ETFs QQQ/SPY), the app can fetch data via FinanceDataReader as a fallback for single‑ticker analysis.
 
 **Key Features**
@@ -41,17 +41,17 @@ US Stock helper. It provides useful technical indicators, chart graph and stock 
 - pandas, numpy, matplotlib, PyQt5, FinanceDataReader, yahooquery, pandas_market_calendars, rich, openpyxl
 
 **Run**
-- `python main.py` then choose an option from the menu.
-- For single‑ticker drop‑day search (option 15), enter a symbol (e.g., `QQQ`) and a threshold (e.g., `-3`).
+- python main.py then choose an option from the menu.
+- For single‑ticker drop‑day search (option 15), enter a symbol (e.g., QQQ) and a threshold (e.g., -3).
 
 **Data Layout**
-- `StockData/{TICKER}.csv`: OHLCV time series per symbol.
-- `StockData/MetaData/`: Up/Down aggregates, rankings, screenshots, etc.
-- UI assets in `UI/` (Qt form, font, image).
+- StockData/{TICKER}.csv: OHLCV time series per symbol.
+- StockData/MetaData/: Up/Down aggregates, rankings, screenshots, etc.
+- UI assets in UI/ (Qt form, font, image).
 
 **Notes**
 - If an ETF/Index is not found locally, option 15 fetches data via FinanceDataReader without persisting to disk.
-- Logging: rotating file + rich console; see `logging_conf.py`.
+- Logging: rotating file + rich console; see logging_conf.py.
 
 ---
 
@@ -59,7 +59,7 @@ US Stock helper. It provides useful technical indicators, chart graph and stock 
 
 ### 개요
 - 미국 주식 데이터를 대상으로 지표 계산, 스크리닝, 차트 시각화를 제공합니다(PyQt5 + Matplotlib).
-- 기본적으로 `StockData/`의 로컬 CSV를 사용하고, 메타데이터는 `StockData/MetaData/`에 생성됩니다.
+- 기본적으로 StockData/의 로컬 CSV를 사용하고, 메타데이터는 StockData/MetaData/에 생성됩니다.
 - 단일 티커 분석(예: QQQ, SPY) 중 로컬 CSV가 없으면 FinanceDataReader를 통해 데이터를 가져오는 폴백을 지원합니다(옵션 15).
 
 ### 주요 기능
@@ -87,7 +87,7 @@ US Stock helper. It provides useful technical indicators, chart graph and stock 
 - 15: 단일 티커 하락일 탐색(ETF 폴백 지원)
 
 ### 실행 방법
-- `python main.py` 실행 후 메뉴에서 원하는 번호를 선택하세요.
+- python main.py 실행 후 메뉴에서 원하는 번호를 선택하세요.
 - 단일 티커 하락일 탐색(옵션 15): 티커(예: QQQ)와 하락 임계값(예: -3)을 입력하면 최근 5년 내 해당 조건을 만족한 날짜들을 출력합니다.
   - 로컬 CSV가 없을 경우 FinanceDataReader를 통해 데이터를 가져오며, 디스크에는 저장하지 않습니다.
 
@@ -96,10 +96,40 @@ US Stock helper. It provides useful technical indicators, chart graph and stock 
 - pandas, numpy, matplotlib, PyQt5, FinanceDataReader, yahooquery, pandas_market_calendars, rich, openpyxl
 
 ### 데이터 구조
-- `StockData/{TICKER}.csv`: 각 티커의 OHLCV 데이터
-- `StockData/MetaData/`: 업/다운 집계, 랭킹, 스크린샷 등 결과물
-- `UI/`: Qt 폼(.ui), 폰트, 이미지 등
+- StockData/{TICKER}.csv: 각 티커의 OHLCV 데이터
+- StockData/MetaData/: 업/다운 집계, 랭킹, 스크린샷 등 결과물
+- UI/: Qt 폼(.ui), 폰트, 이미지 등
 
 ### 참고 사항
 - ETF/지수(QQQ, SPY, US500 등) 분석 시 로컬 CSV가 없으면 FinanceDataReader 폴백으로 데이터를 가져와 단일 티커 분석을 수행합니다(옵션 15).
-- 로깅: 파일 로테이팅 + 콘솔(RichHandler). 자세한 설정은 `logging_conf.py`를 참고하세요.
+- 로깅: 파일 로테이팅 + 콘솔(RichHandler). 자세한 설정은 logging_conf.py를 참고하세요.
+
+---
+
+**Source Files (overview)**
+- logging_conf.py — Global logging (rotating file, rich console)
+- jdIndicator.py — TR, ATR, SMA/EMA, ADR% utilities
+- jd_io_utils.py — CSV/JSON/Pickle I/O + directory ensure
+- jd_filter_utils.py — precheck decorator for filter functions
+- jdStockFilteringManager.py — Screeners (MTT, High ADR Swing, Bull Snort, RS 8/10, Young, Good RS, Hope from bottom, Gap) + orchestration
+- jdStockDataManager.py — Core data manager (CSV orchestration, indicators, counts, rankings, industry scores); single‑ticker helpers (find_days_by_return with FDR fallback)
+- jdGlobal.py — Global paths, prompt util, exception lists
+- jdDataGetter.py — Data access layer (FDR lists, cached CSV load, web sync/download with retries)
+- jdChart.py — Matplotlib charts (stocks, momentum, ATR expansion, counts; PyQt5 backend)
+- main.py — CLI entry/menu and runners
+- qtWindow.py — PyQt5 window with embedded Matplotlib
+- __init__.py — Package marker
+
+### 소스 파일 개요
+- logging_conf.py — 전역 로깅 설정(로테이팅 파일 + 리치 콘솔)
+- jdIndicator.py — TR/ATR/SMA/EMA/ADR% 유틸
+- jd_io_utils.py — CSV/JSON/Pickle I/O 및 디렉터리 보장
+- jd_filter_utils.py — 스크리닝용 precheck 데코레이터
+- jdStockFilteringManager.py — 스크리너(MTT, High ADR Swing, Bull Snort, RS 8/10, Young, Good RS, Hope from bottom, Gap)와 오케스트레이션
+- jdStockDataManager.py — 코어 데이터 매니저(CSV/지표/카운트/랭킹/산업 점수), 단일 티커 헬퍼(find_days_by_return, FDR 폴백 포함)
+- jdGlobal.py — 경로 상수, 입력 유틸, 예외 리스트
+- jdDataGetter.py — 데이터 접근 레이어(FDR 종목리스트, 캐시된 CSV 로드, 재시도 포함 웹 동기화/다운로드)
+- jdChart.py — 차트(종목/모멘텀/ATR 확장/카운트, PyQt5 백엔드)
+- main.py — CLI 진입/메뉴 및 러너
+- qtWindow.py — PyQt5 창 + Matplotlib 임베딩
+- __init__.py — 패키지 마커
