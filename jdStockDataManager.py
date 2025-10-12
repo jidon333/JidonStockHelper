@@ -1131,6 +1131,80 @@ class JdStockDataManager:
 
         return DCR
 
+    # ------------------------------------------------
+    # [ Public Helper ]: 단일 티커 날짜 탐색 및 로딩
+    # ------------------------------------------------
+    def find_days_by_return(self, ticker: str, pct_threshold: float = -3.0, days_num: int = 365*5) -> pd.DataFrame:
+        """
+        지정한 티커의 일일 등락률(%)이 pct_threshold 이하인 날짜를 반환합니다.
+        예) pct_threshold = -3.0  => -3% 이상 하락한 날만 필터링
+
+        반환 컬럼: ['Open','High','Low','Close','Volume','change_pct']
+        """
+        df = self.load_single_ticker_data(ticker, days_num)
+        if df.empty or 'Close' not in df:
+            return pd.DataFrame()
+
+        df = df.sort_index()
+        if len(df) < 2:
+            return pd.DataFrame()
+
+        prev_close = df['Close'].shift(1)
+        df['change_pct'] = (df['Close'] / prev_close - 1.0) * 100.0
+
+        res = df[df['change_pct'] <= pct_threshold].copy()
+        if res.empty:
+            return pd.DataFrame()
+
+        return res[['Open','High','Low','Close','Volume','change_pct']]
+
+    def load_single_ticker_data(self, ticker: str, days_num: int = 365*5) -> pd.DataFrame:
+        """
+        단일 티커 데이터를 로드합니다.
+         - 1순위: 로컬 CSV(StockData/{ticker}.csv)
+         - 2순위: FinanceDataReader에서 직접 수집(ETF/지수 티커 포함, 예: QQQ, SPY)
+
+        반환: Date 인덱스 정렬된 DataFrame (가능 시 ['Open','High','Low','Close','Volume'] 포함)
+        """
+        try:
+            today_date = dt.date.today()
+            start_date = today_date - dt.timedelta(days=days_num)
+
+            # 로컬 CSV 우선
+            local_df = load_csv_with_date_index(
+                ticker, data_dir=DATA_FOLDER, start_date=start_date, end_date=today_date
+            )
+            if not local_df.empty:
+                return local_df.sort_index()
+
+            # 로컬에 없으면 FDR에서 수집 (ETF/지수 포함)
+            try:
+                fetched = fdr.DataReader(ticker, start_date)
+            except Exception as e:
+                logging.info(f"[load_single_ticker_data] FDR fetch failed for {ticker}: {e}")
+                return pd.DataFrame()
+
+            if fetched is None or fetched.empty:
+                return pd.DataFrame()
+
+            # Date 인덱스 정렬 및 표준 컬럼 보존
+            fetched = fetched.sort_index()
+            if 'Volume' not in fetched.columns:
+                fetched['Volume'] = 0
+
+            needed = ['Open','High','Low','Close','Volume']
+            # Close는 반드시 필요. 없으면 빈 DF 반환
+            if 'Close' not in fetched.columns:
+                return pd.DataFrame()
+            for c in needed:
+                if c not in fetched.columns:
+                    fetched[c] = 0
+
+            return fetched[needed]
+
+        except Exception as e:
+            logging.info(f"[load_single_ticker_data] Unexpected error for {ticker}: {e}")
+            return pd.DataFrame()
         
 
     # cook industry ranks according to the atrs14_exp.

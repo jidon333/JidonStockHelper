@@ -70,15 +70,16 @@ def display_menu() -> int:
         "12: Generate all indicators and screening results\n"
         "13: Power gap history screen\n"
         "14: ATR Expansion Chart\n"
+        "15: Investigate ticker drop days (single ticker)\n"
         "\nEnter your choice: "
     )
     while True:
         try:
             choice = int(input(menu_text))
-            if 1 <= choice <= 14:
+            if 1 <= choice <= 15:
                 return choice
             else:
-                print("Please enter a number between 1 and 14.")
+                print("Please enter a number between 1 and 15.")
         except ValueError:
             print("Invalid input. Please enter a number.")
 
@@ -381,6 +382,27 @@ def run_atr_expansion_chart_option():
     draw_atr_expansion_chart(df, True)
 
 
+def run_investigate_ticker_drop():
+    """Option 15: Investigate single ticker drop days (handles ETF like QQQ/SPY)."""
+    ticker = input("Ticker (default: QQQ): ").strip() or "QQQ"
+    try:
+        threshold = float(input("하락 임계값 % (default: -3): ").strip() or "-3")
+    except ValueError:
+        threshold = -3.0
+
+    # 로컬 CSV가 없으면 FinanceDataReader에서 직접 가져옵니다.
+    res = sd.find_days_by_return(ticker, threshold, 365*5)
+    if res is None or res.empty:
+        print(f"{ticker}: 조건을 만족하는 날짜가 없습니다.")
+        return
+
+    print(f"{ticker} 조건 일치 {len(res)}건:")
+    try:
+        print(res[["Close","change_pct"]].tail(20))
+    except Exception:
+        print(res.tail(20))
+
+
 def main():
     """
     Main function:
@@ -430,6 +452,8 @@ def main():
         run_power_gap_history_screen()
     elif choice == 14:
         run_atr_expansion_chart_option()
+    elif choice == 15:
+        run_investigate_ticker_drop()
 
 
 # --------------------------------------------------------------------
