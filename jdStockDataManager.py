@@ -1158,6 +1158,77 @@ class JdStockDataManager:
 
         return res[['Open','High','Low','Close','Volume','change_pct']]
 
+    def find_days_drop_and_ema_violation(
+        self,
+        ticker: str,
+        pct_threshold: float = -3.0,
+        atr_multiple: float = 2.0,
+        days_num: int = 365*5
+    ) -> dict:
+        """
+        단일 티커에 대해 "EMA 리젝션(거부)" 조건과 함께 두 가지 하락 조건을 탐지합니다.
+
+        정의 및 계산식:
+        - EMA 리젝션: 시가가 10EMA, 21EMA 모두 위에서 시작하고, 종가가 10EMA, 21EMA 모두 아래에서 마감
+          (Open > EMA10, Open > EMA21) AND (Close < EMA10, Close < EMA21)
+        - 퍼센트 하락: change_pct = (Close / PrevClose - 1) * 100 <= pct_threshold
+        - ATR 배수 하락: ATR_Drop = (Open - Close) / ATR(10) >= abs(atr_multiple)
+          (여기서 ATR은 True Range의 10일 이동평균)
+
+        처리 절차:
+        1) 최근 days_num 기간의 단일 티커 데이터를 로드하고 날짜 기준 정렬
+        2) EMA10, EMA21, ATR(10) 계산
+        3) 전일 종가(PrevClose)로부터 change_pct 및 ATR_Drop 계산
+        4) EMA 리젝션 조건과 각 하락 조건(퍼센트/ATR)을 결합하여 필터링
+
+        반환값(dict):
+        - 'drop_pct': EMA 리젝션이면서 퍼센트 하락 조건을 만족
+        - 'drop_atr': EMA 리젝션이면서 ATR 배수 하락 조건을 만족
+        - 'intersection': 위 두 조건을 모두 만족하는 교집합
+
+        반환 DataFrame 공통 컬럼:
+        ['Open','High','Low','Close','Volume','EMA10','EMA21','ATR','change_pct','ATR_Drop']
+        """
+
+        df = self.load_single_ticker_data(ticker, days_num)
+        if df.empty or 'Close' not in df:
+            return {
+                'drop_pct': pd.DataFrame(),
+                'drop_atr': pd.DataFrame(),
+                'intersection': pd.DataFrame()
+            }
+
+        df = df.sort_index()
+
+        # Indicators
+        prev_close = df['Close'].shift(1)
+        df['EMA10'] = jdi.ema(df['Close'], span=10)
+        df['EMA21'] = jdi.ema(df['Close'], span=21)
+        df['ATR']   = jdi.atr(df, 10)
+
+        # Changes
+        df['change_pct'] = (df['Close'] / prev_close - 1.0) * 100.0
+        
+        # ATR 하락폭(양수): 시가 대비 종가 하락폭을 ATR 배수로 환산
+        df['ATR_Drop'] = (df['Open'] - df['Close']) / df['ATR']
+
+        # EMA rejection: Open above both EMAs while Close ends below both
+        ema_reject = (
+            (df['Open'] > df['EMA10']) & (df['Open'] > df['EMA21']) &
+            (df['Close'] < df['EMA10']) & (df['Close'] < df['EMA21'])
+        )
+
+        cond_pct = (df['change_pct'] <= pct_threshold) & ema_reject
+        cond_atr = (df['ATR_Drop'] >= abs(atr_multiple)) & ema_reject
+        cond_both = cond_pct & cond_atr
+
+        cols = ['Open','High','Low','Close','Volume','EMA10','EMA21','ATR','change_pct','ATR_Drop']
+        return {
+            'drop_pct': df.loc[cond_pct, cols].copy(),
+            'drop_atr': df.loc[cond_atr, cols].copy(),
+            'intersection': df.loc[cond_both, cols].copy(),
+        }
+
     def load_single_ticker_data(self, ticker: str, days_num: int = 365*5) -> pd.DataFrame:
         """
         단일 티커 데이터를 로드합니다.

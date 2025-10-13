@@ -403,13 +403,60 @@ def run_investigate_ticker_drop():
         print(res.tail(20))
 
 
+def print_drop_tail(df, title):
+    """Prints last 10 rows of drop result with key columns; no-op for empty input."""
+    if df is not None and not df.empty:
+        print(title)
+        try:
+            temp = df.tail(20).copy()
+            # Prefer precomputed ATR_Drop; fall back to TC if present
+            if 'ATR_Drop' in temp.columns:
+                temp['ATR_Drop'] = temp['ATR_Drop'].round(2)
+            cols = ["Open","High","Low","Close","EMA10","EMA21","ATR","change_pct"]
+            if 'ATR_Drop' in temp.columns:
+                cols.append("ATR_Drop")
+            print(temp[cols])
+        except Exception:
+            print(df.tail(10))
+        print("")
+
+
+def run_investigate_ticker_drop_ext():
+    """Investigate drop days with EMA rejection using percent and ATR thresholds."""
+    ticker = input("Ticker (default: QQQ): ").strip() or "QQQ"
+    try:
+        pct_threshold = float(input("Drop threshold % (default: -3): ").strip() or "-3")
+    except ValueError:
+        pct_threshold = -3.0
+    try:
+        atr_multiple = float(input("ATR multiple (default: 2): ").strip() or "2")
+    except ValueError:
+        atr_multiple = 2.0
+
+    res = sd.find_days_drop_and_ema_violation(
+        ticker=ticker,
+        pct_threshold=pct_threshold,
+        atr_multiple=atr_multiple,
+        days_num=365*10,
+    )
+    drop_pct = res.get('drop_pct')
+    drop_atr = res.get('drop_atr')
+    both = res.get('intersection')
+    print(f"\n[{ticker}] EMA rejection days summary (last 10y):")
+    print(f" - Percent drop <= {pct_threshold}%: {0 if drop_pct is None or drop_pct.empty else len(drop_pct)} days")
+    print(f" - ATR drop <= -{atr_multiple} ATR: {0 if drop_atr is None or drop_atr.empty else len(drop_atr)} days")
+    print(f" - Intersection (both conditions): {0 if both is None or both.empty else len(both)} days\n")
+    print_drop_tail(drop_pct,  f"Recent percent-drop days (<= {pct_threshold}%):")
+    print_drop_tail(drop_atr,  f"Recent ATR-drop days (<= -{atr_multiple} ATR):")
+    print_drop_tail(both,      "Recent intersection days (both conditions):")
+
+
 def main():
     """
     Main function:
       - Initializes the JdStockDataManager and JdStockFilteringManager,
       - Executes the corresponding function based on the user's menu selection.
     """
-
 
     logging.debug("main() -- DEBUG")
     logging.info("main() -- INFO ")
@@ -453,7 +500,7 @@ def main():
     elif choice == 14:
         run_atr_expansion_chart_option()
     elif choice == 15:
-        run_investigate_ticker_drop()
+        run_investigate_ticker_drop_ext()
 
 
 # --------------------------------------------------------------------
