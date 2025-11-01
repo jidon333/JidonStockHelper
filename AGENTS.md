@@ -18,6 +18,7 @@ Scope: entire repository unless otherwise noted.
 - Keep the editor’s EOL to CRLF for .py files. If you must add lines, match the
   surrounding file’s EOL.
 - Avoid trailing whitespace. Ensure a newline at file end.
+- 중요: 줄바꿈문자 변환 금지 — CRLF ↔ LF 변경을 하지 마세요. (작업 시 기존 파일의 EOL을 반드시 그대로 유지)
 
 ## Imports
 
@@ -90,4 +91,3 @@ Scope: entire repository unless otherwise noted.
 - `FinanceDataReader` is the preferred remote source for equities/ETFs/indices
   when local CSV is missing.
 - Handle network failures gracefully and return empty DataFrames on errors.
-

@@ -71,15 +71,16 @@ def display_menu() -> int:
         "13: Power gap history screen\n"
         "14: ATR Expansion Chart\n"
         "15: Investigate ticker drop days (single ticker)\n"
+        "16: Consecutive gap-up finder (single ticker)\n"
         "\nEnter your choice: "
     )
     while True:
         try:
             choice = int(input(menu_text))
-            if 1 <= choice <= 15:
+            if 1 <= choice <= 16:
                 return choice
             else:
-                print("Please enter a number between 1 and 15.")
+                print("Please enter a number between 1 and 16.")
         except ValueError:
             print("Invalid input. Please enter a number.")
 
@@ -451,6 +452,35 @@ def run_investigate_ticker_drop_ext():
     print_drop_tail(both,      "Recent intersection days (both conditions):")
 
 
+def run_find_consecutive_gap_ups():
+    """Find days where a ticker has n consecutive gap-up opens (Open > prior High)."""
+    ticker = input("Ticker (default: QQQ): ").strip() or "QQQ"
+    try:
+        n = int(input("연속 갭 상승 일수 (default: 3): ").strip() or "3")
+    except ValueError:
+        n = 3
+
+    yn = (input("채워지지 않은(완전) 갭만 찾을까요? (y/N): ").strip() or "n").lower()
+    require_unfilled = yn in ("y", "yes")
+
+    res = sd.find_consecutive_gap_ups(ticker=ticker, n=n, days_num=365*20, require_unfilled=require_unfilled)
+    if res is None or res.empty:
+        msg = "채워지지 않은" if require_unfilled else ""
+        msg = (msg + " ").strip()
+        print(f"{ticker}: 연속 {n}일 {msg}갭 상승 케이스가 없습니다.")
+        return
+
+    msg = "채워지지 않은" if require_unfilled else ""
+    msg = (msg + " ").strip()
+    print(f"[{ticker}] 연속 {n}일 {msg}갭 상승 케이스: {len(res)}건")
+    try:
+        temp = res.tail(100).copy()
+        view = temp[["Open","High","Low","Close","prev_high","gap_run"]]
+        print(view)
+    except Exception:
+        print(res.tail(100))
+
+
 def main():
     """
     Main function:
@@ -501,6 +531,8 @@ def main():
         run_atr_expansion_chart_option()
     elif choice == 15:
         run_investigate_ticker_drop_ext()
+    elif choice == 16:
+        run_find_consecutive_gap_ups()
 
 
 # --------------------------------------------------------------------

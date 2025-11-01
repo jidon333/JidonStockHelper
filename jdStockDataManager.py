@@ -1229,6 +1229,53 @@ class JdStockDataManager:
             'intersection': df.loc[cond_both, cols].copy(),
         }
 
+    def find_consecutive_gap_ups(
+        self,
+        ticker: str,
+        n: int = 3,
+        days_num: int = 365*10,
+        require_unfilled: bool = False,
+    ) -> pd.DataFrame:
+        """
+        지정한 티커에서 "갭 상승(Open > 전일 High)"이 연속으로 n번 발생한 케이스를 찾습니다.
+
+        규칙
+        - 기본 갭: gap_up[i] = (Open[i] > High[i-1])
+        - 채워지지 않은(완전) 갭 옵션(require_unfilled=True)일 때:
+            gap_up[i] = (Open[i] > High[i-1]) AND (Low[i] > High[i-1])
+        - 연속 구간의 길이(갭 연속 카운트)가 n에 도달한 첫 날만 이벤트로 반환
+
+        반환 컬럼: ['Open','High','Low','Close','Volume','prev_high','gap_run']
+        (prev_high는 전일 High, gap_run은 해당 일자의 연속 갭 카운트)
+        """
+        df = self.load_single_ticker_data(ticker, days_num)
+        if df is None or df.empty:
+            return pd.DataFrame()
+
+        df = df.sort_index().copy()
+        if 'Open' not in df.columns or 'High' not in df.columns:
+            return pd.DataFrame()
+
+        df['prev_high'] = df['High'].shift(1)
+        basic_gap = df['Open'] > df['prev_high']
+        if require_unfilled:
+            unfilled = df['Low'] > df['prev_high']
+            gap_up = basic_gap & unfilled
+        else:
+            gap_up = basic_gap
+
+        # 연속 True 길이 계산
+        streak_group = (gap_up != gap_up.shift()).cumsum()
+        run_len = gap_up.groupby(streak_group).cumsum()
+        df['gap_run'] = run_len.fillna(0).astype(int)
+
+        # n번째에 도달한 지점만 추출 (연속 길이가 n이 되는 첫 날들)
+        events = df[df['gap_run'] == n]
+        if events.empty:
+            return pd.DataFrame()
+
+        return events[['Open','High','Low','Close','Volume','prev_high','gap_run']]
+
     def load_single_ticker_data(self, ticker: str, days_num: int = 365*5) -> pd.DataFrame:
         """
         단일 티커 데이터를 로드합니다.
