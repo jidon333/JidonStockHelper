@@ -1,55 +1,33 @@
 
-
-import FinanceDataReader as fdr
-
-import yahooquery as yq 
-from yahooquery import Ticker
-
-import pickle
-import math
-
-import numpy as np
-import pandas as pd
-import pandas_market_calendars as mcal
-from pandas import Timestamp, DatetimeIndex
-
-
-import os
-import json
 import datetime as dt
+import json
+import logging
+import math
+import os
 import time
-import random
-import concurrent.futures
 from zoneinfo import ZoneInfo
 
+import FinanceDataReader as fdr
+import numpy as np
 import openpyxl
-from openpyxl.styles import PatternFill, Font, Color
+import pandas as pd
+import pandas_market_calendars as mcal
+from openpyxl.styles import PatternFill
+from pandas import DatetimeIndex, Timestamp
+from yahooquery import Ticker
 
-import logging
-
+from jdGlobal import DATA_FOLDER
+from jdGlobal import FILTERED_STOCKS_FOLDER
+from jdGlobal import METADATA_FOLDER
+from jdGlobal import exception_ticker_list
 from jdGlobal import get_yes_no_input
-from jdGlobal import (
-    DATA_FOLDER,
-    METADATA_FOLDER,
-    FILTERED_STOCKS_FOLDER,
-    SCREENSHOT_FOLDER,
-    PROFILES_FOLDER,
-    sync_fail_ticker_list,
-    exception_ticker_list
-)
-
-from jd_io_utils import (
-    ensure_directories_exist,
-    load_csv_with_date_index,
-    save_df_to_csv,
-    save_to_json,
-    load_from_json,
-    save_pickle,
-    load_pickle
-)
-
+from jdGlobal import sync_fail_ticker_list
+from jd_io_utils import ensure_directories_exist
+from jd_io_utils import load_csv_with_date_index
+from jd_io_utils import load_from_json
+from jd_io_utils import save_df_to_csv
+from jd_io_utils import save_to_json
 from jdDataGetter import JdDataGetter
-
 import jdIndicator as jdi
 
 

@@ -1,5 +1,6 @@
 # indicators.py
-import numpy as np, pandas as pd
+import numpy as np
+import pandas as pd
 
 def true_range(df: pd.DataFrame):
     """

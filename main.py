@@ -7,39 +7,24 @@ filtering, and indicator generation. Each menu option is mapped to a separate fu
 validation and documentation.
 """
 
-import datetime as dt
-import glob
 import json
 import os
-import sys
-import time
 import pickle
-
-
-from jdStockDataManager import JdStockDataManager 
-from jdChart import JdChart
-from jdGlobal import get_yes_no_input
-from jdGlobal import DATA_FOLDER
-from jdGlobal import METADATA_FOLDER
-
-from qtWindow import JdWindowClass
-
-from PyQt5.QtWidgets import *
-from PyQt5 import uic
-from PyQt5.QtGui import QPixmap
-from PyQt5.QtCore import Qt
-
-import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
-
-import pandas as pd
-import jdStockFilteringManager
-
-
+import sys
 
 import logging
+
+import pandas as pd
+from PyQt5.QtWidgets import QApplication
+
+import jdStockFilteringManager
+from jdChart import JdChart
+from jdGlobal import DATA_FOLDER
+from jdGlobal import METADATA_FOLDER
+from jdGlobal import get_yes_no_input
+from jdStockDataManager import JdStockDataManager
+from qtWindow import JdWindowClass
 import logging_conf  # 전역 로깅 설정 로드
-import datetime
 
 
 

@@ -1,18 +1,12 @@
-
-
 from jdStockDataManager import JdStockDataManager
-import numpy as np
-import pandas as pd
-import pandas_market_calendars as mcal
-
-import time
 import os
 import pickle
+import time
 
 import logging
+import pandas as pd
 
 from jdGlobal import PROFILES_FOLDER
-
 from jd_filter_utils import precheck 
 
 if not os.path.exists(PROFILES_FOLDER):

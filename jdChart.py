@@ -1,30 +1,19 @@
 
-
+import os
+import sys
+import time
 
 import numpy as np
 import pandas as pd
-import sys
-
-
-import os
-import json
-import time
-
-
-
 from matplotlib.dates import num2date
 import matplotlib.font_manager as fm
-from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.widgets import TextBox, Button
-import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 import matplotlib.ticker as tk
 
-
 from jdStockDataManager import JdStockDataManager 
-from jdGlobal import UI_FOLDER
 from jdGlobal import SCREENSHOT_FOLDER
+from jdGlobal import UI_FOLDER
 
 plt.switch_backend('Qt5Agg')
 

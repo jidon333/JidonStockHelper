@@ -1,15 +1,14 @@
-import sys
 import os
+import sys
 import time
-from PyQt5.QtWidgets import *
+
 from PyQt5 import uic
-from PyQt5.QtGui import QPixmap
-from PyQt5.QtCore import Qt, QRect, QEvent, QObject
-from PyQt5.QtGui import QScreen, QGuiApplication
+from PyQt5.QtCore import QEvent, QObject, QRect, Qt
+from PyQt5.QtGui import QGuiApplication, QPixmap, QScreen
+from PyQt5.QtWidgets import QCheckBox, QLabel, QLineEdit, QMainWindow, QSizePolicy
 
-
-from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
 
 from jdChart import JdChart
 from jdGlobal import UI_FOLDER

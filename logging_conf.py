@@ -1,5 +1,9 @@
-import logging, sys, os, datetime
+import datetime
+import logging
+import os
+import sys
 from logging.handlers import RotatingFileHandler
+
 from rich.logging import RichHandler 
 
 # Directory that stores all log files

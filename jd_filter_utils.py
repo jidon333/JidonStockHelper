@@ -1,8 +1,10 @@
 # jd_filter_utils.py
 from functools import wraps
-from typing import Callable, Dict, List, Any, Optional
-import pandas as pd, numpy as np
+from typing import Any, Callable, Dict, List, Optional
 import logging
+
+import numpy as np
+import pandas as pd
 
 
 # ── 기본값 (필요하면 여기만 수정) ──────────────────────────────
