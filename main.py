@@ -98,7 +98,7 @@ def draw_momentum_index(updown_nyse, updown_nasdaq, updown_sp500, is_only_for_sc
     :param is_only_for_screenshot: If True, the chart is saved for screenshot purposes.
     """
     chart = JdChart(sd)
-    chart.bOnlyForScreenShot = is_only_for_screenshot
+    chart.is_only_for_screenshot = is_only_for_screenshot
     chart.init_plots_for_up_down(updown_nyse, updown_nasdaq, updown_sp500)
     chart.draw_updown_chart()
 
@@ -111,7 +111,7 @@ def draw_atr_expansion_chart(atr_changes_df: pd.DataFrame, is_only_for_screensho
     :param is_only_for_screenshot: If True, the chart is saved for screenshot purposes.
     """
     chart = JdChart(sd)
-    chart.bOnlyForScreenShot = is_only_for_screenshot
+    chart.is_only_for_screenshot = is_only_for_screenshot
     chart.init_plots_for_atr_up_down(atr_changes_df)
     chart.draw_updown_ATR_chart()
 
@@ -125,7 +125,7 @@ def draw_count_data_chart(mtt_cnt_df, name: str, chart_type: str, is_only_for_sc
     :param is_only_for_screenshot: If True, the chart is saved for screenshot purposes.
     """
     chart = JdChart(sd)
-    chart.bOnlyForScreenShot = is_only_for_screenshot
+    chart.is_only_for_screenshot = is_only_for_screenshot
     chart.init_plots_for_count_data(mtt_cnt_df, chart_type)
     chart.draw_count_data_chart(name, chart_type)
 
