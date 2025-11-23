@@ -22,7 +22,7 @@ class JdWindowClass(QMainWindow, form_class):
         super().__init__()
         self.setupUi(self)
 
-        self.chart : JdChart = None
+        self.chart: JdChart = None
 
         screen = QGuiApplication.primaryScreen()
         screen_size = screen.availableSize()
@@ -33,13 +33,13 @@ class JdWindowClass(QMainWindow, form_class):
         self.label : QLabel
         self.setWindowTitle("Jidon stock helper")
 
-        self.lineEdit_search : QLineEdit
-        self.lineEdit_search.returnPressed.connect(self.on_lienEdit_search_returnPressed)
+        self.lineEdit_search: QLineEdit
+        self.lineEdit_search.returnPressed.connect(self.on_search_return_pressed)
 
-        self.checkbox_ma10 : QCheckBox
-        self.checkbox_ma20 : QCheckBox
-        self.checkbox_ema10 : QCheckBox
-        self.checkbox_ema21 : QCheckBox
+        self.checkbox_ma10: QCheckBox
+        self.checkbox_ma20: QCheckBox
+        self.checkbox_ema10: QCheckBox
+        self.checkbox_ema21: QCheckBox
 
         self.checkbox_ma10.stateChanged.connect(self.on_ma_checkbox_changed)
         self.checkbox_ma20.stateChanged.connect(self.on_ma_checkbox_changed)
@@ -50,8 +50,8 @@ class JdWindowClass(QMainWindow, form_class):
 
         self.setFocusPolicy(Qt.StrongFocus)
 
-    def set_chart_class(self, inChartClass : JdChart):
-        self.chart = inChartClass
+    def set_chart_class(self, chart: JdChart):
+        self.chart = chart
         fig = self.chart.draw_stock_chart()
         self.set_canvas(fig)
 
@@ -61,9 +61,9 @@ class JdWindowClass(QMainWindow, form_class):
         self.canvas.draw()
 
 
-    def set_canvas(self, inFig : Figure):
+    def set_canvas(self, figure: Figure):
         # FigureCanvas 생성 및 설정
-        self.canvas = FigureCanvasQTAgg(inFig)
+        self.canvas = FigureCanvasQTAgg(figure)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.canvas.setParent(self.label)
         print('canvas size hint: ', self.canvas.sizeHint())
@@ -73,23 +73,23 @@ class JdWindowClass(QMainWindow, form_class):
 
 
             
-    def on_lienEdit_search_returnPressed(self):
-        targetTicker = self.lineEdit_search.text()
-        print(targetTicker)
+    def on_search_return_pressed(self):
+        target_ticker = self.lineEdit_search.text()
+        print(target_ticker)
 
-        res = self.chart.move_to_ticker_stock(targetTicker)
+        res = self.chart.move_to_ticker_stock(target_ticker)
         if res:
-            self.chart.move_to_ticker_stock(targetTicker)
+            self.chart.move_to_ticker_stock(target_ticker)
             self.chart.draw_stock_chart()
             self.refresh_canvas()
 
     def on_ma_checkbox_changed(self):
-        bMa10Checked = self.checkbox_ma10.isChecked()
-        bMa20Checked = self.checkbox_ma20.isChecked()
-        beEma10Checked = self.checkbox_ema10.isChecked()
-        beEma21Checked = self.checkbox_ema21.isChecked()
+        is_ma10_checked = self.checkbox_ma10.isChecked()
+        is_ma20_checked = self.checkbox_ma20.isChecked()
+        is_ema10_checked = self.checkbox_ema10.isChecked()
+        is_ema21_checked = self.checkbox_ema21.isChecked()
 
-        self.chart.set_ma_visibility(bMa10Checked, bMa20Checked, beEma10Checked, beEma21Checked)
+        self.chart.set_ma_visibility(is_ma10_checked, is_ma20_checked, is_ema10_checked, is_ema21_checked)
         self.chart.draw_stock_chart()
         self.refresh_canvas()
 
