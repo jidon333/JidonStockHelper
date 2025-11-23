@@ -70,7 +70,7 @@ def display_menu() -> int:
             print("Invalid input. Please enter a number.")
 
 
-def draw_stock_datas(stock_datas_dic, selected_tickers, inStockManager : JdStockDataManager):
+def draw_stock_datas(stock_datas_dic, selected_tickers, stock_manager: JdStockDataManager):
     """
     Displays a stock chart using the provided stock data.
     
@@ -81,51 +81,51 @@ def draw_stock_datas(stock_datas_dic, selected_tickers, inStockManager : JdStock
 
     # Create the QApplication and initialize the main window.
     app = QApplication(sys.argv) 
-    myWindow = JdWindowClass() 
-    chart = JdChart(inStockManager)
+    window = JdWindowClass() 
+    chart = JdChart(stock_manager)
     chart.init_plots_for_stock(stock_datas_dic, selected_tickers)
-    myWindow.set_chart_class(chart)
-    myWindow.show()
+    window.set_chart_class(chart)
+    window.show()
     app.exec_()
 
-def draw_momentum_index(updown_nyse, updown_nasdaq, updown_sp500, bOnlyForScreenShot = False):
+def draw_momentum_index(updown_nyse, updown_nasdaq, updown_sp500, is_only_for_screenshot: bool = False):
     """
     Draws the momentum index chart.
     
     :param updown_nyse: DataFrame for NYSE up-down data.
     :param updown_nasdaq: DataFrame for NASDAQ up-down data.
     :param updown_sp500: DataFrame for S&P500 up-down data.
-    :param bOnlyForScreenShot: If True, the chart is saved for screenshot purposes.
+    :param is_only_for_screenshot: If True, the chart is saved for screenshot purposes.
     """
     chart = JdChart(sd)
-    chart.bOnlyForScreenShot = bOnlyForScreenShot
+    chart.bOnlyForScreenShot = is_only_for_screenshot
     chart.init_plots_for_up_down(updown_nyse, updown_nasdaq, updown_sp500)
     chart.draw_updown_chart()
 
 
-def draw_atr_expansion_chart(atr_changes_df : pd.DataFrame , bOnlyForScreenShot = False):
+def draw_atr_expansion_chart(atr_changes_df: pd.DataFrame, is_only_for_screenshot: bool = False):
     """
     Draws the ATR Expansion chart.
     
     :param atr_changes_df: DataFrame containing ATR expansion data.
-    :param bOnlyForScreenShot: If True, the chart is saved for screenshot purposes.
+    :param is_only_for_screenshot: If True, the chart is saved for screenshot purposes.
     """
     chart = JdChart(sd)
-    chart.bOnlyForScreenShot = bOnlyForScreenShot
+    chart.bOnlyForScreenShot = is_only_for_screenshot
     chart.init_plots_for_atr_up_down(atr_changes_df)
     chart.draw_updown_ATR_chart()
 
-def draw_count_data_chart(mtt_cnt_df, name : str, chart_type : str, bOnlyForScreenShot = False):
+def draw_count_data_chart(mtt_cnt_df, name: str, chart_type: str, is_only_for_screenshot: bool = False):
     """
     Draws a chart for count data.
     
     :param mtt_cnt_df: DataFrame containing count data.
     :param name: Chart name (e.g., "MTT" or "FA50").
     :param chart_type: Type of chart ("line" or "bar").
-    :param bOnlyForScreenShot: If True, the chart is saved for screenshot purposes.
+    :param is_only_for_screenshot: If True, the chart is saved for screenshot purposes.
     """
     chart = JdChart(sd)
-    chart.bOnlyForScreenShot = bOnlyForScreenShot
+    chart.bOnlyForScreenShot = is_only_for_screenshot
     chart.init_plots_for_count_data(mtt_cnt_df, chart_type)
     chart.draw_count_data_chart(name, chart_type)
 
@@ -155,16 +155,16 @@ def remove_local_caches():
 
 
 
-def screen_stocks_and_show_chart(filter_function, bUseLocalLoadedStockDataForScreening, bSortByRS):
+def screen_stocks_and_show_chart(filter_function, use_local_loaded_stock_data_for_screening: bool, sort_by_rs: bool):
     """
     Filters stocks using the provided filter function and displays the corresponding chart.
     
     :param filter_function: Function used to filter stock data.
-    :param bUseLocalLoadedStockDataForScreening: If True, uses locally cached stock data for screening.
-    :param bSortByRS: If True, sorts the resulting tickers by RS.
+    :param use_local_loaded_stock_data_for_screening: If True, uses locally cached stock data for screening.
+    :param sort_by_rs: If True, sorts the resulting tickers by RS.
     """
-    bUseLocalCache = get_yes_no_input('Do you want to see last chart data? \n It will just show your last chart data without screening. \n (y/n)')
-    if bUseLocalCache:
+    use_local_cache = get_yes_no_input('Do you want to see last chart data? \n It will just show your last chart data without screening. \n (y/n)')
+    if use_local_cache:
         try:
             with open('cache_tickers', "rb") as f:
                 tickers = pickle.load(f)
@@ -174,13 +174,13 @@ def screen_stocks_and_show_chart(filter_function, bUseLocalLoadedStockDataForScr
             
         except FileNotFoundError:
             print('Can not find your last stock chart data in local.\n The chart data will be re-generated. ')
-            bUseLocalCache = False
-            stock_data, tickers = sf.screening_stocks_by_func(filter_function, bUseLocalLoadedStockDataForScreening, bSortByRS)
+            use_local_cache = False
+            stock_data, tickers = sf.screening_stocks_by_func(filter_function, use_local_loaded_stock_data_for_screening, sort_by_rs)
 
     else:
-        stock_data, tickers = sf.screening_stocks_by_func(filter_function, bUseLocalLoadedStockDataForScreening, bSortByRS)
+        stock_data, tickers = sf.screening_stocks_by_func(filter_function, use_local_loaded_stock_data_for_screening, sort_by_rs)
 
-    if not bUseLocalCache:
+    if not use_local_cache:
         with open('cache_tickers', "wb") as f:
             pickle.dump(tickers, f)
 
@@ -288,8 +288,8 @@ def run_screening_to_xlsx():
     """Option 9: Generate screening result as an XLSX file"""
     stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stock_Custom, True, True)
     first_stock_data: pd.DataFrame = stock_data[tickers[0]]
-    lastday = str(first_stock_data.index[-1].date())
-    sd.cook_stock_info_from_tickers(tickers, f'MTT_Leaders_{lastday}')
+    last_day = str(first_stock_data.index[-1].date())
+    sd.cook_stock_info_from_tickers(tickers, f'MTT_Leaders_{last_day}')
 
 
 def run_mtt_index_chart():
@@ -325,22 +325,22 @@ def run_generate_all_indicators():
     # Generate various screening XLSX outputs
     stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stocks_MTT, True, True)
     first_stock_data: pd.DataFrame = stock_data[tickers[0]]
-    lastday = str(first_stock_data.index[-1].date())
+    last_day = str(first_stock_data.index[-1].date())
 
     if tickers:
-        sd.cook_stock_info_from_tickers(tickers, f'US_MTT_{lastday}')
+        sd.cook_stock_info_from_tickers(tickers, f'US_MTT_{last_day}')
 
     stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stocks_high_ADR_swing, True, True)
     if tickers:
-        sd.cook_stock_info_from_tickers(tickers, f'US_HighAdrSwing_{lastday}')
+        sd.cook_stock_info_from_tickers(tickers, f'US_HighAdrSwing_{last_day}')
 
     stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stocks_rs_8_10, True, True)
     if tickers:
-        sd.cook_stock_info_from_tickers(tickers, f'US_RS_8_10_{lastday}')
+        sd.cook_stock_info_from_tickers(tickers, f'US_RS_8_10_{last_day}')
 
     stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stock_hope_from_bottom, True, True)
     if tickers:
-        sd.cook_stock_info_from_tickers(tickers, f'US_hope_from_bottom_{lastday}')
+        sd.cook_stock_info_from_tickers(tickers, f'US_hope_from_bottom_{last_day}')
 
     # Print various screening results
     for func, label in [
@@ -352,7 +352,7 @@ def run_generate_all_indicators():
         (sf.filter_stocks_high_ADR_swing, "High ADR Swing")
     ]:
         stock_data_dic, tickers = sf.screening_stocks_by_func(func, True, True, -1)
-        print(f"[{lastday}] {label} tickers: {tickers}")
+        print(f"[{last_day}] {label} tickers: {tickers}")
 
 def run_power_gap_history_screen():
     """Option 13: Power gap history screen"""
