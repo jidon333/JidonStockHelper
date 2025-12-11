@@ -201,19 +201,19 @@ def run_stock_data_chart():
     """Option 1: Stock Data Chart"""
     sf.MTT_ADR_minimum = 2.5
     sf.LastDayMinimumVolume = 1000000
-    screen_stocks_and_show_chart(sf.filter_stocks_MTT, True, True)
+    screen_stocks_and_show_chart(sf.filter_stocks_mtt, True, True)
     #screen_stocks_and_show_chart(sf.filter_stock_power_gap, True, True)
     #screen_stocks_and_show_chart(sf.filter_stocks_young, True, True)
     
 
-    #screen_stocks_and_show_chart(sf.filter_stocks_high_ADR_swing, True, True)
+    #screen_stocks_and_show_chart(sf.filter_stocks_high_adr_swing, True, True)
     #screen_stocks_and_show_chart(sf.filter_stocks_young, True, True)
-    #screen_stocks_and_show_chart(sf.filter_stocks_Bull_Snort, True, True)
+    #screen_stocks_and_show_chart(sf.filter_stocks_bull_snort, True, True)
     #screen_stocks_and_show_chart(sf.filter_stocks_rs_8_10, True, True)
     #screen_stocks_and_show_chart(sf.filter_stock_hope_from_bottom, True, True)
-    #screen_stocks_and_show_chart(sf.filter_stock_ALL, True, False)
-    #screen_stocks_and_show_chart(sf.filter_stock_Good_RS, True, True)3
-    #screen_stocks_and_show_chart(sf.filter_stocks_high_ADR_swing, True, True)
+    #screen_stocks_and_show_chart(sf.filter_stock_all, True, False)
+    #screen_stocks_and_show_chart(sf.filter_stock_good_rs, True, True)3
+    #screen_stocks_and_show_chart(sf.filter_stocks_high_adr_swing, True, True)
     #screen_stocks_and_show_chart(sf.filter_stock_power_gap, True, True)
 
 def run_momentum_index_chart():
@@ -235,8 +235,8 @@ def run_sync_csv_and_generate_metadata():
     sd.cook_ATRS150_exp_Ranks(365 * 2)
     sd.cook_short_term_industry_rank_scores()
     sd.cook_long_term_industry_rank_scores()
-    sd.cook_filter_count_data(sf.filter_stocks_MTT, "MTT_Counts", 10, True)
-    sd.cook_filter_count_data(sf.filter_stock_FA50, "FA50_Counts", 10, True)
+    sd.cook_filter_count_data(sf.filter_stocks_mtt, "MTT_Counts", 10, True)
+    sd.cook_filter_count_data(sf.filter_stock_fa50, "FA50_Counts", 10, True)
     sd.cook_top10_in_industries()
 
 
@@ -267,8 +267,8 @@ def run_download_stock_data():
     sd.cook_Nday_ATRS150_exp(365 * 2)
     sd.cook_ATRS150_exp_Ranks(365 * 2)
     sd.cook_top10_in_industries()
-    sd.cook_filter_count_data(sf.filter_stocks_MTT, "MTT_Counts", 365 * 3, False)
-    sd.cook_filter_count_data(sf.filter_stock_FA50, "FA50_Counts", 365 * 3, False)
+    sd.cook_filter_count_data(sf.filter_stocks_mtt, "MTT_Counts", 365 * 3, False)
+    sd.cook_filter_count_data(sf.filter_stock_fa50, "FA50_Counts", 365 * 3, False)
 
 
 def run_atrs_ranking():
@@ -286,7 +286,7 @@ def run_industry_ranking():
 
 def run_screening_to_xlsx():
     """Option 9: Generate screening result as an XLSX file"""
-    stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stock_Custom, True, True)
+    stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stock_custom, True, True)
     first_stock_data: pd.DataFrame = stock_data[tickers[0]]
     last_day = str(first_stock_data.index[-1].date())
     sd.cook_stock_info_from_tickers(tickers, f'MTT_Leaders_{last_day}')
@@ -323,14 +323,14 @@ def run_generate_all_indicators():
     draw_atr_expansion_chart(df, True)
 
     # Generate various screening XLSX outputs
-    stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stocks_MTT, True, True)
+    stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stocks_mtt, True, True)
     first_stock_data: pd.DataFrame = stock_data[tickers[0]]
     last_day = str(first_stock_data.index[-1].date())
 
     if tickers:
         sd.cook_stock_info_from_tickers(tickers, f'US_MTT_{last_day}')
 
-    stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stocks_high_ADR_swing, True, True)
+    stock_data, tickers = sf.screening_stocks_by_func(sf.filter_stocks_high_adr_swing, True, True)
     if tickers:
         sd.cook_stock_info_from_tickers(tickers, f'US_HighAdrSwing_{last_day}')
 
@@ -345,11 +345,11 @@ def run_generate_all_indicators():
     # Print various screening results
     for func, label in [
         (sf.filter_stock_power_gap, "power gap"),
-        (sf.filter_stocks_Bull_Snort, "bull snort"),
+        (sf.filter_stocks_bull_snort, "bull snort"),
         (sf.filter_stocks_rs_8_10, "RS 8/10"),
         (sf.filter_stocks_young, "Young"),
         (sf.filter_stock_hope_from_bottom, "Hope from bottom"),
-        (sf.filter_stocks_high_ADR_swing, "High ADR Swing")
+        (sf.filter_stocks_high_adr_swing, "High ADR Swing")
     ]:
         stock_data_dic, tickers = sf.screening_stocks_by_func(func, True, True, -1)
         print(f"[{last_day}] {label} tickers: {tickers}")

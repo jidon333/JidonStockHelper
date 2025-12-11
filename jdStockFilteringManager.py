@@ -60,23 +60,23 @@ def has_required_data(stock_data: pd.DataFrame, day_before: int, columns: list) 
 # Filtering Manager
 # -------------------------------------------------------------------------
 class JdStockFilteringManager:
-    def __init__(self, inStockDataManager : JdStockDataManager):
+    def __init__(self, stock_data_manager: JdStockDataManager):
         print("Hello JdScreenStockManager!")
-        self.sd = inStockDataManager
+        self.sd = stock_data_manager
         self.MTT_ADR_minimum = 1
         self.LastDayMinimumVolume = 0
 
 
     
 
-    def screening_stocks_by_func(self, filter_func, bUseLoadedStockData = True, bSortByRS = False, n_day_before = -1):
+    def screening_stocks_by_func(self, filter_func, use_loaded_stock_data: bool = True, sort_by_rs: bool = False, n_day_before: int = -1):
         """
         Loads stock data, applies a given filter function, and optionally sorts by RS rank.
         """
 
-        daysNum = int(365)
+        days_num = int(365)
         stock_list = self.sd.get_local_stock_list()
-        out_stock_datas_dic = self.sd.get_stock_datas_from_csv(stock_list, daysNum, bUseLoadedStockData)
+        out_stock_datas_dic = self.sd.get_stock_datas_from_csv(stock_list, days_num, use_loaded_stock_data)
         out_tickers = list(out_stock_datas_dic.keys())
 
 
@@ -91,7 +91,7 @@ class JdStockFilteringManager:
 
 
         # Optional: sort by RS
-        if bSortByRS:
+        if sort_by_rs:
             rs_ranks = []
             for ticker in selected_tickers:
                 try:
@@ -113,7 +113,7 @@ class JdStockFilteringManager:
 
 
     # -------------------------------------------------------------------------
-    # 1) filter_stocks_MTT
+    # 1) filter_stocks_mtt
     # -------------------------------------------------------------------------
     @precheck(
         cols=["Close", "150MA", "200MA", "MA150_Slope", "MA200_Slope", "ADR"],
@@ -121,7 +121,7 @@ class JdStockFilteringManager:
         min_price=10,
         vol_window=50
     )
-    def filter_stocks_MTT(self, stock_datas_dic: dict, n_day_before=-1):
+    def filter_stocks_mtt(self, stock_datas_dic: dict, n_day_before: int = -1):
         """
         Filters tickers that meet the following conditions (MTT criteria):
 
@@ -170,10 +170,10 @@ class JdStockFilteringManager:
             try:
                 atrs_rank = atrs_ranking_df.loc[ticker].iloc[n_day_before]
             except KeyError:
-                logging.debug(f"[filter_stocks_MTT] {ticker}: not in ATRS df")
+                logging.debug(f"[filter_stocks_mtt] {ticker}: not in ATRS df")
                 continue
             except IndexError as e:
-                logging.debug(f"[filter_stocks_MTT] {ticker}: IndexErr {e}")
+                logging.debug(f"[filter_stocks_mtt] {ticker}: IndexErr {e}")
                 continue
             if atrs_rank >= 1000:                        # 7)
                 continue
@@ -188,7 +188,7 @@ class JdStockFilteringManager:
 
 
     # -------------------------------------------------------------------------
-    # 2) filter_stocks_high_ADR_swing
+    # 2) filter_stocks_high_adr_swing
     # -------------------------------------------------------------------------
     @precheck(
         cols=["Close", "50MA", "200MA", "ADR"],
@@ -196,7 +196,7 @@ class JdStockFilteringManager:
         min_price=5,
         vol_window=50
     )
-    def filter_stocks_high_ADR_swing(self, stock_datas_dic : dict, n_day_before = -1):
+    def filter_stocks_high_adr_swing(self, stock_datas_dic: dict, n_day_before: int = -1):
         """
         High ADR short-term momentum filter:
 
@@ -219,12 +219,12 @@ class JdStockFilteringManager:
             ma200 = stock_data['200MA'].iloc[n_day_before]
             ma50 = stock_data['50MA'].iloc[n_day_before]
             last_volume = stock_data['Volume'].iloc[n_day_before]
-            ADR = stock_data['ADR'].iloc[n_day_before]
+            adr = stock_data['ADR'].iloc[n_day_before]
 
 
             # 2) 20-day ADR >= 4.0
             # code uses ADR from 20-day by default if inStockData['ADR'] is 20day. 
-            if ADR < 4.0:
+            if adr < 4.0:
                 continue
 
             if last_volume < self.LastDayMinimumVolume:
@@ -259,9 +259,9 @@ class JdStockFilteringManager:
 
 
     # -------------------------------------------------------------------------
-    # 3) filter_stocks_Bull_Snort
+    # 3) filter_stocks_bull_snort
     # -------------------------------------------------------------------------
-    def filter_stocks_Bull_Snort(self, stock_datas_dic : dict, n_day_before = -1):
+    def filter_stocks_bull_snort(self, stock_datas_dic: dict, n_day_before: int = -1):
 
         """
         Bull Snort Filter:
@@ -334,7 +334,7 @@ class JdStockFilteringManager:
     # -------------------------------------------------------------------------
     # 4) filter_stocks_rs_8_10
     # -------------------------------------------------------------------------
-    def filter_stocks_rs_8_10(self, stock_datas_dic : dict, n_day_before = -1):
+    def filter_stocks_rs_8_10(self, stock_datas_dic: dict, n_day_before: int = -1):
         """
         Filters tickers where:
          1) Price >= 8
@@ -401,7 +401,7 @@ class JdStockFilteringManager:
     # -------------------------------------------------------------------------
     # 5) filter_stocks_young
     # -------------------------------------------------------------------------
-    def filter_stocks_young(self, stock_datas_dic : dict, n_day_before = -1):
+    def filter_stocks_young(self, stock_datas_dic: dict, n_day_before: int = -1):
         """
         1) Stock IPO < 200 days (ma200 not present => no 200MA)
         2) Volume >= 1,000,000
@@ -452,9 +452,9 @@ class JdStockFilteringManager:
         return filtered_tickers
 
     # -------------------------------------------------------------------------
-    # 6) filter_stock_ALL
+    # 6) filter_stock_all
     # -------------------------------------------------------------------------
-    def filter_stock_ALL(self, stock_datas_dic : dict):
+    def filter_stock_all(self, stock_datas_dic: dict):
         """
         Simply returns all tickers.
         """
@@ -463,14 +463,14 @@ class JdStockFilteringManager:
 
 
     # -------------------------------------------------------------------------
-    # 7) filter_stock_Custom
+    # 7) filter_stock_custom
     # -------------------------------------------------------------------------
-    def filter_stock_Custom(self, stock_datas_dic : dict):
+    def filter_stock_custom(self, stock_datas_dic: dict):
         """
         Example custom filter: intersect with a predefined mylist
         """
         filtered_tickers = []
-        all_tickers = self.filter_stock_ALL(stock_datas_dic)
+        all_tickers = self.filter_stock_all(stock_datas_dic)
 
         # Example list
         mylist = [
@@ -486,9 +486,9 @@ class JdStockFilteringManager:
 
 
     # -------------------------------------------------------------------------
-    # 8) filter_stock_FA50
+    # 8) filter_stock_fa50
     # -------------------------------------------------------------------------
-    def filter_stock_FA50(self, stock_datas_dic : dict, n_day_before = -1):
+    def filter_stock_fa50(self, stock_datas_dic: dict, n_day_before: int = -1):
         """
         1) ADR > 3
         2) 50-day avg volume >= 1,000,000
@@ -496,7 +496,7 @@ class JdStockFilteringManager:
         4) close >= 50MA
         """
         filtered_tickers = []
-        all_tickers = self.filter_stock_ALL(stock_datas_dic)
+        all_tickers = self.filter_stock_all(stock_datas_dic)
 
         for ticker in all_tickers:
             stock_data = stock_datas_dic[ticker]
@@ -530,9 +530,9 @@ class JdStockFilteringManager:
     
 
     # -------------------------------------------------------------------------
-    # 9) filter_stock_ATR_plus_150
+    # 9) filter_stock_atr_plus_150
     # -------------------------------------------------------------------------
-    def filter_stock_ATR_plus_150(self, stock_datas_dic : dict, n_day_before = -1):
+    def filter_stock_atr_plus_150(self, stock_datas_dic: dict, n_day_before: int = -1):
         """
          - 50-day avg volume >= 2,000,000
          - close >= 10
@@ -540,7 +540,7 @@ class JdStockFilteringManager:
         """
 
         filtered_tickers = []
-        all_tickers = self.filter_stock_ALL(stock_datas_dic)
+        all_tickers = self.filter_stock_all(stock_datas_dic)
 
         for ticker in all_tickers:
             stock_data = stock_datas_dic[ticker]
@@ -571,9 +571,9 @@ class JdStockFilteringManager:
   
 
     # -------------------------------------------------------------------------
-    # 10) filter_stock_Good_RS
+    # 10) filter_stock_good_rs
     # -------------------------------------------------------------------------
-    def filter_stock_Good_RS(self, stock_datas_dic : dict, n_day_before = -1):
+    def filter_stock_good_rs(self, stock_datas_dic: dict, n_day_before: int = -1):
         """
         1) ADR >= 2
         2) RS rank top 1000
@@ -585,7 +585,7 @@ class JdStockFilteringManager:
         """
 
         filtered_tickers = []
-        Mtt_tickers = self.filter_stock_ALL(stock_datas_dic)
+        Mtt_tickers = self.filter_stock_all(stock_datas_dic)
         atrs_ranking_df = self.sd.get_ATRS_Ranking_df()
         gisc_df = self.sd.get_GICS_df()
 
@@ -611,14 +611,14 @@ class JdStockFilteringManager:
                 continue
 
             # 2) RS rank top 1000
-            is_ATRS_Ranking_Good = False
+            is_atrs_ranking_good = False
             try:
-                atrsRank = atrs_ranking_df.loc[ticker].iloc[n_day_before]
-                is_ATRS_Ranking_Good = (atrsRank < 1000)
+                atrs_rank = atrs_ranking_df.loc[ticker].iloc[n_day_before]
+                is_atrs_ranking_good = atrs_rank < 1000
             except Exception:
                 continue
 
-            if not is_ATRS_Ranking_Good:
+            if not is_atrs_ranking_good:
                 continue
 
             # 3) Exclude Healthcare, Energy
@@ -663,7 +663,7 @@ class JdStockFilteringManager:
         6) near 150 or 200SMA (within 2 * ADR)
         """
         filtered_tickers = []
-        Mtt_tickers = self.filter_stock_ALL(stock_datas_dic)
+        Mtt_tickers = self.filter_stock_all(stock_datas_dic)
         atrs_ranking_df = self.sd.get_ATRS_Ranking_df()
         gisc_df = self.sd.get_GICS_df()
 
@@ -687,14 +687,14 @@ class JdStockFilteringManager:
                 continue
 
             # 2) RS rank < 2000
-            bIsATRS_Ranking_Good = False
+            is_atrs_ranking_good = False
             try:
                 rank = atrs_ranking_df.loc[ticker].iloc[n_day_before]
-                bIsATRS_Ranking_Good = (rank < 2000)
+                is_atrs_ranking_good = rank < 2000
             except Exception:
                 continue
 
-            if not bIsATRS_Ranking_Good:
+            if not is_atrs_ranking_good:
                 continue
 
             # 3) Exclude Healthcare, Energy
@@ -727,7 +727,7 @@ class JdStockFilteringManager:
     # -------------------------------------------------------------------------
     # 12) filter_stock_power_gap
     # -------------------------------------------------------------------------
-    def filter_stock_power_gap(self, stock_datas_dic : dict, n_day_before = -1):
+    def filter_stock_power_gap(self, stock_datas_dic: dict, n_day_before: int = -1):
         """
         1) ADR(1 day ago) >= 2
         2) Gap up: open > previous day's high
@@ -739,7 +739,7 @@ class JdStockFilteringManager:
         """
 
         filtered_tickers = []
-        all_tickers = self.filter_stock_ALL(stock_datas_dic)
+        all_tickers = self.filter_stock_all(stock_datas_dic)
         gisc_df = self.sd.get_GICS_df()
 
         for ticker in all_tickers:
@@ -810,7 +810,7 @@ class JdStockFilteringManager:
         5) Exclude Healthcare
         """
         filtered_tickers = []
-        all_tickers = self.filter_stock_ALL(stock_datas_dic)
+        all_tickers = self.filter_stock_all(stock_datas_dic)
         gisc_df = self.sd.get_GICS_df()
 
         for ticker in all_tickers:
