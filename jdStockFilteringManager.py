@@ -424,7 +424,7 @@ class JdStockFilteringManager:
             except Exception:
                 continue
 
-            bNo_ma200 = pd.isna(ma200)
+            is_no_ma200 = pd.isna(ma200)
 
             # 4) ATRS rank < 1000
             is_ATRS_good = False
@@ -436,7 +436,7 @@ class JdStockFilteringManager:
 
 
             # 1) no 200MA => IPO < 200 days
-            if not bNo_ma200:
+            if not is_no_ma200:
                 continue
 
             # 2) volume >= 1,000,000
@@ -1025,11 +1025,11 @@ class JdStockFilteringManager:
 
                 d0_dollar_volume = d0_volume * d0_close
 
-                # [bOEL]
-                bOEL = d0_open == d0_low
+                # [is_oel]
+                is_oel = d0_open == d0_low
 
                 # [Above 200sma]
-                bAbove200ma = d0_close > d0_ma200
+                is_above_200ma = d0_close > d0_ma200
                 
                 # ------------ d0 이후에 알 수 있는 것들 ------------
 
@@ -1117,9 +1117,9 @@ class JdStockFilteringManager:
 
                 gap_profile_dic[ticker_date] = [ticker,
                                            # d5, d10, d20, d30, d40, d50 퍼포먼스
-                                           gap_date, day_n_performances[0], day_n_performances[1], day_n_performances[2], day_n_performances[3], day_n_performances[4], day_n_performances[5],
+                                            gap_date, day_n_performances[0], day_n_performances[1], day_n_performances[2], day_n_performances[3], day_n_performances[4], day_n_performances[5],
                                             d0_close, d0_open_change, d0_close_change, d0_low_change_from_open, d0_close_change_from_open,
-                                            d0_daily_range, d0_performance_vs_ADR, DCR, d0_volume, d0_volume_vs_50Avg, d0_dollar_volume, bOEL, bAbove200ma,
+                                            d0_daily_range, d0_performance_vs_ADR, DCR, d0_volume, d0_volume_vs_50Avg, d0_dollar_volume, is_oel, is_above_200ma,
                                             first_ma_touch_day, d0_open_violation_day, d0_low_violation_day, HVC_violation_first_day, HVC_violation_last_day, HVC_violation_cnt,
                                             alpha_window_lowest_day, alpha_window_lowest_pct_from_HVC, alpha_window_highest_day, alpha_window_highest_pct_from_HVC,
                                               HVC_recovery_day_from_alpha_window_lowest]
@@ -1128,7 +1128,7 @@ class JdStockFilteringManager:
         df = pd.DataFrame.from_dict(gap_profile_dic).transpose()
         columns = ['Symbol', 'gap_date', 'd5_performance', 'd10_performance', 'd20_performance', 'd30_performance', 'd40_performance', 'd50_performance',
                     'd0_close', 'd0_open_change', 'd0_close_change', 'd0_low_change_from_open', 'd0_close_change_from_open',
-                    'd0_daily_range', 'd0_performance_vs_ADR', 'DCR', 'd0_volume', 'd0_volume_vs_50Avg', 'd0_dollar_volume', 'bOEL', 'bAbove200ma',
+                    'd0_daily_range', 'd0_performance_vs_ADR', 'DCR', 'd0_volume', 'd0_volume_vs_50Avg', 'd0_dollar_volume', 'is_oel', 'is_above_200ma',
                     'first_ma_touch_day', 'd0_open_violation_day', 'd0_low_violation_day', 'HVC_violation_first_day', 'HVC_violation_last_day', 'HVC_violation_cnt',
                     'alpha_window_lowest_day', 'alpha_window_lowest_pct_from_HVC', 'alpha_window_highest_day', 'alpha_window_highest_pct_from_HVC',
                         'HVC_recovery_day_from_alpha_window_lowest']
@@ -1158,9 +1158,9 @@ class JdStockFilteringManager:
 
         sd = self.sd
         gap_date_tickers_dic = {}
-        bUseGapDataCache = True
+        use_gap_data_cache = True
 
-        if bUseGapDataCache:
+        if use_gap_data_cache:
             try: 
                 with open('cache_power_gap_date_tickers_dic', "rb") as f:
                     gap_date_tickers_dic = pickle.load(f)
@@ -1205,8 +1205,8 @@ class JdStockFilteringManager:
         sd = self.sd
         gap_date_tickers_dic = {}
 
-        bUseGapDataCache = True
-        if bUseGapDataCache:
+        use_gap_data_cache = True
+        if use_gap_data_cache:
             try: 
                 with open('cache_open_gap_date_tickers_dic', "rb") as f:
                     gap_date_tickers_dic = pickle.load(f)
