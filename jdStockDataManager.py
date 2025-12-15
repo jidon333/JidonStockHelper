@@ -156,7 +156,7 @@ class JdStockDataManager:
 
 
 
-    def _CookIndexData(self, index_data, n = 14):
+    def _cook_index_data(self, index_data, n = 14):
         """
         S&P500 (index_data)에 ATR, TC, ATC 컬럼을 추가
         """
@@ -179,7 +179,7 @@ class JdStockDataManager:
 
         return index_new_data
 
-    def _CookStockData(self, stock_data : pd.DataFrame):
+    def _cook_stock_data(self, stock_data : pd.DataFrame):
         """
         종목별 주가 데이터를 받아서
         RS, MA, ATR, TRS, ATRS 등 각종 지표를 추가
@@ -232,7 +232,7 @@ class JdStockDataManager:
             atc = tc.rolling(n).mean()
             new_data['ATC'] = atc
 
-            new_index_data = self._CookIndexData(self.us500_data, 14)
+            new_index_data = self._cook_index_data(self.us500_data, 14)
         
             # TRS(True Relative Strength)
             sp500_tc = new_index_data['TC']
@@ -411,13 +411,13 @@ class JdStockDataManager:
         return self.data_getter.get_local_stock_list()
     
 
-    def cook_ATR_Expansion_Counts(self, daysNum = 365*5):
+    def cook_atr_expansion_counts(self, daysNum = 365*5):
         stock_list = self.get_local_stock_list()
         up_down_condition_df = self._getUpDownConditions_df(stock_list)
         up_down_condition_df.to_csv(os.path.join(METADATA_FOLDER, 'ATR_Expansion_Counts.csv'))
     
 
-    def cookUpDownDatas(self, daysNum = 365*5):
+    def cook_up_down_datas(self, daysNum = 365*5):
 
         # S&P 500 지수의 모든 종목에 대해 매일 상승/하락한 종목 수 계산
         nyse_list = self.data_getter.get_fdr_stock_list('NYSE', daysNum)
@@ -580,7 +580,7 @@ class JdStockDataManager:
                 continue
 
             try:
-                cooked_df = self._CookStockData(df)
+                cooked_df = self._cook_stock_data(df)
                 cooked_data_dic[ticker] = cooked_df
                 i += 1
                 print(f"[download_stock_datas_from_web] {ticker} cooked. {i}/{total}")
@@ -600,7 +600,7 @@ class JdStockDataManager:
         print("[download_stock_datas_from_web] Done override.")
 
     # cooking 공식이 변하는 경우 로컬 데이터를 업데이트하기 위해 호출
-    def cookLocalStockData(self, bUseLocalCache = False):
+    def cook_local_stock_data(self, bUseLocalCache = False):
         print("-------------------cookLocalStockData-----------------\n ") 
 
         all_list = self.get_local_stock_list()
@@ -617,7 +617,7 @@ class JdStockDataManager:
                 sync_fail_ticker_list.append(ticker)
                 continue
 
-            cookedData = self._CookStockData(csvData)
+            cookedData = self._cook_stock_data(csvData)
             cooked_data_dic[ticker] = cookedData
 
             print(ticker, ' cooked!')
@@ -644,7 +644,7 @@ class JdStockDataManager:
         
             # [Cook]
             try:
-                cooked_df = self._CookStockData(merged_df)
+                cooked_df = self._cook_stock_data(merged_df)
                 cooked_data_dic[ticker] = cooked_df
                 i += 1
                 logging.info(f"[sync_csv_from_web] {ticker} cooked. {i}/{total}")
@@ -664,7 +664,7 @@ class JdStockDataManager:
 
         print("[sync_csv_from_web] Done.")
 
-    def getUpDownDataFromCsv(self, daysNum = 365*2):
+    def get_up_down_data_from_csv(self, daysNum = 365*2):
         updown_nyse = pd.DataFrame()
         updown_nasdaq = pd.DataFrame()
         updown_sp500 = pd.DataFrame()
@@ -756,7 +756,7 @@ class JdStockDataManager:
                 os.remove(file_path)
                 print(file_path, 'is removed from local directory!')
 
-    def cook_Nday_ATRS150_exp(self, N=150):
+    def cook_nday_atrs150_exp(self, N=150):
         all_list = self.get_local_stock_list()
 
         propertyName = 'ATRS150_Exp'
@@ -789,7 +789,7 @@ class JdStockDataManager:
 
         return atrs_df
 
-    def cook_ATRS150_exp_Ranks(self, N = 150):
+    def cook_atrs150_exp_ranks(self, N = 150):
 
         propertyName = 'ATRS150_Exp'
 
@@ -804,12 +804,12 @@ class JdStockDataManager:
         save_path = os.path.join(METADATA_FOLDER, f'{propertyName}_Ranking.csv')
         rank_df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
 
-    def get_ATRS150_exp_Ranks_Normalized(self, Symbol):
+    def get_atrs150_exp_ranks_normalized(self, Symbol):
 
         propertyName = 'ATRS150_Exp'
 
         try:
-            rank_df = self.get_ATRS_Ranking_df()
+            rank_df = self.get_atrs_ranking_df()
             serise_rankChanges = rank_df.loc[Symbol]
 
             max_value = len(rank_df)
@@ -825,12 +825,12 @@ class JdStockDataManager:
         except Exception as e:
             return pd.Series()
         
-    def get_ATRS150_exp_Ranks(self, Symbol):
+    def get_atrs150_exp_ranks(self, Symbol):
 
         propertyName = 'ATRS150_Exp'
 
         try:
-            rank_df = self.get_ATRS_Ranking_df()
+            rank_df = self.get_atrs_ranking_df()
             serise_rankChanges = rank_df.loc[Symbol]
             serise_rankChanges.name = f'Rank_{propertyName}'
 
@@ -839,7 +839,7 @@ class JdStockDataManager:
         except Exception as e:
             return pd.Series()
         
-    def get_ATRS_Ranking_df(self):
+    def get_atrs_ranking_df(self):
 
         propertyName = 'ATRS150_Exp'
 
@@ -856,7 +856,7 @@ class JdStockDataManager:
         except Exception as e:
             return pd.DataFrame()
         
-    def cook_Stock_GICS_df(self):
+    def cook_stock_gics_df(self):
         """
         If you got the HTTP 404 error, always check  yf library version first.
         cmd: pip install --upgrade yahooquery
@@ -954,7 +954,7 @@ class JdStockDataManager:
         return result_df
     
 
-    def get_GICS_df(self):
+    def get_gics_df(self):
         if self.stock_GICS_df.empty:
             # TODO: 예외처리 추가
             csv_path = os.path.join(METADATA_FOLDER, "Stock_GICS.csv")
@@ -1012,7 +1012,7 @@ class JdStockDataManager:
     # cook industry ranks according to the ATRS150_Exp ranks.
     def cook_long_term_industry_rank_scores(self):
         print('cook_long_term_industry_rank_scores')
-        ATRS_Ranks_df = self.get_ATRS_Ranking_df()
+        ATRS_Ranks_df = self.get_atrs_ranking_df()
         csv_path = os.path.join(METADATA_FOLDER, "Stock_GICS.csv")
         stock_GICS_df = pd.read_csv(csv_path)
 
@@ -1090,12 +1090,12 @@ class JdStockDataManager:
             return sorted_sector_scores
     
 
-    def get_percentage_AtoB(self, priceA : float, priceB : float):
+    def get_percentage_a_to_b(self, priceA : float, priceB : float):
         res = ((priceB - priceA)/priceA) * 100
         return res
 
 
-    def get_DCR_normalized(self, inStockData: pd.DataFrame, n_day_before = -1):      
+    def get_dcr_normalized(self, inStockData: pd.DataFrame, n_day_before = -1):      
         # [DCR](%)
 
         d0_close = inStockData['Close'].iloc[n_day_before]
@@ -1358,34 +1358,34 @@ class JdStockDataManager:
         rank_history_df.to_csv(save_path, encoding='utf-8-sig')
         print('short_term_industry_rank_scores.csv cooked!')
 
-    def check_NR_with_TrueRange(self, inStockData : pd.DataFrame , maxDepth = 20):
+    def check_nr_with_true_range(self, inStockData : pd.DataFrame , maxDepth = 20):
         # Calcaute NR(x) using True Range.
         last_tr = inStockData['TR'].iloc[-1]
-        trueRange_NR_x = 0
+        true_range_nr_x = 0
         for i in range(2, maxDepth):
-            tr_rangeN = inStockData['TR'][-i:]
-            min_value = tr_rangeN.min()
+            tr_range_n = inStockData['TR'][-i:]
+            min_value = tr_range_n.min()
             if min_value == last_tr:
-                trueRange_NR_x = i
-        return trueRange_NR_x
+                true_range_nr_x = i
+        return true_range_nr_x
     
-    def check_insideBar(self, inStockData: pd.DataFrame):
+    def check_inside_bar(self, inStockData: pd.DataFrame):
         d2_ago_high, d2_ago_low = inStockData['High'].iloc[-2], inStockData['Low'].iloc[-2]
         d1_ago_high, d1_ago_low = inStockData['High'].iloc[-1], inStockData['Low'].iloc[-1]
-        bIsInsideBar = False
-        bDoubleInsideBar = False
+        is_inside_bar = False
+        is_double_inside_bar = False
         if d2_ago_high > d1_ago_high and d2_ago_low < d1_ago_low:
-            bIsInsideBar = True
+            is_inside_bar = True
 
-        if bIsInsideBar:
+        if is_inside_bar:
             d3_ago_high, d3_ago_low = inStockData['High'].iloc[-3], inStockData['Low'].iloc[-3]
             if d3_ago_high > d2_ago_high and d3_ago_low < d2_ago_low:
-                bDoubleInsideBar = True
+                is_double_inside_bar = True
 
 
 
         
-        return bIsInsideBar, bDoubleInsideBar
+        return is_inside_bar, is_double_inside_bar
     
     def get_moving_average_data(self, inStockData: pd.DataFrame, Num):
         return inStockData['Close'].rolling(window=Num).mean()
@@ -1447,8 +1447,8 @@ class JdStockDataManager:
 
         
 
-        ma_dist_from_close = abs(self.get_percentage_AtoB(close, ma))
-        ma_dist_from_low = abs(self.get_percentage_AtoB(low, ma))
+        ma_dist_from_close = abs(self.get_percentage_a_to_b(close, ma))
+        ma_dist_from_low = abs(self.get_percentage_a_to_b(low, ma))
 
         return ma_dist_from_close < max_error_pct or ma_dist_from_low < max_error_pct
    
@@ -1467,8 +1467,8 @@ class JdStockDataManager:
         close = inStockData['Close'].iloc[-1]
         ma = ma_datas.iloc[-1]
 
-        dist_from_close = abs(self.get_percentage_AtoB(close, ma))
-        dist_from_low = abs(self.get_percentage_AtoB(low, ma))
+        dist_from_close = abs(self.get_percentage_a_to_b(close, ma))
+        dist_from_low = abs(self.get_percentage_a_to_b(low, ma))
 
 
         if low > ma and dist_from_low < max_error_pct:
@@ -1510,32 +1510,32 @@ class JdStockDataManager:
 
 
     def check_wickplay(self, inStockData: pd.DataFrame):
-        bWickPlay = False
+        is_wick_play = False
         d2_ago_open, d2_ago_high, d2_ago_low, d2_ago_close = inStockData['Open'].iloc[-2], inStockData['High'].iloc[-2], inStockData['Low'].iloc[-2], inStockData['Close'].iloc[-2]
         d1_ago_open, d1_ago_high, d1_ago_low, d1_ago_close = inStockData['Open'].iloc[-1], inStockData['High'].iloc[-1], inStockData['Low'].iloc[-1], inStockData['Close'].iloc[-1]
 
         # bullish candle
         if d2_ago_open <= d2_ago_close:
             if d1_ago_high <= d2_ago_high and d1_ago_low >= d2_ago_close:
-                bWickPlay = True
+                is_wick_play = True
         # bearish candle
         else:
             if d1_ago_high <= d2_ago_high and d1_ago_low >= d2_ago_open:
-                bWickPlay = True
+                is_wick_play = True
 
-        return bWickPlay
+        return is_wick_play
     
 
     # open equal low
-    def check_OEL(self, inStockData: pd.DataFrame, n_day_before = -1):
+    def check_oel(self, inStockData: pd.DataFrame, n_day_before = -1):
         d1_ago_open, d1_ago_low = inStockData['Open'].iloc[n_day_before], inStockData['Low'].iloc[n_day_before]
-        bOEL = d1_ago_open == d1_ago_low
-        return bOEL
+        is_oel = d1_ago_open == d1_ago_low
+        return is_oel
     
-    def check_OEH(self, inStockData: pd.DataFrame, n_day_before = -1):
+    def check_oeh(self, inStockData: pd.DataFrame, n_day_before = -1):
         d1_ago_open, d1_ago_high = inStockData['Open'].iloc[n_day_before], inStockData['High'].iloc[n_day_before]
-        bOEH = d1_ago_open == d1_ago_high
-        return bOEH
+        is_oeh = d1_ago_open == d1_ago_high
+        return is_oeh
     
 
 
@@ -1619,7 +1619,7 @@ class JdStockDataManager:
         for i in range(0, days-1):
             prev_close = closes[i]
             close = closes[i+1]
-            dist_percentage = self.get_percentage_AtoB(prev_close, close)
+            dist_percentage = self.get_percentage_a_to_b(prev_close, close)
             if dist_percentage > 0 and abs(dist_percentage) >= ADRs[i]:
                 cnt += 1
             
@@ -1634,7 +1634,7 @@ class JdStockDataManager:
         for i in range(0, days-1):
             prev_close = closes[i]
             close = closes[i+1]
-            dist_percentage = self.get_percentage_AtoB(prev_close, close)
+            dist_percentage = self.get_percentage_a_to_b(prev_close, close)
             if dist_percentage < 0 and abs(dist_percentage) >= ADRs[i]:
                 cnt += 1
             
@@ -1702,7 +1702,7 @@ class JdStockDataManager:
     
 
     # gap + OEL
-    def check_GOEL(self, inStockData: pd.DataFrame, n_day_before = -1):
+    def check_goel(self, inStockData: pd.DataFrame, n_day_before = -1):
         
         d1_ago_close = inStockData['Close'].iloc[n_day_before - 1]
         d1_ago_high = inStockData['High'].iloc[n_day_before - 1]
@@ -1711,14 +1711,14 @@ class JdStockDataManager:
         # Gap Start
         if d1_ago_high < d0_open:
             # more than 3% up
-            if self.get_percentage_AtoB(d1_ago_close, d0_open) >= 3.0:
+            if self.get_percentage_a_to_b(d1_ago_close, d0_open) >= 3.0:
                 # and OEL
-                if self.check_OEL(inStockData, n_day_before):
+                if self.check_oel(inStockData, n_day_before):
                     return True
     
         return False
 
-    def check_failed_downside_wick_BO(self, inStockData: pd.DataFrame):
+    def check_failed_downside_wick_bo(self, inStockData: pd.DataFrame):
         d2_ago_open, d2_ago_high, d2_ago_low, d2_ago_close = inStockData['Open'].iloc[-2], inStockData['High'].iloc[-2], inStockData['Low'].iloc[-2], inStockData['Close'].iloc[-2]
         d1_ago_open, d1_ago_high, d1_ago_low, d1_ago_close = inStockData['Open'].iloc[-1], inStockData['High'].iloc[-1], inStockData['Low'].iloc[-1], inStockData['Close'].iloc[-1]
 
@@ -1776,7 +1776,7 @@ class JdStockDataManager:
         return oops_up_cnt
 
 
-    def check_OEL_cnt(self, inStockData: pd.DataFrame, days=15):
+    def check_oel_cnt(self, inStockData: pd.DataFrame, days=15):
         ticker = inStockData['Symbol'].iloc[-1]
         opens = inStockData['Open'].iloc[-days:].tolist()
         lows = inStockData['Low'].iloc[-days:].tolist()
@@ -1791,7 +1791,7 @@ class JdStockDataManager:
         return condition_cnt
     
 
-    def check_OEH_cnt(self, inStockData: pd.DataFrame, days=15):
+    def check_oeh_cnt(self, inStockData: pd.DataFrame, days=15):
         ticker = inStockData['Symbol'].iloc[-1]
         opens = inStockData['Open'].iloc[-days:].tolist()
         highs = inStockData['High'].iloc[-days:].tolist()
@@ -1821,7 +1821,7 @@ class JdStockDataManager:
             adr = ADRs[i]
 
             if high > prevHigh:
-                dist_pct = self.get_percentage_AtoB(prevHigh, high)
+                dist_pct = self.get_percentage_a_to_b(prevHigh, high)
                 if dist_pct >= adr:
                     if close < prevHigh:
                         squat_cnt += 1
@@ -1843,7 +1843,7 @@ class JdStockDataManager:
             adr = ADRs[i]
 
             if high > prevHigh:
-                dist_pct = self.get_percentage_AtoB(prevHigh, high)
+                dist_pct = self.get_percentage_a_to_b(prevHigh, high)
                 if dist_pct >= adr:
                     # 스쿼트 발생!
                     if close < prevHigh:
@@ -1930,11 +1930,11 @@ class JdStockDataManager:
 
     def check_pocket_pivot(self, inStockData: pd.DataFrame):
         # Check Pocket pivot
-        bIsPocketPivot = False
+        is_pocket_pivot = False
 
         # only bullish day
-        bBullishDay = inStockData['Close'].iloc[-1] > inStockData['Open'].iloc[-1]
-        if bBullishDay:
+        is_bullish_day = inStockData['Close'].iloc[-1] > inStockData['Open'].iloc[-1]
+        if is_bullish_day:
             # get the last 10 days from the last day. considering shift operaion below.
             recent_10_days_volumes = inStockData[-12:-1]
             last_day_volume = inStockData['Volume'].iloc[-1]
@@ -1947,13 +1947,13 @@ class JdStockDataManager:
             if volume_on_price_drop_days.max() < last_day_volume:
                 ma10 = self.get_moving_average_data(inStockData, 10).iloc[-1]
                 low = inStockData['Low'].iloc[-1]
-                ma10_to_low = self.get_percentage_AtoB(ma10, low)
+                ma10_to_low = self.get_percentage_a_to_b(ma10, low)
 
                 # stock price shouldn't above the ma10 more than 0.1%
                 if ma10_to_low <= 0.1:
-                    bIsPocketPivot = True
+                    is_pocket_pivot = True
 
-        return bIsPocketPivot
+        return is_pocket_pivot
 
 
     def check_pocket_pivot_cnt(self, inStockData: pd.DataFrame, days=15):
@@ -1975,10 +1975,10 @@ class JdStockDataManager:
             today_low = lows[i]
             today_ma10 = ma10[i]
 
-            bBullishDay = today_close > today_open
+            is_bullish_day = today_close > today_open
             # bullish day
-            if bBullishDay:
-                ma10_to_low_pcg = self.get_percentage_AtoB(today_ma10, today_low)
+            if is_bullish_day:
+                ma10_to_low_pcg = self.get_percentage_a_to_b(today_ma10, today_low)
                 # stock price shouldn't above the ma10 more than 0.1%
                 if ma10_to_low_pcg <= 0.1:
                     n_day_before_index = i - days
@@ -2058,7 +2058,7 @@ class JdStockDataManager:
 
 
     def cook_top10_in_industries(self):
-        ATRS_Ranks_df = self.get_ATRS_Ranking_df()
+        ATRS_Ranks_df = self.get_atrs_ranking_df()
         csv_path = os.path.join(METADATA_FOLDER, "Stock_GICS.csv")
         stock_GICS_df = pd.read_csv(csv_path)
         ranks_in_industries = self.get_ranks_in_industries(ATRS_Ranks_df, stock_GICS_df)
@@ -2126,7 +2126,7 @@ class JdStockDataManager:
         stock_list = self.get_local_stock_list()
         daysNum = 365
         stock_datas_from_csv = self.get_stock_datas_from_csv(stock_list, daysNum, bUseDataCache)
-        atrs_ranking_df = self.get_ATRS_Ranking_df()
+        atrs_ranking_df = self.get_atrs_ranking_df()
 
         nyse_list = self.data_getter.get_fdr_stock_list('NYSE')
         nyse_list = nyse_list['Symbol'].tolist()
@@ -2137,7 +2137,7 @@ class JdStockDataManager:
         stock_info_dic = {}
 
         for ticker in inTickers:
-            gisc_df = self.get_GICS_df()
+            gisc_df = self.get_gics_df()
             market = ''
 
             if ticker in nyse_list:
@@ -2191,8 +2191,8 @@ class JdStockDataManager:
             close_equal_high, close_equal_low = self.check_close_equal_high_or_low_cnt(stockData) # bad, good
             close_equal_low *= -1
 
-            open_equal_high = self.check_OEH_cnt(stockData) * -1 # bad
-            open_equal_low = self.check_OEL_cnt(stockData) # good
+            open_equal_high = self.check_oeh_cnt(stockData) * -1 # bad
+            open_equal_low = self.check_oel_cnt(stockData) # good
 
             oops_up_reversal = self.check_oops_up_reversal_cnt(stockData) # good
 
@@ -2210,16 +2210,16 @@ class JdStockDataManager:
             rs_new_high + rs_new_low + pocket_pivot_cnt)
 
 
-            bPocketPivot = self.check_pocket_pivot(stockData)
-            bInsideBar, bDoubleInsideBar = self.check_insideBar(stockData)
-            NR_x = self.check_NR_with_TrueRange(stockData)
-            bWickPlay = self.check_wickplay(stockData)
-            bOEL = self.check_OEL(stockData)
-            bGOEL = self.check_GOEL(stockData)
+            is_pocket_pivot = self.check_pocket_pivot(stockData)
+            is_inside_bar, is_double_inside_bar = self.check_inside_bar(stockData)
+            nr_x = self.check_nr_with_true_range(stockData)
+            is_wick_play = self.check_wickplay(stockData)
+            is_oel = self.check_oel(stockData)
+            is_goel = self.check_goel(stockData)
 
-            bOopsUpReversal = self.check_oops_up_reversal(stockData)
-            bFailedDownsideWickBO = self.check_failed_downside_wick_BO(stockData)
-            bConverging, bPower3, bPower2 = self.check_ma_converging(stockData)
+            is_oops_up_reversal = self.check_oops_up_reversal(stockData)
+            is_failed_downside_wick_bo = self.check_failed_downside_wick_bo(stockData)
+            is_converging, is_power3, is_power2 = self.check_ma_converging(stockData)
 
             bNearEma10 = self.check_near_ma(stockData, 10, 1.5, True)
             bNearEma21 = self.check_near_ma(stockData, 21, 1.5, True)
@@ -2243,11 +2243,11 @@ class JdStockDataManager:
 
             try:
 
-                stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), ADR, int(volume_ma50), near_ma_list, bPower3, bPocketPivot,
+                stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), ADR, int(volume_ma50), near_ma_list, is_power3, is_pocket_pivot,
                                         # Volatility Contraction
-                                        bInsideBar, bDoubleInsideBar, NR_x, bWickPlay,
+                                        is_inside_bar, is_double_inside_bar, nr_x, is_wick_play,
                                         # Demand
-                                        bOEL, bGOEL, bOopsUpReversal, bFailedDownsideWickBO,
+                                        is_oel, is_goel, is_oops_up_reversal, is_failed_downside_wick_bo,
                                         # C/V factors
                                         lower_low_3, higher_high_3, below_20ma_closed, below_50ma_closed, up_more_than_adr, down_more_than_adr, more_bullish_candle,
                                         ma20_disparity_more_than_20ptg, close_equal_low, close_equal_high, open_equal_high, open_equal_low, oops_up_reversal,

@@ -128,10 +128,10 @@ class JdChart:
      
 
     def get_sector(self, ticker):
-        GICS_df = self.stock_manager.get_GICS_df()
+        GICS_df = self.stock_manager.get_gics_df()
         return GICS_df.loc[ticker]['sector']
     def get_industry(self, ticker):
-        GICS_df = self.stock_manager.get_GICS_df()
+        GICS_df = self.stock_manager.get_gics_df()
         return GICS_df.loc[ticker]['industry']
     
     def get_long_term_industry_rank_scores(self, industry_name):
@@ -301,8 +301,8 @@ class JdChart:
         
         print('ticker: ', ticker)
 
-        ranks_atrs = self.stock_manager.get_ATRS150_exp_Ranks_Normalized(ticker)
-        curr_rank = self.stock_manager.get_ATRS150_exp_Ranks(ticker).iloc[-1]
+        ranks_atrs = self.stock_manager.get_atrs150_exp_ranks_normalized(ticker)
+        curr_rank = self.stock_manager.get_atrs150_exp_ranks(ticker).iloc[-1]
 
         name = curr_stock_data['Name'].iloc[0]
         font_path = os.path.join(UI_FOLDER, 'NanumGothic.ttf')
@@ -331,11 +331,11 @@ class JdChart:
             top10_len = 0
 
 
-        true_range_nr_x = self.stock_manager.check_NR_with_TrueRange(curr_stock_data)
-        is_inside_bar, is_double_inside_bar = self.stock_manager.check_insideBar(curr_stock_data)
+        true_range_nr_x = self.stock_manager.check_nr_with_true_range(curr_stock_data)
+        is_inside_bar, is_double_inside_bar = self.stock_manager.check_inside_bar(curr_stock_data)
         is_pocket_pivot = self.stock_manager.check_pocket_pivot(curr_stock_data)
         is_wick_play = self.stock_manager.check_wickplay(curr_stock_data)
-        is_oel = self.stock_manager.check_OEL(curr_stock_data)
+        is_oel = self.stock_manager.check_oel(curr_stock_data)
         is_ma_converging, is_power3, is_power2 = self.stock_manager.check_ma_converging(curr_stock_data)
         
         is_near_ema10 = self.stock_manager.check_near_ma(curr_stock_data, 10, 1.5, True)

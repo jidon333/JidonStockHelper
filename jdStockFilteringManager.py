@@ -95,7 +95,7 @@ class JdStockFilteringManager:
             rs_ranks = []
             for ticker in selected_tickers:
                 try:
-                    rank = self.sd.get_ATRS150_exp_Ranks(ticker).iloc[-1]
+                    rank = self.sd.get_atrs150_exp_ranks(ticker).iloc[-1]
                     rs_ranks.append((ticker, rank))
                 except Exception as e:
                     print(e)
@@ -141,7 +141,7 @@ class JdStockFilteringManager:
         :return: List of tickers passing all conditions
         """
         filtered_tickers = []
-        atrs_ranking_df = self.sd.get_ATRS_Ranking_df()
+        atrs_ranking_df = self.sd.get_atrs_ranking_df()
 
         for ticker, stock_data in stock_datas_dic.items():
 
@@ -211,7 +211,7 @@ class JdStockFilteringManager:
 
 
         filtered_tickers = []
-        gisc_df = self.sd.get_GICS_df()
+        gisc_df = self.sd.get_gics_df()
 
         for ticker, stock_data in stock_datas_dic.items():
 
@@ -295,7 +295,7 @@ class JdStockFilteringManager:
                 continue
 
             # 2) DCR >= 0.5
-            DCR = self.sd.get_DCR_normalized(stock_data, n_day_before)  # n_day_before might be used
+            DCR = self.sd.get_dcr_normalized(stock_data, n_day_before)  # n_day_before might be used
             if DCR < 0.5:
                 continue
 
@@ -307,7 +307,7 @@ class JdStockFilteringManager:
             # 4) Price up >= 3% from previous close
             try:
                 prev_close = stock_data['Close'].iloc[n_day_before - 1]
-                change_pct = self.sd.get_percentage_AtoB(prev_close, close)
+                change_pct = self.sd.get_percentage_a_to_b(prev_close, close)
                 if change_pct < 3:
                     continue
             except Exception:
@@ -409,7 +409,7 @@ class JdStockFilteringManager:
         4) ATRS rank < 1000
         """
         filtered_tickers = []
-        atrs_ranking_df = self.sd.get_ATRS_Ranking_df()
+        atrs_ranking_df = self.sd.get_atrs_ranking_df()
 
 
         for ticker, stock_data in stock_datas_dic.items():
@@ -586,8 +586,8 @@ class JdStockFilteringManager:
 
         filtered_tickers = []
         Mtt_tickers = self.filter_stock_all(stock_datas_dic)
-        atrs_ranking_df = self.sd.get_ATRS_Ranking_df()
-        gisc_df = self.sd.get_GICS_df()
+        atrs_ranking_df = self.sd.get_atrs_ranking_df()
+        gisc_df = self.sd.get_gics_df()
 
         for ticker in Mtt_tickers:
             stock_data = stock_datas_dic[ticker]
@@ -664,8 +664,8 @@ class JdStockFilteringManager:
         """
         filtered_tickers = []
         Mtt_tickers = self.filter_stock_all(stock_datas_dic)
-        atrs_ranking_df = self.sd.get_ATRS_Ranking_df()
-        gisc_df = self.sd.get_GICS_df()
+        atrs_ranking_df = self.sd.get_atrs_ranking_df()
+        gisc_df = self.sd.get_gics_df()
 
         for ticker in Mtt_tickers:
             stock_data = stock_datas_dic[ticker]
@@ -714,8 +714,8 @@ class JdStockFilteringManager:
                 continue
 
             # 6) near 150 or 200SMA (within 2 * ADR)
-            dist_150 = abs(self.sd.get_percentage_AtoB(close, ma150))
-            dist_200 = abs(self.sd.get_percentage_AtoB(close, ma200))
+            dist_150 = abs(self.sd.get_percentage_a_to_b(close, ma150))
+            dist_200 = abs(self.sd.get_percentage_a_to_b(close, ma200))
             near_150_or_200 = (dist_150 < ADR*2) or (dist_200 < ADR*2)
             if not near_150_or_200:
                 continue
@@ -740,7 +740,7 @@ class JdStockFilteringManager:
 
         filtered_tickers = []
         all_tickers = self.filter_stock_all(stock_datas_dic)
-        gisc_df = self.sd.get_GICS_df()
+        gisc_df = self.sd.get_gics_df()
 
         for ticker in all_tickers:
             stock_data = stock_datas_dic[ticker]
@@ -771,7 +771,7 @@ class JdStockFilteringManager:
                 continue
 
             # 3) Price up >= 10% from previous close
-            change_pct = self.sd.get_percentage_AtoB(close_1d_ago, close_)
+            change_pct = self.sd.get_percentage_a_to_b(close_1d_ago, close_)
             if change_pct < 10:
                 continue
             if change_pct < ADR_1d_ago * 2:
@@ -811,7 +811,7 @@ class JdStockFilteringManager:
         """
         filtered_tickers = []
         all_tickers = self.filter_stock_all(stock_datas_dic)
-        gisc_df = self.sd.get_GICS_df()
+        gisc_df = self.sd.get_gics_df()
 
         for ticker in all_tickers:
             stock_data = stock_datas_dic[ticker]
@@ -842,7 +842,7 @@ class JdStockFilteringManager:
                 continue
 
             # 3) Price up >= 3% from previous close
-            open_change_pct = self.sd.get_percentage_AtoB(close_1d_ago, open_)
+            open_change_pct = self.sd.get_percentage_a_to_b(close_1d_ago, open_)
             if open_change_pct < 3:
                 continue
 
@@ -984,7 +984,7 @@ class JdStockFilteringManager:
                 for day_n_index in day_n_indices:
                     if day_n_index != 0:
                         day_n_close = stock_data['Close'].iloc[day_n_index]
-                        day_n_performance = sd.get_percentage_AtoB(d0_close, day_n_close)
+                        day_n_performance = sd.get_percentage_a_to_b(d0_close, day_n_close)
                         day_n_performances.append(day_n_performance)
                     else:
                         day_n_performances.append(0)
@@ -993,19 +993,19 @@ class JdStockFilteringManager:
                 d0_close = d0_close
 
                 # [d0_open_change] 갭 상승폭 Open(%)
-                d0_open_change = sd.get_percentage_AtoB(close_1d_ago, d0_open)
+                d0_open_change = sd.get_percentage_a_to_b(close_1d_ago, d0_open)
 
                 # [d0_close_change] 종가 상승폭 (%)
-                d0_close_change = sd.get_percentage_AtoB(close_1d_ago, d0_close)
+                d0_close_change = sd.get_percentage_a_to_b(close_1d_ago, d0_close)
 
                 # [d0_low_change_from_open] 시가로부터 저가까지 하락폭(%)
-                d0_low_change_from_open = sd.get_percentage_AtoB(d0_open, d0_low)
+                d0_low_change_from_open = sd.get_percentage_a_to_b(d0_open, d0_low)
 
                 # [d0_close_change_from_open] 시가로부터 종가까지 (%)
-                d0_close_change_from_open = sd.get_percentage_AtoB(d0_open, d0_close)
+                d0_close_change_from_open = sd.get_percentage_a_to_b(d0_open, d0_close)
 
                 # [d0_daily_range] Daily Range(%)
-                d0_daily_range = sd.get_percentage_AtoB(d0_low, d0_high)
+                d0_daily_range = sd.get_percentage_a_to_b(d0_low, d0_high)
 
                 # [d0_performance_vs_ADR] (nADR%)
                 d0_performance_vs_ADR = d0_close_change / ADR_1d_ago
@@ -1089,7 +1089,7 @@ class JdStockFilteringManager:
 
                 # [alpha_window_lowest_pct_from_HVC]
                 alpha_window_lowest_price = stock_data['Low'].iloc[lowest_index_pos]
-                alpha_window_lowest_pct_from_HVC = sd.get_percentage_AtoB(d0_close, alpha_window_lowest_price)
+                alpha_window_lowest_pct_from_HVC = sd.get_percentage_a_to_b(d0_close, alpha_window_lowest_price)
 
                 # [alpha_window_highest_day]
                 start_pos = d0_index + 1
@@ -1100,7 +1100,7 @@ class JdStockFilteringManager:
 
                 # [alpha_window_highest_pct_from_HVC]
                 alpha_window_highest_price = stock_data['High'].iloc[highest_index_pos]
-                alpha_window_highest_pct_from_HVC = sd.get_percentage_AtoB(d0_close, alpha_window_highest_price)
+                alpha_window_highest_pct_from_HVC = sd.get_percentage_a_to_b(d0_close, alpha_window_highest_price)
 
                 # [HVC_recovery_day_from_alpha_window_lowest]
                 # HVC violation이 발생할때만 유효한 프로퍼티

@@ -218,7 +218,7 @@ def run_stock_data_chart():
 
 def run_momentum_index_chart():
     """Option 2: Momentum Index Chart"""
-    updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365 * 2)
+    updown_nyse, updown_nasdaq, updown_sp500 = sd.get_up_down_data_from_csv(365 * 2)
     draw_momentum_index(updown_nyse, updown_nasdaq, updown_sp500)
 
 
@@ -229,10 +229,10 @@ def run_sync_csv_and_generate_metadata():
     """
     remove_local_caches()
     sd.sync_csv_from_web(10)
-    sd.cookUpDownDatas()
-    sd.cook_ATR_Expansion_Counts()
-    sd.cook_Nday_ATRS150_exp(365 * 2)
-    sd.cook_ATRS150_exp_Ranks(365 * 2)
+    sd.cook_up_down_datas()
+    sd.cook_atr_expansion_counts()
+    sd.cook_nday_atrs150_exp(365 * 2)
+    sd.cook_atrs150_exp_ranks(365 * 2)
     sd.cook_short_term_industry_rank_scores()
     sd.cook_long_term_industry_rank_scores()
     sd.cook_filter_count_data(sf.filter_stocks_mtt, "MTT_Counts", 10, True)
@@ -243,14 +243,14 @@ def run_sync_csv_and_generate_metadata():
 
 def run_cook_updown_datas():
     """Option 4: Generate up-down data using local CSV files"""
-    sd.cookUpDownDatas()
-    sd.cook_ATR_Expansion_Counts()
+    sd.cook_up_down_datas()
+    sd.cook_atr_expansion_counts()
 
 
 def run_cook_local_stock_data():
     """Option 5: Process local stock data"""
     remove_local_caches()
-    sd.cookLocalStockData()
+    sd.cook_local_stock_data()
 
 
 def run_download_stock_data():
@@ -263,9 +263,9 @@ def run_download_stock_data():
     sd.download_stock_datas_from_web(365 * 10, False)
     remove_outdated_tickers()
     sd.remove_acquisition_tickers()
-    sd.cook_Stock_GICS_df()
-    sd.cook_Nday_ATRS150_exp(365 * 2)
-    sd.cook_ATRS150_exp_Ranks(365 * 2)
+    sd.cook_stock_gics_df()
+    sd.cook_nday_atrs150_exp(365 * 2)
+    sd.cook_atrs150_exp_ranks(365 * 2)
     sd.cook_top10_in_industries()
     sd.cook_filter_count_data(sf.filter_stocks_mtt, "MTT_Counts", 365 * 3, False)
     sd.cook_filter_count_data(sf.filter_stock_fa50, "FA50_Counts", 365 * 3, False)
@@ -273,8 +273,8 @@ def run_download_stock_data():
 
 def run_atrs_ranking():
     """Option 7: Generate ATRS Ranking"""
-    sd.cook_Nday_ATRS150_exp(365 * 2)
-    sd.cook_ATRS150_exp_Ranks(365 * 2)
+    sd.cook_nday_atrs150_exp(365 * 2)
+    sd.cook_atrs150_exp_ranks(365 * 2)
 
 
 def run_industry_ranking():
@@ -307,7 +307,7 @@ def run_fa50_index_chart():
 def run_generate_all_indicators():
     """Option 12: Generate all indicators and screening results"""
     # MI Index chart
-    updown_nyse, updown_nasdaq, updown_sp500 = sd.getUpDownDataFromCsv(365 * 3)
+    updown_nyse, updown_nasdaq, updown_sp500 = sd.get_up_down_data_from_csv(365 * 3)
     draw_momentum_index(updown_nyse, updown_nasdaq, updown_sp500, True)
 
     # MTT Count chart
@@ -363,7 +363,7 @@ def run_power_gap_history_screen():
 
 def run_atr_expansion_chart_option():
     """Option 14: ATR Expansion Chart"""
-    sd.cook_ATR_Expansion_Counts()
+    sd.cook_atr_expansion_counts()
     df = sd.get_count_data_from_csv("ATR_Expansion", 365 * 1)
     draw_atr_expansion_chart(df, True)
 
