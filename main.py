@@ -22,6 +22,7 @@ from jdChart import JdChart
 from jdGlobal import DATA_FOLDER
 from jdGlobal import METADATA_FOLDER
 from jdGlobal import get_yes_no_input
+from jd_io_utils import quarantine_corrupted_csv_files
 from jdStockDataManager import JdStockDataManager
 from qtWindow import JdWindowClass
 import logging_conf  # 전역 로깅 설정 로드
@@ -228,6 +229,7 @@ def run_sync_csv_and_generate_metadata():
               (e.g., up_down, RS, industry, MTT count, etc.)
     """
     remove_local_caches()
+    quarantine_corrupted_csv_files()
     sd.sync_csv_from_web(10)
     sd.cook_up_down_datas()
     sd.cook_atr_expansion_counts()
