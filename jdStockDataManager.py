@@ -30,6 +30,8 @@ from jd_io_utils import save_to_json
 from jdDataGetter import JdDataGetter
 import jdIndicator as jdi
 
+logger = logging.getLogger(__name__)
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 📌 QUICK REFERENCE — Date-Time & Time-Zone Helpers
@@ -122,7 +124,7 @@ class JdStockDataManager:
 
         # S&P500 지수 데이터(기본값)
         self.us500_data = fdr.DataReader('US500')
-        self.stock_GICS_df = pd.DataFrame()
+        self.stock_gics_df = pd.DataFrame()
 
         self.long_term_industry_rank_df = pd.DataFrame()
         self.short_term_industry_rank_df = pd.DataFrame()
@@ -273,8 +275,8 @@ class JdStockDataManager:
             new_data = new_data.round(5)
 
 
-        except Exception as e:
-            print(e)
+        except Exception:
+            logger.exception("[_cook_stock_data] Failed to cook stock data")
             raise
 
         return new_data
@@ -288,12 +290,12 @@ class JdStockDataManager:
         for ticker, df in data_dic.items():
             save_df_to_csv(df, ticker)
             i = i+1
-            print(f"{ticker}.csv is saved! {i}/{total_len}")
+            logger.debug("%s.csv is saved! %s/%s", ticker, i, total_len)
 
 
 
     
-    def _getATRCondition_df(self, stock_list, ticker):
+    def _get_atr_condition_df(self, stock_list, ticker):
         """
         ATR 기반으로 condition A/B를 계산.
         """
@@ -302,32 +304,33 @@ class JdStockDataManager:
             data = pd.read_csv(save_path)
             data.set_index('Date', inplace=True)
 
-            ATR = data['ATR']
+            atr = data['ATR']
             volume_ma50 = data['Volume'].rolling(window=50).mean()
-            open = data['Open']
-            close = data['Close']
-            diff = close - open
+            open_price = data['Open']
+            close_price = data['Close']
+            diff = close_price - open_price
 
-            bIsVolumeEnough = (volume_ma50 >= 2000000) & (close >= 10)
-            conditionA = bIsVolumeEnough & (diff > (1.0 * ATR))
-            conditionB = bIsVolumeEnough & (diff < (-1.5 * ATR))
+            is_volume_enough = (volume_ma50 >= 2000000) & (close_price >= 10)
+            condition_a = is_volume_enough & (diff > (1.0 * atr))
+            condition_b = is_volume_enough & (diff < (-1.5 * atr))
      
-        except Exception as e:
-                print(f"[_getATRCondition_df] An error occurred: {e} for ticker {ticker}")
-                name = stock_list.loc[stock_list['Symbol'] == ticker, 'Name'].values[0]
-                exception_ticker_list[ticker] = name
-                conditionA = pd.Series()
-                conditionB = pd.Series()
-        return conditionA, conditionB
+        except Exception:
+            logger.exception("[_get_atr_condition_df] Failed for ticker %s", ticker)
+            name_series = stock_list.loc[stock_list["Symbol"] == ticker, "Name"]
+            name = name_series.values[0] if not name_series.empty else ""
+            exception_ticker_list[ticker] = name
+            condition_a = pd.Series()
+            condition_b = pd.Series()
+        return condition_a, condition_b
     
 
-    def _getUpDownConditions_df(self, stock_list):
+    def _get_up_down_conditions_df(self, stock_list):
         l_A = []
         l_B = []
         for ticker in stock_list['Symbol']:
-            conditionA, conditionB = self._getATRCondition_df(stock_list, ticker)
-            l_A.append(conditionA)
-            l_B.append(conditionB)
+            condition_a, condition_b = self._get_atr_condition_df(stock_list, ticker)
+            l_A.append(condition_a)
+            l_B.append(condition_b)
         
         all_conditions_A = pd.concat(l_A, axis=1, sort=True)
         all_conditions_B = pd.concat(l_B, axis=1, sort=True)
@@ -358,24 +361,25 @@ class JdStockDataManager:
 
 
 
-    def _getCloseChanges_df(self, stock_list, ticker):
+    def _get_close_changes_df(self, stock_list, ticker):
         try:
             save_path = os.path.join(DATA_FOLDER, f"{ticker}.csv")
             data = pd.read_csv(save_path)
             data.set_index('Date', inplace=True)
             returns = (data['Close'] - data['Close'].shift(1)) / data['Close'].shift(1)
-        except Exception as e:
-            print(f"[_getCloseChanges_df] An error occurred: {e} for ticker {ticker}")
-            name = stock_list.loc[stock_list['Symbol'] == ticker, 'Name'].values[0]
+        except Exception:
+            logger.exception("[_get_close_changes_df] Failed for ticker %s", ticker)
+            name_series = stock_list.loc[stock_list["Symbol"] == ticker, "Name"]
+            name = name_series.values[0] if not name_series.empty else ""
             exception_ticker_list[ticker] = name
             returns = pd.Series()
 
 
         return returns
 
-    def _getUpDownChanges_df(self, stock_list):
+    def _get_up_down_changes_df(self, stock_list):
         # 모든 종목에 대한 전일 대비 수익률 계산
-        l = [self._getCloseChanges_df(stock_list, ticker) for ticker in stock_list['Symbol']]
+        l = [self._get_close_changes_df(stock_list, ticker) for ticker in stock_list['Symbol']]
         all_returns = pd.concat(l, axis=1, sort=True)
         all_returns.columns = all_returns.columns.to_list()
 
@@ -411,38 +415,38 @@ class JdStockDataManager:
         return self.data_getter.get_local_stock_list()
     
 
-    def cook_atr_expansion_counts(self, daysNum = 365*5):
+    def cook_atr_expansion_counts(self, days_num = 365*5):
         stock_list = self.get_local_stock_list()
-        up_down_condition_df = self._getUpDownConditions_df(stock_list)
+        up_down_condition_df = self._get_up_down_conditions_df(stock_list)
         up_down_condition_df.to_csv(os.path.join(METADATA_FOLDER, 'ATR_Expansion_Counts.csv'))
     
 
-    def cook_up_down_datas(self, daysNum = 365*5):
+    def cook_up_down_datas(self, days_num = 365*5):
 
         # S&P 500 지수의 모든 종목에 대해 매일 상승/하락한 종목 수 계산
-        nyse_list = self.data_getter.get_fdr_stock_list('NYSE', daysNum)
+        nyse_list = self.data_getter.get_fdr_stock_list('NYSE', days_num)
         nyse_list = nyse_list[nyse_list['Symbol'].isin(self._get_csv_names())]
 
-        nasdaq_list = self.data_getter.get_fdr_stock_list('NASDAQ', daysNum)
+        nasdaq_list = self.data_getter.get_fdr_stock_list('NASDAQ', days_num)
         nasdaq_list = nasdaq_list[nasdaq_list['Symbol'].isin(self._get_csv_names())]
 
-        sp500_list = self.data_getter.get_fdr_stock_list('S&P500', daysNum)
+        sp500_list = self.data_getter.get_fdr_stock_list('S&P500', days_num)
         sp500_list = sp500_list[sp500_list['Symbol'].isin(self._get_csv_names())]
 
 
         # 미국 주식시장의 거래일 가져오기
         nyse = mcal.get_calendar('NYSE')
-        trading_days = nyse.schedule(start_date=dt.date.today() - dt.timedelta(days=daysNum), end_date=dt.date.today()).index
+        trading_days = nyse.schedule(start_date=dt.date.today() - dt.timedelta(days=days_num), end_date=dt.date.today()).index
         valid_start_date = trading_days[0]
         valid_end_date = trading_days[-1]
 
-        daily_changes_nyse_df = self._getUpDownChanges_df(nyse_list)
+        daily_changes_nyse_df = self._get_up_down_changes_df(nyse_list)
         daily_changes_nyse_df.to_csv(os.path.join(METADATA_FOLDER, 'up_down_nyse.csv'))
 
-        daily_changes_nasdaq_df = self._getUpDownChanges_df(nasdaq_list)
+        daily_changes_nasdaq_df = self._get_up_down_changes_df(nasdaq_list)
         daily_changes_nasdaq_df.to_csv(os.path.join(METADATA_FOLDER, 'up_down_nasdaq.csv'))
 
-        daily_changes_sp500_df = self._getUpDownChanges_df(sp500_list)
+        daily_changes_sp500_df = self._get_up_down_changes_df(sp500_list)
         daily_changes_sp500_df.to_csv(os.path.join(METADATA_FOLDER, 'up_down_sp500.csv'))
 
         with open("up_down_exception.json", "w") as outfile:
@@ -475,25 +479,25 @@ class JdStockDataManager:
     def cook_filter_count_data(
         self,
         filter_func,
-        fileName: str,
-        daysNum: int = 365,
-        bAccumulateToExistingData: bool = True,
+        file_name: str,
+        days_num: int = 365,
+        accumulate_to_existing_data: bool = True,
     ):
         """
         · filter_func(stock_dic: dict[str, DataFrame], offset: int) -> list[str]
             offset = -1 → 어제, -2 → 그저께 …
-        · fileName : '{fileName}.csv' 로 저장
+        · fileName : '{file_name}.csv' 로 저장
         · daysNum  : 마지막 완료 세션으로부터 N 일 전까지 계산
         """
         # 1) 데이터 준비 --------------------------------------------------------
         stock_list        = self.get_local_stock_list()
         stock_data_len    = 365 * 5
-        stock_dic         = self.get_stock_datas_from_csv(stock_list, stock_data_len, bAccumulateToExistingData)
+        stock_dic         = self.get_stock_datas_from_csv(stock_list, stock_data_len, accumulate_to_existing_data)
 
         # 2) 거래일 & 마지막 완료 세션 -----------------------------------------
         nyse          = mcal.get_calendar("NYSE")
         trading_days  = nyse.valid_days(
-        start_date=dt.date.today() - dt.timedelta(days=daysNum),
+        start_date=dt.date.today() - dt.timedelta(days=days_num),
         end_date  =dt.date.today(),
         )
 
@@ -508,15 +512,15 @@ class JdStockDataManager:
             tickers = filter_func(stock_dic, -off)
             days.append(day)
             cnts.append(len(tickers))
-            print(f"{fileName}: {day.date()} → {len(tickers)}")
+            logger.debug("%s: %s → %s", file_name, day.date(), len(tickers))
 
         result_df = (pd.DataFrame({"Date": days[::-1], "Count": cnts[::-1]})
                     .set_index("Date"))                       # tz-aware(UTC)
 
         # 4) 파일 병합 ----------------------------------------------------------
-        save_path = os.path.join(METADATA_FOLDER, f"{fileName}.csv")
+        save_path = os.path.join(METADATA_FOLDER, f"{file_name}.csv")
 
-        if bAccumulateToExistingData and os.path.exists(save_path):
+        if accumulate_to_existing_data and os.path.exists(save_path):
             local = pd.read_csv(save_path, index_col="Date", parse_dates=["Date"])
             # 과거 CSV는 tz-naive → UTC 로 통일
             local.index = to_utc_idx(local.index)
@@ -531,14 +535,14 @@ class JdStockDataManager:
         export_df.to_csv(save_path, encoding="utf-8-sig")
 
 
-    def get_count_data_from_csv(self, fileName : str, daysNum = 365*2):
+    def get_count_data_from_csv(self, file_name: str, days_num = 365*2):
             """ 
             fileName: {fileName}_Counts.csv 
             """
             # ------------ nyse -------------------
-            data_path = os.path.join(METADATA_FOLDER, f"{fileName}_Counts.csv")
+            data_path = os.path.join(METADATA_FOLDER, f"{file_name}_Counts.csv")
             if not os.path.exists(data_path):
-                print(f"No file: {data_path}")
+                logger.warning("[get_count_data_from_csv] No file: %s", data_path)
                 return pd.DataFrame()
             
             data = pd.read_csv(data_path)
@@ -550,12 +554,12 @@ class JdStockDataManager:
             data.set_index('Date', inplace=True)
 
             # 미국 주식시장의 거래일 가져오기
-            trading_days = nyse.schedule(start_date=dt.date.today() - dt.timedelta(days=daysNum), end_date=dt.date.today()).index
-            startDay = trading_days[0].date()
-            endDay = min(trading_days[-1], data.index[-1]).date()
+            trading_days = nyse.schedule(start_date=dt.date.today() - dt.timedelta(days=days_num), end_date=dt.date.today()).index
+            start_day = trading_days[0].date()
+            end_day = min(trading_days[-1], data.index[-1]).date()
 
             # 시작일부터 종료일까지 가져오기
-            cnt_data = data[startDay:endDay]
+            cnt_data = data[start_day:end_day]
             return cnt_data
 
     def download_stock_datas_from_web(self, days_num=365*5, exclude_not_in_local_csv=True):
@@ -583,9 +587,9 @@ class JdStockDataManager:
                 cooked_df = self._cook_stock_data(df)
                 cooked_data_dic[ticker] = cooked_df
                 i += 1
-                print(f"[download_stock_datas_from_web] {ticker} cooked. {i}/{total}")
+                logger.debug("[download_stock_datas_from_web] %s cooked. %s/%s", ticker, i, total)
             except Exception as e:
-                print(f"Error cooking {ticker}: {e}")
+                logger.exception("[download_stock_datas_from_web] Error cooking %s", ticker)
                 exception_ticker_list[ticker] = str(e)
 
         # 최종 CSV로 저장
@@ -597,14 +601,14 @@ class JdStockDataManager:
             for tk in sync_fail_ticker_list:
                 f.write(tk + '\n')
 
-        print("[download_stock_datas_from_web] Done override.")
+        logger.info("[download_stock_datas_from_web] Done override.")
 
     # cooking 공식이 변하는 경우 로컬 데이터를 업데이트하기 위해 호출
-    def cook_local_stock_data(self, bUseLocalCache = False):
-        print("-------------------cookLocalStockData-----------------\n ") 
+    def cook_local_stock_data(self, use_local_cache: bool = False):
+        logger.info("[cook_local_stock_data] Start")
 
         all_list = self.get_local_stock_list()
-        stock_datas_from_csv = self.get_stock_datas_from_csv(all_list, 365*6, bUseLocalCache)
+        stock_datas_from_csv = self.get_stock_datas_from_csv(all_list, 365*6, use_local_cache)
         tickers = list(stock_datas_from_csv.keys())
 
 
@@ -620,17 +624,17 @@ class JdStockDataManager:
             cookedData = self._cook_stock_data(csvData)
             cooked_data_dic[ticker] = cookedData
 
-            print(ticker, ' cooked!')
+            logger.debug("%s cooked!", ticker)
 
         self._export_datas_to_csv(cooked_data_dic)
 
-    def sync_csv_from_web(self, daysNum = 14):
+    def sync_csv_from_web(self, days_num: int = 14):
         """
         - DataGetter.sync_csv_from_web으로부터 병합된 “원본+웹” merged_data_dic을 받음
         - 여기서 Cook 후 CSV 저장
         """
-        print("[JdStockDataManager] sync_csv_from_web start...")
-        merged_data_dic = self.data_getter.sync_csv_from_web(daysNum)
+        logger.info("[sync_csv_from_web] Start")
+        merged_data_dic = self.data_getter.sync_csv_from_web(days_num)
 
         cooked_data_dic = {}
         i = 0
@@ -647,10 +651,10 @@ class JdStockDataManager:
                 cooked_df = self._cook_stock_data(merged_df)
                 cooked_data_dic[ticker] = cooked_df
                 i += 1
-                logging.info(f"[sync_csv_from_web] {ticker} cooked. {i}/{total}")
+                logger.debug("[sync_csv_from_web] %s cooked. %s/%s", ticker, i, total)
         
             except Exception as e:
-                logging.info(f"Error cooking {ticker}: {e}")
+                logger.exception("[sync_csv_from_web] Error cooking %s", ticker)
                 exception_ticker_list[ticker] = str(e)
 
         # 이제 최종 CSV 저장
@@ -662,9 +666,9 @@ class JdStockDataManager:
             for tk in sync_fail_ticker_list:
                 f.write(tk + '\n')
 
-        print("[sync_csv_from_web] Done.")
+        logger.info("[sync_csv_from_web] Done.")
 
-    def get_up_down_data_from_csv(self, daysNum = 365*2):
+    def get_up_down_data_from_csv(self, days_num = 365*2):
         updown_nyse = pd.DataFrame()
         updown_nasdaq = pd.DataFrame()
         updown_sp500 = pd.DataFrame()
@@ -681,12 +685,12 @@ class JdStockDataManager:
 
 
         # 미국 주식시장의 거래일 가져오기
-        trading_days = nyse.schedule(start_date=dt.date.today() - dt.timedelta(days=daysNum), end_date=dt.date.today()).index
-        startDay = trading_days[0]
-        endDay = min(trading_days[-1], data.index[-1])
+        trading_days = nyse.schedule(start_date=dt.date.today() - dt.timedelta(days=days_num), end_date=dt.date.today()).index
+        start_day = trading_days[0]
+        end_day = min(trading_days[-1], data.index[-1])
 
         # 시작일부터 종료일까지 가져오기
-        data = data[startDay:endDay]
+        data = data[start_day:end_day]
         updown_nyse = data
 
 
@@ -700,7 +704,7 @@ class JdStockDataManager:
         # Date 행을 인덱스로 설정
         data.set_index('Date', inplace=True)
         # 시작일부터 종료일까지 가져오기
-        data = data[startDay:endDay]
+        data = data[start_day:end_day]
         updown_nasdaq = data
 
         # ------------ sp500 -------------------
@@ -713,13 +717,13 @@ class JdStockDataManager:
         # Date 행을 인덱스로 설정
         data.set_index('Date', inplace=True)
         # 시작일부터 종료일까지 가져오기
-        data = data[startDay:endDay]
+        data = data[start_day:end_day]
         updown_sp500 = data
 
         return updown_nyse, updown_nasdaq, updown_sp500
 
-    def get_stock_datas_from_csv(self, stock_list : pd.DataFrame, daysNum = 365*5, bUseCacheData = False):
-        return self.data_getter.get_stock_datas_from_csv(stock_list, daysNum, bUseCacheData)
+    def get_stock_datas_from_csv(self, stock_list: pd.DataFrame, days_num = 365*5, use_cache_data: bool = False):
+        return self.data_getter.get_stock_datas_from_csv(stock_list, days_num, use_cache_data)
 
 
     def remove_acquisition_tickers(self):
@@ -729,37 +733,37 @@ class JdStockDataManager:
         tickers = list(stock_datas_from_csv.keys())
 
 
-        removeTargetTickers = []
+        remove_target_tickers = []
 
         for ticker in tickers:
             data = stock_datas_from_csv[ticker]
             name = data['Name'].iloc[-1].lower()
             try:
                 industry = data['Industry'].iloc[-1].lower()
-            except Exception as e:
-                removeTargetTickers.append(ticker)
-                print(e)
+            except (KeyError, IndexError, AttributeError):
+                remove_target_tickers.append(ticker)
+                logger.exception("[remove_acquisition_tickers] Failed to read Industry for %s", ticker)
                 continue
                   
             if pd.isna(name) or pd.isna(industry):
-                removeTargetTickers.append(ticker)
+                remove_target_tickers.append(ticker)
                 continue
             if 'acquisition' in name or '기타 금융업' in industry:
-                removeTargetTickers.append(ticker)
+                remove_target_tickers.append(ticker)
             if 'acquisition' in name or '투자 지주 회사' in industry:
-                removeTargetTickers.append(ticker)
+                remove_target_tickers.append(ticker)
 
 
-        for ticker in removeTargetTickers:
+        for ticker in remove_target_tickers:
             file_path = os.path.join(DATA_FOLDER, ticker + '.csv')
             if os.path.exists(file_path):
                 os.remove(file_path)
-                print(file_path, 'is removed from local directory!')
+                logger.info("%s is removed from local directory!", file_path)
 
-    def cook_nday_atrs150_exp(self, N=150):
+    def cook_nday_atrs150_exp(self, n = 150):
         all_list = self.get_local_stock_list()
 
-        propertyName = 'ATRS150_Exp'
+        property_name = 'ATRS150_Exp'
 
         stock_datas_from_csv = self.get_stock_datas_from_csv(all_list)
         tickers = list(stock_datas_from_csv.keys())
@@ -769,14 +773,14 @@ class JdStockDataManager:
         atrs_dict = {}
         for ticker in tickers:
             data = stock_datas_from_csv[ticker]
-            atrs_list = data[propertyName].iloc[-N:].tolist() # 최근 N일 동안의 ATRS150 값만 가져오기=
+            atrs_list = data[property_name].iloc[-n:].tolist() # 최근 N일 동안의 ATRS150 값만 가져오기=
             atrs_list = [x if not math.isnan(x) else -1 for x in atrs_list] # NaN의 경우 -1로 대체
-            while len(atrs_list) < N:
+            while len(atrs_list) < n:
                 atrs_list.insert(0, -1) # 리스트앞에 -1을 추가하여 과거 NaN 데이터를 -1로 치환
-            if pd.notna(atrs_list).all() and len(atrs_list) == N: # ATRS150 값이 모두 유효한 경우에만 추가
+            if pd.notna(atrs_list).all() and len(atrs_list) == n: # ATRS150 값이 모두 유효한 경우에만 추가
                 atrs_dict[ticker] = atrs_list
                 if date_list is None:  # 처음으로 유효한 atrs_list를 발견하면 날짜 정보를 가져옴
-                    date_list = data.index[-N:].strftime('%Y-%m-%d').tolist()
+                    date_list = data.index[-n:].strftime('%Y-%m-%d').tolist()
 
         
         atrs_df = pd.DataFrame.from_dict(atrs_dict)
@@ -784,16 +788,16 @@ class JdStockDataManager:
         atrs_df = atrs_df.set_index('Date')
         atrs_df = atrs_df.T # transpose
 
-        save_path = os.path.join(METADATA_FOLDER, f'{N}day_{propertyName}.csv')
+        save_path = os.path.join(METADATA_FOLDER, f'{n}day_{property_name}.csv')
         atrs_df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
 
         return atrs_df
 
-    def cook_atrs150_exp_ranks(self, N = 150):
+    def cook_atrs150_exp_ranks(self, n = 150):
 
-        propertyName = 'ATRS150_Exp'
+        property_name = 'ATRS150_Exp'
 
-        csv_path = os.path.join(METADATA_FOLDER, f'{N}day_{propertyName}.csv')
+        csv_path = os.path.join(METADATA_FOLDER, f'{n}day_{property_name}.csv')
         data = pd.read_csv(csv_path)
         data = data.set_index('Symbol')
 
@@ -801,51 +805,59 @@ class JdStockDataManager:
 
         rank_df = rank_df
 
-        save_path = os.path.join(METADATA_FOLDER, f'{propertyName}_Ranking.csv')
+        save_path = os.path.join(METADATA_FOLDER, f'{property_name}_Ranking.csv')
         rank_df.to_csv(save_path, encoding='utf-8-sig', index_label='Symbol')
 
-    def get_atrs150_exp_ranks_normalized(self, Symbol):
+    def get_atrs150_exp_ranks_normalized(self, symbol):
 
-        propertyName = 'ATRS150_Exp'
+        property_name = 'ATRS150_Exp'
 
         try:
             rank_df = self.get_atrs_ranking_df()
-            serise_rankChanges = rank_df.loc[Symbol]
+            series_rank_changes = rank_df.loc[symbol]
 
             max_value = len(rank_df)
 
             # normalize ranking [0, 1] so that value '1' is most strong ranking.
-            serise_rankChanges = max_value - serise_rankChanges
-            serise_rankChanges = serise_rankChanges / max_value
+            series_rank_changes = max_value - series_rank_changes
+            series_rank_changes = series_rank_changes / max_value
             
-            serise_rankChanges.name = f'Rank_{propertyName}'
+            series_rank_changes.name = f'Rank_{property_name}'
 
-            return serise_rankChanges
+            return series_rank_changes
         
-        except Exception as e:
+        except KeyError:
+            logger.debug("[get_atrs150_exp_ranks_normalized] Symbol not found: %s", symbol)
+            return pd.Series()
+        except Exception:
+            logger.exception("[get_atrs150_exp_ranks_normalized] Failed for symbol %s", symbol)
             return pd.Series()
         
-    def get_atrs150_exp_ranks(self, Symbol):
+    def get_atrs150_exp_ranks(self, symbol):
 
-        propertyName = 'ATRS150_Exp'
+        property_name = 'ATRS150_Exp'
 
         try:
             rank_df = self.get_atrs_ranking_df()
-            serise_rankChanges = rank_df.loc[Symbol]
-            serise_rankChanges.name = f'Rank_{propertyName}'
+            series_rank_changes = rank_df.loc[symbol]
+            series_rank_changes.name = f'Rank_{property_name}'
 
-            return serise_rankChanges
+            return series_rank_changes
         
-        except Exception as e:
+        except KeyError:
+            logger.debug("[get_atrs150_exp_ranks] Symbol not found: %s", symbol)
+            return pd.Series()
+        except Exception:
+            logger.exception("[get_atrs150_exp_ranks] Failed for symbol %s", symbol)
             return pd.Series()
         
     def get_atrs_ranking_df(self):
 
-        propertyName = 'ATRS150_Exp'
+        property_name = 'ATRS150_Exp'
 
         try:
-            if self.atrs_ranking_df.empty == True:
-                csv_path = os.path.join(METADATA_FOLDER, f'{propertyName}_Ranking.csv')
+            if self.atrs_ranking_df.empty:
+                csv_path = os.path.join(METADATA_FOLDER, f'{property_name}_Ranking.csv')
                 rank_df = pd.read_csv(csv_path)
                 rank_df = rank_df.set_index('Symbol')
                 self.atrs_ranking_df = rank_df
@@ -853,7 +865,11 @@ class JdStockDataManager:
             else:
                 return self.atrs_ranking_df
         
-        except Exception as e:
+        except FileNotFoundError:
+            logger.warning("[get_atrs_ranking_df] Ranking CSV not found")
+            return pd.DataFrame()
+        except Exception:
+            logger.exception("[get_atrs_ranking_df] Failed to load ranking DataFrame")
             return pd.DataFrame()
         
     def cook_stock_gics_df(self):
@@ -868,14 +884,14 @@ class JdStockDataManager:
         all_list = self.get_local_stock_list()
         symbols = all_list['Symbol'].tolist()
         df_list = []
-        requestQueue = []
-        symbolsNum = len(symbols)
-        errorTickers = []
-        for i in range(0, symbolsNum):
-            requestQueue.append(symbols[i])
-            if len(requestQueue) >= 10:
+        request_queue = []
+        symbols_num = len(symbols)
+        error_tickers = []
+        for i in range(0, symbols_num):
+            request_queue.append(symbols[i])
+            if len(request_queue) >= 10:
                 try:
-                    tickers = Ticker(requestQueue)
+                    tickers = Ticker(request_queue)
                     profiles = tickers.get_modules("summaryProfile")
                     df = pd.DataFrame.from_dict(profiles).T
                     sector =  df['sector']
@@ -883,18 +899,17 @@ class JdStockDataManager:
                     df = pd.concat([sector, industry], axis=1)
                     df.index.name = 'Symbol'
                     df_list.append(df)
-                    requestQueue.clear()
-                    print(f"{i/symbolsNum*100:.2f}% Done")
-                except Exception as e:
-                    print(e)
-                    print(requestQueue)
-                    errorTickers.extend(requestQueue)
-                    requestQueue.clear()
+                    request_queue.clear()
+                    logger.debug("%0.2f%% Done", i / symbols_num * 100)
+                except Exception:
+                    logger.exception("[cook_stock_gics_df] Failed request queue (batch): %s", request_queue)
+                    error_tickers.extend(request_queue)
+                    request_queue.clear()
                     
 
-        if len(requestQueue) > 0:
+        if len(request_queue) > 0:
             try:
-                tickers = Ticker(requestQueue)
+                tickers = Ticker(request_queue)
                 profiles = tickers.get_modules("summaryProfile")
                 df = pd.DataFrame.from_dict(profiles).T
                 sector =  df['sector']
@@ -902,22 +917,21 @@ class JdStockDataManager:
                 df = pd.concat([sector, industry], axis=1)
                 df.index.name = 'Symbol'
                 df_list.append(df)
-                requestQueue.clear()
-            except Exception as e:
-                print(e)
-                print(requestQueue)
-                errorTickers.extend(requestQueue)
-                requestQueue.clear()
+                request_queue.clear()
+            except Exception:
+                logger.exception("[cook_stock_gics_df] Failed request queue (tail): %s", request_queue)
+                error_tickers.extend(request_queue)
+                request_queue.clear()
 
 
-        errorSymbolNum = len(errorTickers)
-        symbols = errorTickers.copy()
-        errorTickers.clear()
-        for i in range(0, errorSymbolNum):
-            requestQueue.append(symbols[i])
-            if len(requestQueue) >= 1:
+        error_symbol_num = len(error_tickers)
+        symbols = error_tickers.copy()
+        error_tickers.clear()
+        for i in range(0, error_symbol_num):
+            request_queue.append(symbols[i])
+            if len(request_queue) >= 1:
                 try:
-                    tickers = Ticker(requestQueue)
+                    tickers = Ticker(request_queue)
                     profiles = tickers.get_modules("summaryProfile")
                     df = pd.DataFrame.from_dict(profiles).T
                     sector =  df['sector']
@@ -925,21 +939,21 @@ class JdStockDataManager:
                     df = pd.concat([sector, industry], axis=1)
                     df.index.name = 'Symbol'
                     df_list.append(df)
-                    requestQueue.clear()
-                    print(f"{i/symbolsNum*100:.2f}% Done")
-                except Exception as e:
-                    print(e)
-                    print(requestQueue)
-                    errorTickers.extend(requestQueue)
-                    requestQueue.clear()
+                    request_queue.clear()
+                    logger.debug("%0.2f%% Done", i / symbols_num * 100)
+                except Exception:
+                    logger.exception("[cook_stock_gics_df] Failed request queue (retry): %s", request_queue)
+                    error_tickers.extend(request_queue)
+                    request_queue.clear()
                 time.sleep(1)
 
 
 
-        print('error tickers can\'t get the info')
-        print(errorTickers)
+        if error_tickers:
+            logger.warning("error tickers can't get the info")
+            logger.warning("%s", error_tickers)
 
-        print("Complete!")
+        logger.info("Complete!")
 
         result_df = pd.concat(df_list)
         # remove duplicated df
@@ -948,31 +962,36 @@ class JdStockDataManager:
         result_df.index.name = 'Symbol'
         result_df.to_csv(os.path.join(METADATA_FOLDER, 'Stock_GICS.csv'), encoding='utf-8-sig')
 
-        print('Error Tickers: ', errorTickers)
+        if error_tickers:
+            logger.warning("Error Tickers: %s", error_tickers)
 
 
         return result_df
     
 
     def get_gics_df(self):
-        if self.stock_GICS_df.empty:
-            # TODO: 예외처리 추가
+        if self.stock_gics_df.empty:
             csv_path = os.path.join(METADATA_FOLDER, "Stock_GICS.csv")
-            self.stock_GICS_df = pd.read_csv(csv_path)
-            self.stock_GICS_df = self.stock_GICS_df.set_index('Symbol')
-        
-        return self.stock_GICS_df
+            try:
+                self.stock_gics_df = pd.read_csv(csv_path).set_index("Symbol")
+            except FileNotFoundError:
+                logger.warning("[get_gics_df] File not found: %s", csv_path)
+                return pd.DataFrame()
+            except Exception:
+                logger.exception("[get_gics_df] Failed to load: %s", csv_path)
+                return pd.DataFrame()
+        return self.stock_gics_df
 
    
     # method: industry or sector
     # N_day_before: rank will be calculated at the [:, -N_day_before].
-    def get_industry_atrs150_ranks_mean(self, ATRS_Ranks_df, stock_GICS_df, N_day_before = 1, method : str = 'industry'):
+    def get_industry_atrs150_ranks_mean(self, atrs_ranks_df, stock_gics_df, n_day_before = 1, method : str = 'industry'):
         category = method
 
-        tickers_by_category = stock_GICS_df.groupby(category)['Symbol'].apply(list).to_dict()
+        tickers_by_category = stock_gics_df.groupby(category)['Symbol'].apply(list).to_dict()
 
         # ex) -1, -5, -20, -60, -120, -240 (오늘, 일주전, 한달전, 3개월전, 6개월전, 1년전)
-        last_ranks = ATRS_Ranks_df.iloc[:, -N_day_before]
+        last_ranks = atrs_ranks_df.iloc[:, -n_day_before]
         sectorTotalScoreMap = {}
         for category, tickers in tickers_by_category.items():
             scores = []
@@ -995,11 +1014,11 @@ class JdStockDataManager:
         return sorted_sector_scores
     
 
-    def get_ranks_in_industries(self, ATRS_Ranks_df, stock_GICS_df):
-        tickers_by_category = stock_GICS_df.groupby('industry')['Symbol'].apply(list).to_dict()
+    def get_ranks_in_industries(self, atrs_ranks_df, stock_gics_df):
+        tickers_by_category = stock_gics_df.groupby('industry')['Symbol'].apply(list).to_dict()
 
         # get last ranks
-        last_ranks = ATRS_Ranks_df.iloc[:, -1]
+        last_ranks = atrs_ranks_df.iloc[:, -1]
         sorted_industries_ranks_dic = {}
         for category, tickers in tickers_by_category.items():
             # generate sorted ticker-rank dictionary
@@ -1011,44 +1030,44 @@ class JdStockDataManager:
 
     # cook industry ranks according to the ATRS150_Exp ranks.
     def cook_long_term_industry_rank_scores(self):
-        print('cook_long_term_industry_rank_scores')
-        ATRS_Ranks_df = self.get_atrs_ranking_df()
+        logger.info("cook_long_term_industry_rank_scores")
+        atrs_ranks_df = self.get_atrs_ranking_df()
         csv_path = os.path.join(METADATA_FOLDER, "Stock_GICS.csv")
-        stock_GICS_df = pd.read_csv(csv_path)
+        stock_gics_df = pd.read_csv(csv_path)
 
 
         dn_list = []
-        columnNames = []
-        nDay = 365
-        for i in range(1, nDay+1):
-            dn = self.get_industry_atrs150_ranks_mean(ATRS_Ranks_df, stock_GICS_df, i)
+        column_names = []
+        n_day = 365
+        for i in range(1, n_day+1):
+            dn = self.get_industry_atrs150_ranks_mean(atrs_ranks_df, stock_gics_df, i)
             dn_list.append(dn)
-            columnNames.append(f'{i}d ago')
+            column_names.append(f'{i}d ago')
 
         # reverse the list so that lastest day can be located at the last column in dataframe.
         dn_list.reverse()
-        columnNames.reverse()
+        column_names.reverse()
 
         d1 = dn_list[0]
-        industryNames = list(d1.keys())
-        industryNum = len(industryNames)
+        industry_names = list(d1.keys())
+        industry_num = len(industry_names)
         industry_rank_history_dic = {}
 
         # generate industryName-list dictionary.
-        for name in industryNames:
+        for name in industry_names:
             industry_rank_history_dic[name] = []
 
-        for i in range(1, nDay+1):
+        for i in range(1, n_day+1):
             for key, value in dn_list[i-1].items():
                 try:
                     industry_rank_history_dic[key].append(value)
-                except Exception as e:
-                    print(e)
+                except KeyError:
+                    logger.debug("[cook_long_term_industry_rank_scores] Unknown industry key: %s", key)
         rank_history_df = pd.DataFrame.from_dict(industry_rank_history_dic).transpose()
         rank_history_df = rank_history_df.rank(axis=0, ascending=True, method='dense')
-        rank_history_df = (1 - rank_history_df.div(industryNum))*100
+        rank_history_df = (1 - rank_history_df.div(industry_num))*100
         rank_history_df = rank_history_df.round(2)
-        rank_history_df.columns = columnNames
+        rank_history_df.columns = column_names
         rank_history_df.index.name = 'industry'
 
 
@@ -1060,12 +1079,12 @@ class JdStockDataManager:
         save_path = os.path.join(METADATA_FOLDER, "long_term_industry_rank_scores.csv")
         rank_history_df.index.name = 'industry'
         rank_history_df.to_csv(save_path, encoding='utf-8-sig')
-        print('long_term_industry_rank_scores.csv cooked!')
+        logger.info("long_term_industry_rank_scores.csv cooked!")
 
-    def get_industry_atrs14_mean(self, stock_data_dic, stock_GICS_df, N_day_before = 1, method : str = 'industry'):
+    def get_industry_atrs14_mean(self, stock_data_dic, stock_gics_df, n_day_before = 1, method : str = 'industry'):
             category = method
 
-            tickers_by_category = stock_GICS_df.groupby(category)['Symbol'].apply(list).to_dict()
+            tickers_by_category = stock_gics_df.groupby(category)['Symbol'].apply(list).to_dict()
 
             # ex) -1, -5, -20, -60, -120, -240 (오늘, 일주전, 한달전, 3개월전, 6개월전, 1년전)    
             sectorTotalScoreMap = {}
@@ -1074,8 +1093,8 @@ class JdStockDataManager:
                 # collect each sector's atrs and dump lower 50%
                 for ticker in tickers:     
                     df = stock_data_dic.get(ticker)           
-                    if df is not None and (len(df) > N_day_before):
-                        scores.append(df['ATRS_Exp'].iloc[-N_day_before])
+                    if df is not None and (len(df) > n_day_before):
+                        scores.append(df['ATRS_Exp'].iloc[-n_day_before])
                 # ascending order sort
                 scores = [score for score in scores if not np.isnan(score)]
                 scores = sorted(scores)
@@ -1090,8 +1109,8 @@ class JdStockDataManager:
             return sorted_sector_scores
     
 
-    def get_percentage_a_to_b(self, priceA : float, priceB : float):
-        res = ((priceB - priceA)/priceA) * 100
+    def get_percentage_a_to_b(self, price_a: float, price_b: float):
+        res = ((price_b - price_a) / price_a) * 100
         return res
 
 
@@ -1277,7 +1296,7 @@ class JdStockDataManager:
             try:
                 fetched = fdr.DataReader(ticker, start_date)
             except Exception as e:
-                logging.info(f"[load_single_ticker_data] FDR fetch failed for {ticker}: {e}")
+                logger.warning("[load_single_ticker_data] FDR fetch failed for %s: %s", ticker, e)
                 return pd.DataFrame()
 
             if fetched is None or fetched.empty:
@@ -1298,56 +1317,56 @@ class JdStockDataManager:
 
             return fetched[needed]
 
-        except Exception as e:
-            logging.info(f"[load_single_ticker_data] Unexpected error for {ticker}: {e}")
+        except Exception:
+            logger.exception("[load_single_ticker_data] Unexpected error for %s", ticker)
             return pd.DataFrame()
         
 
     # cook industry ranks according to the atrs14_exp.
     def cook_short_term_industry_rank_scores(self):
-        print('cook_short_term_industry_rank_scores')
+        logger.info("cook_short_term_industry_rank_scores")
 
         all_list = self.get_local_stock_list()
         stock_datas_from_csv = self.get_stock_datas_from_csv(all_list, 365, True)
 
         csv_path = os.path.join(METADATA_FOLDER, "Stock_GICS.csv")
-        stock_GICS_df = pd.read_csv(csv_path)
+        stock_gics_df = pd.read_csv(csv_path)
 
 
         dn_list = []
-        columnNames = []
-        nDay = 30
-        for i in range(1, nDay+1):
-            dn = self.get_industry_atrs14_mean(stock_datas_from_csv, stock_GICS_df, i, 'industry')
+        column_names = []
+        n_day = 30
+        for i in range(1, n_day+1):
+            dn = self.get_industry_atrs14_mean(stock_datas_from_csv, stock_gics_df, i, 'industry')
             dn_list.append(dn)
-            columnNames.append(f'{i}d ago')
+            column_names.append(f'{i}d ago')
 
 
         # reverse the list so that lastest day can be located at the last column in dataframe.
         dn_list.reverse()
-        columnNames.reverse()
+        column_names.reverse()
 
         d1 = dn_list[0]
-        industryNames = list(d1.keys())
-        industryNum = len(industryNames)
+        industry_names = list(d1.keys())
+        industry_num = len(industry_names)
         industry_atrs14_rank_history_dic = {}
 
         # generate industryName-list dictionary.
-        for name in industryNames:
+        for name in industry_names:
             industry_atrs14_rank_history_dic[name] = []
 
-        for i in range(1, nDay+1):
+        for i in range(1, n_day+1):
             for key, value in dn_list[i-1].items():
                 try:
                     industry_atrs14_rank_history_dic[key].append(value)
-                except Exception as e:
-                    print(e)
+                except KeyError:
+                    logger.debug("[cook_short_term_industry_rank_scores] Unknown industry key: %s", key)
 
         rank_history_df = pd.DataFrame.from_dict(industry_atrs14_rank_history_dic).transpose()
         rank_history_df = rank_history_df.rank(axis=0, ascending=False, method='dense')
-        rank_history_df = (1 - rank_history_df.div(industryNum))*100
+        rank_history_df = (1 - rank_history_df.div(industry_num))*100
         rank_history_df = rank_history_df.round(2)
-        rank_history_df.columns = columnNames
+        rank_history_df.columns = column_names
         rank_history_df.index.name = 'industry'
 
         # sort ranks by lastest score.
@@ -1356,14 +1375,14 @@ class JdStockDataManager:
 
         save_path = os.path.join(METADATA_FOLDER, "short_term_industry_rank_scores.csv")
         rank_history_df.to_csv(save_path, encoding='utf-8-sig')
-        print('short_term_industry_rank_scores.csv cooked!')
+        logger.info("short_term_industry_rank_scores.csv cooked!")
 
-    def check_nr_with_true_range(self, inStockData : pd.DataFrame , maxDepth = 20):
+    def check_nr_with_true_range(self, stock_data: pd.DataFrame, max_depth = 20):
         # Calcaute NR(x) using True Range.
-        last_tr = inStockData['TR'].iloc[-1]
+        last_tr = stock_data['TR'].iloc[-1]
         true_range_nr_x = 0
-        for i in range(2, maxDepth):
-            tr_range_n = inStockData['TR'][-i:]
+        for i in range(2, max_depth):
+            tr_range_n = stock_data['TR'][-i:]
             min_value = tr_range_n.min()
             if min_value == last_tr:
                 true_range_nr_x = i
@@ -1585,19 +1604,18 @@ class JdStockDataManager:
         return False
     
 
-    def _check_below_N_ma_closed_cnt(self, inStockData: pd.DataFrame, MA_Num, days):
+    def _check_below_n_ma_closed_cnt(self, stock_data: pd.DataFrame, ma_num, days):
 
-        ticker = inStockData['Symbol'].iloc[-1]
-        ma_datas = inStockData['Close'].rolling(window=MA_Num).mean().iloc[-days:].tolist()
-        opens = inStockData['Open'].iloc[-days:].tolist()
-        closes = inStockData['Close'].iloc[-days:].tolist()
+        ma_datas = stock_data['Close'].rolling(window=ma_num).mean().iloc[-days:].tolist()
+        opens = stock_data['Open'].iloc[-days:].tolist()
+        closes = stock_data['Close'].iloc[-days:].tolist()
 
         ma_below_closed_cnt = 0
         for i in range(0, days):
             ma = ma_datas[i]
-            open = opens[i]
-            close = closes[i]
-            if open >= ma and close < ma:
+            open_price = opens[i]
+            close_price = closes[i]
+            if open_price >= ma and close_price < ma:
                 ma_below_closed_cnt += 1
             
 
@@ -1605,10 +1623,10 @@ class JdStockDataManager:
 
 
     def check_below_20ma_closed_cnt(self, inStockData: pd.DataFrame, days=15):
-        return self._check_below_N_ma_closed_cnt(inStockData, 20, days)
+        return self._check_below_n_ma_closed_cnt(inStockData, 20, days)
 
     def check_below_50ma_closed_cnt(self, inStockData: pd.DataFrame, days=15):
-        return self._check_below_N_ma_closed_cnt(inStockData, 50, days)
+        return self._check_below_n_ma_closed_cnt(inStockData, 50, days)
     
     def check_up_more_than_adr_cnt(self, inStockData: pd.DataFrame, days=15):
         ticker = inStockData['Symbol'].iloc[-1]
@@ -1875,8 +1893,8 @@ class JdStockDataManager:
 
     # rs_check_range: Check if RS is maximum within N days.
     # days: Check if the day with the maximum RS occurred among n days.
-    def check_rs_N_day_new_high_in_n_days(self, inStockData: pd.DataFrame, atrs_ranking_df : pd.DataFrame, rs_check_range = 50, days = 15):
-        ticker = inStockData['Symbol'].iloc[-1]
+    def check_rs_n_day_new_high_in_n_days(self, stock_data: pd.DataFrame, atrs_ranking_df: pd.DataFrame, rs_check_range = 50, days = 15):
+        ticker = stock_data['Symbol'].iloc[-1]
         rs_of_ticker = atrs_ranking_df.loc[ticker]
         rs_ranks_in_n_days = rs_of_ticker.iloc[-days:].tolist()
 
@@ -1900,8 +1918,8 @@ class JdStockDataManager:
 
         return False
     
-    def check_rs_N_day_new_low_in_n_days(self, inStockData: pd.DataFrame, atrs_ranking_df : pd.DataFrame, rs_check_range = 50, days = 15):
-        ticker = inStockData['Symbol'].iloc[-1]
+    def check_rs_n_day_new_low_in_n_days(self, stock_data: pd.DataFrame, atrs_ranking_df: pd.DataFrame, rs_check_range = 50, days = 15):
+        ticker = stock_data['Symbol'].iloc[-1]
         rs_of_ticker = atrs_ranking_df.loc[ticker]
         rs_ranks_in_n_days = rs_of_ticker.iloc[-days:].tolist()
 
@@ -2058,13 +2076,13 @@ class JdStockDataManager:
 
 
     def cook_top10_in_industries(self):
-        ATRS_Ranks_df = self.get_atrs_ranking_df()
+        atrs_ranks_df = self.get_atrs_ranking_df()
         csv_path = os.path.join(METADATA_FOLDER, "Stock_GICS.csv")
-        stock_GICS_df = pd.read_csv(csv_path)
-        ranks_in_industries = self.get_ranks_in_industries(ATRS_Ranks_df, stock_GICS_df)
-        daysNum = 365
+        stock_gics_df = pd.read_csv(csv_path)
+        ranks_in_industries = self.get_ranks_in_industries(atrs_ranks_df, stock_gics_df)
+        days_num = 365
         stock_list = self.get_local_stock_list()
-        stock_datas_from_csv = self.get_stock_datas_from_csv(stock_list, daysNum, False)
+        stock_datas_from_csv = self.get_stock_datas_from_csv(stock_list, days_num, False)
 
         top10_in_industries = {}
         for industry, datas in ranks_in_industries.items():
@@ -2094,16 +2112,19 @@ class JdStockDataManager:
 
         return self.long_term_industry_rank_df
     
-    def get_long_term_industry_rank_scores(self, industryName):
+    def get_long_term_industry_rank_scores(self, industry_name):
         df = self.get_long_term_industry_rank_scores_df()
         try:
-            result = df.loc[industryName]
-        except Exception as e:
-            result = pd.Series()
-            print(e)
-            print(f"{industryName} does not exist in the DataFrame. Returning pd.Series().")
-
-        return result
+            return df.loc[industry_name]
+        except KeyError:
+            logger.debug(
+                "[get_long_term_industry_rank_scores] %s does not exist in the DataFrame.",
+                industry_name,
+            )
+            return pd.Series()
+        except Exception:
+            logger.exception("[get_long_term_industry_rank_scores] Failed for industry: %s", industry_name)
+            return pd.Series()
 
     def get_short_term_industry_rank_scores_df(self):
         if self.short_term_industry_rank_df.empty:
@@ -2120,12 +2141,12 @@ class JdStockDataManager:
         dic = load_from_json('top10_in_industries')
         return dic
     
-    def cook_stock_info_from_tickers(self, inTickers : list, fileName : str, bUseDataCache = True):
+    def cook_stock_info_from_tickers(self, tickers: list, file_name: str, use_data_cache: bool = True):
         cook_start_time = time.time()
 
         stock_list = self.get_local_stock_list()
-        daysNum = 365
-        stock_datas_from_csv = self.get_stock_datas_from_csv(stock_list, daysNum, bUseDataCache)
+        days_num = 365
+        stock_datas_from_csv = self.get_stock_datas_from_csv(stock_list, days_num, use_data_cache)
         atrs_ranking_df = self.get_atrs_ranking_df()
 
         nyse_list = self.data_getter.get_fdr_stock_list('NYSE')
@@ -2136,8 +2157,8 @@ class JdStockDataManager:
 
         stock_info_dic = {}
 
-        for ticker in inTickers:
-            gisc_df = self.get_gics_df()
+        for ticker in tickers:
+            gics_df = self.get_gics_df()
             market = ''
 
             if ticker in nyse_list:
@@ -2146,104 +2167,115 @@ class JdStockDataManager:
                 market = 'NASDAQ'
 
             if market == '':
-                print('can not find ticker {0} in any nyse or nasdaq market.', ticker)
+                logger.warning(
+                    "[cook_stock_info_from_tickers] Ticker not found in NYSE/NASDAQ lists: %s",
+                    ticker,
+                )
             
             try:
-                industry = gisc_df.loc[ticker]['industry']
+                industry = gics_df.loc[ticker]['industry']
                 scores = self.get_long_term_industry_rank_scores(industry)
-            except:
+            except KeyError:
                 industry = 'None'
-                scores = 'None'
+                scores = pd.Series()
+            except Exception:
+                logger.exception("[cook_stock_info_from_tickers] Failed to get industry/scores for %s", ticker)
+                industry = 'None'
+                scores = pd.Series()
                 
             
             industry_score = 0
-            if len(scores) != 0:
-                s_rank_scores : pd.Series = self.get_long_term_industry_rank_scores(industry)
-                if not s_rank_scores.empty:
-                    industry_score = s_rank_scores.iloc[-1]
+            if isinstance(scores, pd.Series) and not scores.empty:
+                industry_score = scores.iloc[-1]
             else:
-                print(f'can not find industry rank score from ticker: {ticker}, industry: {industry}')
+                logger.debug(
+                    "[cook_stock_info_from_tickers] No industry rank score: ticker=%s industry=%s",
+                    ticker,
+                    industry,
+                )
 
+            stock_data = stock_datas_from_csv.get(ticker, pd.DataFrame())
+            if stock_data.empty:
+                continue
             try:
-                stockData = stock_datas_from_csv.get(ticker)
-                atrsRank = atrs_ranking_df.loc[ticker].iloc[-1]
-            except:
+                atrs_rank = atrs_ranking_df.loc[ticker].iloc[-1]
+            except (KeyError, IndexError):
                 continue
 
-            volume_ma50 = stockData['Volume'].rolling(window=50).mean().iloc[-1]
+            volume_ma50 = stock_data['Volume'].rolling(window=50).mean().iloc[-1]
             if pd.isna(volume_ma50):
-                volume_ma50 = stockData['Volume'].iloc[-1]
+                volume_ma50 = stock_data['Volume'].iloc[-1]
 
-            lower_low_3 = -1 if self.check_lower_lows_3(stockData) else 0 # bad
-            higher_high_3 = 1 if self.check_higher_highs_3(stockData) else 0 # good
+            lower_low_3 = -1 if self.check_lower_lows_3(stock_data) else 0 # bad
+            higher_high_3 = 1 if self.check_higher_highs_3(stock_data) else 0 # good
 
-            below_20ma_closed = self.check_below_20ma_closed_cnt(stockData) * -1 # bad
-            below_50ma_closed = self.check_below_50ma_closed_cnt(stockData) * -1 # bad
+            below_20ma_closed = self.check_below_20ma_closed_cnt(stock_data) * -1 # bad
+            below_50ma_closed = self.check_below_50ma_closed_cnt(stock_data) * -1 # bad
 
-            up_more_than_adr = self.check_up_more_than_adr_cnt(stockData) # good
-            down_more_than_adr = self.check_down_more_than_adr_cnt(stockData) * -1 # bad
+            up_more_than_adr = self.check_up_more_than_adr_cnt(stock_data) # good
+            down_more_than_adr = self.check_down_more_than_adr_cnt(stock_data) * -1 # bad
 
-            bullish_candle_cnt, bearish_candle_cnt = self.check_bullish_bearish_candle_count_in_n_days(stockData) # good vs bad
+            bullish_candle_cnt, bearish_candle_cnt = self.check_bullish_bearish_candle_count_in_n_days(stock_data) # good vs bad
             more_bullish_candle = 1 if bullish_candle_cnt > bearish_candle_cnt else -1
 
-            ma20_disparity_more_than_20ptg = self.check_20ma_dist_more_than_20ptg_cnt(stockData) * -1 # bad
+            ma20_disparity_more_than_20ptg = self.check_20ma_dist_more_than_20ptg_cnt(stock_data) * -1 # bad
 
-            close_equal_high, close_equal_low = self.check_close_equal_high_or_low_cnt(stockData) # bad, good
+            close_equal_high, close_equal_low = self.check_close_equal_high_or_low_cnt(stock_data) # bad, good
             close_equal_low *= -1
 
-            open_equal_high = self.check_oeh_cnt(stockData) * -1 # bad
-            open_equal_low = self.check_oel_cnt(stockData) # good
+            open_equal_high = self.check_oeh_cnt(stock_data) * -1 # bad
+            open_equal_low = self.check_oel_cnt(stock_data) # good
 
-            oops_up_reversal = self.check_oops_up_reversal_cnt(stockData) # good
+            oops_up_reversal = self.check_oops_up_reversal_cnt(stock_data) # good
 
-            squat = self.check_squat_cnt(stockData) * -1 # bad
-            squat_recovery = self.check_squat_recovery_cnt(stockData) # good
+            squat = self.check_squat_cnt(stock_data) * -1 # bad
+            squat_recovery = self.check_squat_recovery_cnt(stock_data) # good
 
-            rs_new_high = 1 if self.check_rs_N_day_new_high_in_n_days(stockData, atrs_ranking_df, 50, 15) else 0 # good
-            rs_new_low = -1 if self.check_rs_N_day_new_low_in_n_days(stockData, atrs_ranking_df, 50, 15) else 0 # bad
+            rs_new_high = 1 if self.check_rs_n_day_new_high_in_n_days(stock_data, atrs_ranking_df, 50, 15) else 0 # good
+            rs_new_low = -1 if self.check_rs_n_day_new_low_in_n_days(stock_data, atrs_ranking_df, 50, 15) else 0 # bad
 
-            pocket_pivot_cnt = self.check_pocket_pivot_cnt(stockData)
+            pocket_pivot_cnt = self.check_pocket_pivot_cnt(stock_data)
 
 
-            CV_total_cnt = (lower_low_3 + higher_high_3 + below_20ma_closed + below_50ma_closed + up_more_than_adr + down_more_than_adr + more_bullish_candle +
+            cv_total_cnt = (lower_low_3 + higher_high_3 + below_20ma_closed + below_50ma_closed + up_more_than_adr + down_more_than_adr + more_bullish_candle +
             ma20_disparity_more_than_20ptg + close_equal_low + close_equal_high + open_equal_high + open_equal_low + oops_up_reversal + squat + squat_recovery + 
             rs_new_high + rs_new_low + pocket_pivot_cnt)
 
 
-            is_pocket_pivot = self.check_pocket_pivot(stockData)
-            is_inside_bar, is_double_inside_bar = self.check_inside_bar(stockData)
-            nr_x = self.check_nr_with_true_range(stockData)
-            is_wick_play = self.check_wickplay(stockData)
-            is_oel = self.check_oel(stockData)
-            is_goel = self.check_goel(stockData)
+            is_pocket_pivot = self.check_pocket_pivot(stock_data)
+            is_inside_bar, is_double_inside_bar = self.check_inside_bar(stock_data)
+            nr_x = self.check_nr_with_true_range(stock_data)
+            is_wick_play = self.check_wickplay(stock_data)
+            is_oel = self.check_oel(stock_data)
+            is_goel = self.check_goel(stock_data)
 
-            is_oops_up_reversal = self.check_oops_up_reversal(stockData)
-            is_failed_downside_wick_bo = self.check_failed_downside_wick_bo(stockData)
-            is_converging, is_power3, is_power2 = self.check_ma_converging(stockData)
+            is_oops_up_reversal = self.check_oops_up_reversal(stock_data)
+            is_failed_downside_wick_bo = self.check_failed_downside_wick_bo(stock_data)
+            is_converging, is_power3, is_power2 = self.check_ma_converging(stock_data)
 
-            bNearEma10 = self.check_near_ma(stockData, 10, 1.5, True)
-            bNearEma21 = self.check_near_ma(stockData, 21, 1.5, True)
-            bNearMa50 = self.check_near_ma(stockData, 50, 1.5)
+            is_near_ema10 = self.check_near_ma(stock_data, 10, 1.5, True)
+            is_near_ema21 = self.check_near_ma(stock_data, 21, 1.5, True)
+            is_near_ma50 = self.check_near_ma(stock_data, 50, 1.5)
 
             near_ma_list = []
-            if bNearEma10:
+            if is_near_ema10:
                 near_ma_list.append(10)
-            if bNearEma21:
+            if is_near_ema21:
                 near_ma_list.append(21)
-            if bNearMa50:
+            if is_near_ma50:
                 near_ma_list.append(50)
             
 
 
 
-            bNearMA = self.check_near_ma(stockData)
-            ADR = stockData['ADR'].iloc[-1]
+            is_near_ma = self.check_near_ma(stock_data)
+            adr = stock_data['ADR'].iloc[-1]
 
-            trandingViewFormat = market + ':' + ticker + ','
+            trading_view_format = market + ':' + ticker + ','
 
             try:
 
-                stock_info_dic[ticker] = [market, industry, industry_score, int(atrsRank), ADR, int(volume_ma50), near_ma_list, is_power3, is_pocket_pivot,
+                stock_info_dic[ticker] = [market, industry, industry_score, int(atrs_rank), adr, int(volume_ma50), near_ma_list, is_power3, is_pocket_pivot,
                                         # Volatility Contraction
                                         is_inside_bar, is_double_inside_bar, nr_x, is_wick_play,
                                         # Demand
@@ -2251,10 +2283,13 @@ class JdStockDataManager:
                                         # C/V factors
                                         lower_low_3, higher_high_3, below_20ma_closed, below_50ma_closed, up_more_than_adr, down_more_than_adr, more_bullish_candle,
                                         ma20_disparity_more_than_20ptg, close_equal_low, close_equal_high, open_equal_high, open_equal_low, oops_up_reversal,
-                                        squat, squat_recovery, rs_new_high, rs_new_low, pocket_pivot_cnt, CV_total_cnt,
-                                        trandingViewFormat]
-            except:
-                print("Fail to convert dictionary data from cooked properties, ticker: ", ticker)
+                                        squat, squat_recovery, rs_new_high, rs_new_low, pocket_pivot_cnt, cv_total_cnt,
+                                        trading_view_format]
+            except (ValueError, TypeError) as e:
+                logger.warning("[cook_stock_info_from_tickers] Failed to build row for %s: %s", ticker, e)
+                continue
+            except Exception:
+                logger.exception("[cook_stock_info_from_tickers] Failed to build row for %s", ticker)
                 continue
 
         df = pd.DataFrame.from_dict(stock_info_dic).transpose()
@@ -2269,10 +2304,10 @@ class JdStockDataManager:
         df.index.name = 'Symbol'
 
 
-        save_path = os.path.join(FILTERED_STOCKS_FOLDER, f'{fileName}.xlsx')
+        save_path = os.path.join(FILTERED_STOCKS_FOLDER, f'{file_name}.xlsx')
         
         df.to_excel(save_path, index_label='Symbol')
-        print(f'{fileName}.xlsx', 'is saved!')
+        logger.info("%s.xlsx is saved!", file_name)
 
 
         # 엑셀 조건수 서식 적용
@@ -2312,8 +2347,8 @@ class JdStockDataManager:
 
 
         cook_end_time = time.time()
-        elapsedTime = cook_end_time - cook_start_time
-        print('cook elapsed time: ', elapsedTime)
+        elapsed_time = cook_end_time - cook_start_time
+        logger.info("cook elapsed time: %s", elapsed_time)
 
     
     def date_to_index(self, df : pd.DataFrame, date_str):

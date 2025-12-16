@@ -13,6 +13,8 @@ import pickle
 
 import pandas as pd
 
+logger = logging.getLogger(__name__)
+
 # -----------------------------------------------------------------------------
 # 폴더 경로 설정
 # -----------------------------------------------------------------------------
@@ -56,7 +58,7 @@ def load_csv_with_date_index(
     """
     csv_path = os.path.join(data_dir, f"{ticker}.csv")
     if not os.path.exists(csv_path):
-        print(f"[load_csv_with_date_index] File not found: {csv_path}")
+        logger.debug("[load_csv_with_date_index] File not found: %s", csv_path)
         return pd.DataFrame()
 
     try:
@@ -70,8 +72,8 @@ def load_csv_with_date_index(
             df = df[df.index <= pd.to_datetime(end_date)]
 
         return df
-    except Exception as e:
-        print(f"[load_csv_with_date_index] An error occurred: {e}")
+    except (OSError, ValueError, pd.errors.EmptyDataError, pd.errors.ParserError):
+        logger.exception("[load_csv_with_date_index] Failed to read CSV: %s", csv_path)
         return pd.DataFrame()
 
 
@@ -87,9 +89,9 @@ def save_df_to_csv(
     save_path = os.path.join(data_dir, f"{ticker}.csv")
     try:
         df.to_csv(save_path, encoding=encoding)
-        logging.info(f"{ticker}.csv saved to {save_path}")
-    except Exception as e:
-        logging.info(f"[save_df_to_csv] An error occurred: {e}")
+        logger.info("%s.csv saved to %s", ticker, save_path)
+    except (OSError, ValueError):
+        logger.exception("[save_df_to_csv] Failed to save CSV: %s", save_path)
 
 # -----------------------------------------------------------------------------
 # JSON 입출력
@@ -103,9 +105,9 @@ def save_to_json(data, filename: str, folder: str = METADATA_FOLDER):
     try:
         with open(full_path, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=4, ensure_ascii=False)
-        print(f"dictionary data is saved as {full_path}")
-    except Exception as e:
-        print(f"[save_to_json] An error occurred: {e}")
+        logger.info("[save_to_json] Saved: %s", full_path)
+    except (OSError, TypeError):
+        logger.exception("[save_to_json] Failed to save JSON: %s", full_path)
 
 
 def load_from_json(filename: str, folder: str = METADATA_FOLDER):
@@ -115,14 +117,14 @@ def load_from_json(filename: str, folder: str = METADATA_FOLDER):
     """
     full_path = os.path.join(folder, f"{filename}.json")
     if not os.path.exists(full_path):
-        print(f"[load_from_json] File not found: {full_path}")
+        logger.debug("[load_from_json] File not found: %s", full_path)
         return {}
 
     try:
         with open(full_path, "r", encoding="utf-8") as file:
             return json.load(file)
-    except Exception as e:
-        print(f"[load_from_json] An error occurred: {e}")
+    except (OSError, json.JSONDecodeError):
+        logger.exception("[load_from_json] Failed to load JSON: %s", full_path)
         return {}
 
 # -----------------------------------------------------------------------------
@@ -136,9 +138,9 @@ def save_pickle(data, filename: str, folder: str = METADATA_FOLDER):
     try:
         with open(full_path, "wb") as f:
             pickle.dump(data, f)
-        print(f"[save_pickle] Saved: {full_path}")
-    except Exception as e:
-        print(f"[save_pickle] An error occurred: {e}")
+        logger.info("[save_pickle] Saved: %s", full_path)
+    except (OSError, pickle.PicklingError):
+        logger.exception("[save_pickle] Failed to save pickle: %s", full_path)
 
 
 def load_pickle(filename: str, folder: str = METADATA_FOLDER):
@@ -147,12 +149,12 @@ def load_pickle(filename: str, folder: str = METADATA_FOLDER):
     """
     full_path = os.path.join(folder, f"{filename}.pkl")
     if not os.path.exists(full_path):
-        print(f"[load_pickle] File not found: {full_path}")
+        logger.debug("[load_pickle] File not found: %s", full_path)
         return None
 
     try:
         with open(full_path, "rb") as f:
             return pickle.load(f)
-    except Exception as e:
-        print(f"[load_pickle] An error occurred: {e}")
+    except (OSError, pickle.UnpicklingError, EOFError):
+        logger.exception("[load_pickle] Failed to load pickle: %s", full_path)
         return None

@@ -8,6 +8,7 @@
 import concurrent.futures
 import datetime as dt
 import json
+import logging
 import os
 import time
 
@@ -31,6 +32,8 @@ from jdGlobal import (
 
 #미국 주식시장 달력
 nyse = mcal.get_calendar("NYSE")
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -64,7 +67,7 @@ class JdDataGetter:
         로컬 pickle 캐시(cache_fdr_{market}_list.pkl) 사용 가능.
         """
         if market not in ["NYSE", "NASDAQ", "S&P500"]:
-            print(f"[get_fdr_stock_list] Invalid market: {market}")
+            logger.warning("[get_fdr_stock_list] Invalid market: %s", market)
             return pd.DataFrame()
 
         # 캐시가 있으면 캐시 반환
@@ -76,8 +79,8 @@ class JdDataGetter:
         # 웹에서 새로 가져오기
         try:
             stock_list = fdr.StockListing(market)
-        except Exception as e:
-            print(f"[get_fdr_stock_list] Error fetching list for {market}: {e}")
+        except Exception:
+            logger.exception("[get_fdr_stock_list] Error fetching list for %s", market)
             return pd.DataFrame()
 
         # 로컬 CSV 폴더에 없는 티커 제외
@@ -137,7 +140,7 @@ class JdDataGetter:
                 self.cache_stock_datas = cached_dic
                 return cached_dic
 
-        print("[get_stock_datas_from_csv] Loading from CSV files...")
+        logger.info("[get_stock_datas_from_csv] Loading from CSV files...")
 
         stock_datas_dic = {}
         today_date = dt.date.today()
@@ -148,7 +151,12 @@ class JdDataGetter:
             if df.empty:
                 continue
             stock_datas_dic[ticker] = df
-            print(f"[{idx+1}/{len(stock_list['Symbol'])}] {ticker} - Data loaded successfully.")
+            logger.debug(
+                "[%s/%s] %s - Data loaded successfully.",
+                idx + 1,
+                len(stock_list["Symbol"]),
+                ticker,
+            )
 
 
         save_pickle(stock_datas_dic, "cache_getStockDatas_dic", folder=METADATA_FOLDER)
@@ -174,13 +182,23 @@ class JdDataGetter:
         future = executor.submit(fdr.DataReader, ticker, start_date)
         try:
             data = future.result(timeout=timeout_sec)
-            return data, False
         except concurrent.futures.TimeoutError:
-            print(f"[Timeout] {ticker} data request did not complete within {timeout_sec} seconds.")
+            future.cancel()
+            logger.warning(
+                "[Timeout] %s data request did not complete within %s seconds.",
+                ticker,
+                timeout_sec,
+            )
             return None, True
-        except Exception as e:
-            print(f"[Exception] An error occurred while requesting data for {ticker}: {e}")
+        except Exception:
+            future.cancel()
+            logger.exception(
+                "[Exception] An error occurred while requesting data for %s (start_date=%s)",
+                ticker,
+                start_date,
+            )
             return None, False
+        return data, False
 
 
     # ------------------------------------------------------------
@@ -207,40 +225,46 @@ class JdDataGetter:
         if stock_data is not None and not stock_data.empty:
             return stock_data, is_timeout, executor
 
-        print(f"{ticker} initial call failed. Starting retries.")
+        logger.warning("%s initial call failed. Starting retries.", ticker)
         for retryCnt in range(max_retries):
 
             # 이전 호출이 타임아웃이라면, executor 교체
             if is_timeout:
-                print(f"[{ticker}] Timeout detected. Replacing the executor.")
+                logger.warning("[%s] Timeout detected. Replacing the executor.", ticker)
                 executor.shutdown(wait=False)
                 executor = concurrent.futures.ProcessPoolExecutor(max_workers=1)  # 새 executor 생성
                 wait_time = long_wait
             else:
                 wait_time = retry_delay * (retryCnt + 1)
             
-            print(f"[{ticker}] Retry {retryCnt+1}/{max_retries} - waiting {wait_time} seconds before retrying...")
+            logger.info(
+                "[%s] Retry %s/%s - waiting %s seconds before retrying...",
+                ticker,
+                retryCnt + 1,
+                max_retries,
+                wait_time,
+            )
             time.sleep(wait_time)
 
             stock_data, is_timeout = self.fetch_data_with_timeout_process(executor, ticker, trading_day, timeout_sec)
 
             if is_timeout:
-                print(f"[{ticker}] Timeout detected Again!!!. Replacing the executor.")
+                logger.warning("[%s] Timeout detected again. Replacing the executor.", ticker)
                 executor.shutdown(wait=False)
                 executor = concurrent.futures.ProcessPoolExecutor(max_workers=1)
                 return pd.DataFrame(), is_timeout, executor
 
             elif stock_data is not None and not stock_data.empty:
                 # 정상적으로 값을 얻었다면 종료
-                print(f"{ticker} retry successful!")
+                logger.info("%s retry successful!", ticker)
                 return stock_data, is_timeout, executor
             else:
                 # 타임아웃은 아니지만 데이터를 못얻었다면 그냥 빈 DataFrame 반환
-                print(f"{ticker} data call failed. Assigning an empty DataFrame.")
+                logger.warning("%s data call failed. Assigning an empty DataFrame.", ticker)
                 return pd.DataFrame(), is_timeout, executor
 
         # 모든 재시도 실패
-        print(f"{ticker} data call ultimately failed. Returning empty DataFrame.")
+        logger.error("%s data call ultimately failed. Returning empty DataFrame.", ticker)
         return pd.DataFrame(), is_timeout, executor
 
 
@@ -268,7 +292,7 @@ class JdDataGetter:
         executor = concurrent.futures.ProcessPoolExecutor(max_workers=1)
         try:
             for ticker in stock_list['Symbol']:
-                print(ticker,' stock data from ', trading_days[0])
+                logger.debug("%s stock data from %s", ticker, trading_days[0])
                 
                 # get_stock_data_with_retries를 호출할 때, 현재 executor를 전달
                 # 그리고 반환값으로 executor를 다시 받는다. (API hang으로 executor가 shutdown 되면 함수 내부에서 재생성해서 반환)
@@ -291,7 +315,7 @@ class JdDataGetter:
 
                 out_data_dic[ticker] = stock_data
                 i += 1
-                print(f"{i/stockNums*100:.2f}% Done")
+                logger.debug("%0.2f%% Done", i / stockNums * 100)
 
         finally:
             executor.shutdown(wait=False)
@@ -303,7 +327,7 @@ class JdDataGetter:
     # (7) sync_csv_from_web
     # ------------------------------------------------------------
     def sync_csv_from_web(self, days_num=14):
-        print("[sync_csv_from_web] Start sync...")
+        logger.info("[sync_csv_from_web] Start sync...")
 
         stock_list = self.get_local_stock_list()  # 로컬에 있는 종목들
         schedule = nyse.schedule(
@@ -355,7 +379,7 @@ class JdDataGetter:
     # (8) download_stock_datas_from_web
     # ------------------------------------------------------------
     def download_stock_datas_from_web(self, days_num=365*5, exclude_not_in_local_csv=True):
-        print("[download_stock_datas_from_web] Start download...")
+        logger.info("[download_stock_datas_from_web] Start download...")
 
         if not exclude_not_in_local_csv:
             nyse_list = self.get_fdr_stock_list("NYSE", days_num, ignore_no_local_tickers=False)
@@ -383,7 +407,7 @@ class JdDataGetter:
             merged_data_dic[ticker] = webData
 
             i += 1
-            print(f"[download_stock_datas_from_web] {ticker} done {i}/{total}")
+            logger.debug("[download_stock_datas_from_web] %s done %s/%s", ticker, i, total)
 
         # 실패 목록
         with open('download_fail_list.txt', 'w') as f:
