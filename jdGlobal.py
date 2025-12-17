@@ -4,6 +4,7 @@ import os
 DATA_FOLDER = os.path.join(os.getcwd(), 'StockData')
 METADATA_FOLDER = os.path.join(DATA_FOLDER, 'MetaData')
 UI_FOLDER = os.path.join(os.getcwd(), 'UI')
+SAVE_FOLDER = os.path.join(os.getcwd(), 'save')
 SCREENSHOT_FOLDER = os.path.join(METADATA_FOLDER, 'ScreenShot')
 FILTERED_STOCKS_FOLDER = os.path.join(METADATA_FOLDER, "FilteredStocks")
 PROFILES_FOLDER = os.path.join(METADATA_FOLDER, "Profiles")

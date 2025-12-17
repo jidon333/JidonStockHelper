@@ -7,6 +7,7 @@ import logging
 import pandas as pd
 
 from jdGlobal import PROFILES_FOLDER
+from jdGlobal import SAVE_FOLDER
 from jd_filter_utils import precheck 
 
 if not os.path.exists(PROFILES_FOLDER):
@@ -1159,10 +1160,11 @@ class JdStockFilteringManager:
         sd = self.sd
         gap_date_tickers_dic = {}
         use_gap_data_cache = True
+        os.makedirs(SAVE_FOLDER, exist_ok=True)
 
         if use_gap_data_cache:
             try: 
-                with open('cache_power_gap_date_tickers_dic', "rb") as f:
+                with open(os.path.join(SAVE_FOLDER, 'cache_power_gap_date_tickers_dic'), "rb") as f:
                     gap_date_tickers_dic = pickle.load(f)
             except Exception as e:
                 print('[Cache] no cache_gap_date_tickers_dic in local')
@@ -1170,7 +1172,7 @@ class JdStockFilteringManager:
         if not gap_date_tickers_dic:
             gap_date_tickers_dic = self.get_filter_gap_stocks_in_range(range_from, range_to, self.filter_stock_power_gap)
             try:
-                with open('cache_power_gap_date_tickers_dic', "wb") as f:
+                with open(os.path.join(SAVE_FOLDER, 'cache_power_gap_date_tickers_dic'), "wb") as f:
                     pickle.dump(gap_date_tickers_dic, f)
             except Exception as e:
                 print(e)
@@ -1206,9 +1208,10 @@ class JdStockFilteringManager:
         gap_date_tickers_dic = {}
 
         use_gap_data_cache = True
+        os.makedirs(SAVE_FOLDER, exist_ok=True)
         if use_gap_data_cache:
             try: 
-                with open('cache_open_gap_date_tickers_dic', "rb") as f:
+                with open(os.path.join(SAVE_FOLDER, 'cache_open_gap_date_tickers_dic'), "rb") as f:
                     gap_date_tickers_dic = pickle.load(f)
             except Exception as e:
                 print('[Cache] no cache_open_gap_date_tickers_dic in local')
@@ -1216,7 +1219,7 @@ class JdStockFilteringManager:
         if not gap_date_tickers_dic:
             gap_date_tickers_dic = self.get_filter_gap_stocks_in_range(range_from, range_to, self.filter_stock_open_gap)
             try:
-                with open('cache_open_gap_date_tickers_dic', "wb") as f:
+                with open(os.path.join(SAVE_FOLDER, 'cache_open_gap_date_tickers_dic'), "wb") as f:
                     pickle.dump(gap_date_tickers_dic, f)
             except Exception as e:
                 print(e)

@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 # -----------------------------------------------------------------------------
 from jdGlobal import DATA_FOLDER
 from jdGlobal import METADATA_FOLDER
+from jdGlobal import SAVE_FOLDER
 from jdGlobal import SCREENSHOT_FOLDER
 from jdGlobal import FILTERED_STOCKS_FOLDER
 from jdGlobal import PROFILES_FOLDER
@@ -35,6 +36,7 @@ def ensure_directories_exist():
     for folder in [
         DATA_FOLDER,
         METADATA_FOLDER,
+        SAVE_FOLDER,
         FILTERED_STOCKS_FOLDER,
         SCREENSHOT_FOLDER,
         PROFILES_FOLDER

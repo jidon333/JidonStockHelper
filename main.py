@@ -21,6 +21,7 @@ import jdStockFilteringManager
 from jdChart import JdChart
 from jdGlobal import DATA_FOLDER
 from jdGlobal import METADATA_FOLDER
+from jdGlobal import SAVE_FOLDER
 from jdGlobal import get_yes_no_input
 from jd_io_utils import quarantine_corrupted_csv_files
 from jdStockDataManager import JdStockDataManager
@@ -134,7 +135,11 @@ def remove_outdated_tickers():
     """
     Removes local CSV files for tickers listed in DataReader_exception.json.
     """
-    with open("DataReader_exception.json", "r") as outfile:
+    json_path = os.path.join(SAVE_FOLDER, "DataReader_exception.json")
+    if not os.path.exists(json_path):
+        json_path = "DataReader_exception.json"
+
+    with open(json_path, "r") as outfile:
         data = json.load(outfile)
         for key in data.keys():
             file_path = os.path.join(DATA_FOLDER, key + '.csv')
@@ -167,10 +172,10 @@ def screen_stocks_and_show_chart(filter_function, use_local_loaded_stock_data_fo
     use_local_cache = get_yes_no_input('Do you want to see last chart data? \n It will just show your last chart data without screening. \n (y/n)')
     if use_local_cache:
         try:
-            with open('cache_tickers', "rb") as f:
+            with open(os.path.join(SAVE_FOLDER, 'cache_tickers'), "rb") as f:
                 tickers = pickle.load(f)
 
-            with open('cache_stock_datas_dic', 'rb') as f:
+            with open(os.path.join(SAVE_FOLDER, 'cache_stock_datas_dic'), 'rb') as f:
                 stock_data = pickle.load(f)
             
         except FileNotFoundError:
@@ -182,10 +187,10 @@ def screen_stocks_and_show_chart(filter_function, use_local_loaded_stock_data_fo
         stock_data, tickers = sf.screening_stocks_by_func(filter_function, use_local_loaded_stock_data_for_screening, sort_by_rs)
 
     if not use_local_cache:
-        with open('cache_tickers', "wb") as f:
+        with open(os.path.join(SAVE_FOLDER, 'cache_tickers'), "wb") as f:
             pickle.dump(tickers, f)
 
-        with open('cache_stock_datas_dic', "wb") as f:
+        with open(os.path.join(SAVE_FOLDER, 'cache_stock_datas_dic'), "wb") as f:
             pickle.dump(stock_data, f)
 
     print(tickers)

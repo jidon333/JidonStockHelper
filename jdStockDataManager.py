@@ -19,6 +19,7 @@ from yahooquery import Ticker
 from jdGlobal import DATA_FOLDER
 from jdGlobal import FILTERED_STOCKS_FOLDER
 from jdGlobal import METADATA_FOLDER
+from jdGlobal import SAVE_FOLDER
 from jdGlobal import exception_ticker_list
 from jdGlobal import get_yes_no_input
 from jdGlobal import sync_fail_ticker_list
@@ -449,8 +450,9 @@ class JdStockDataManager:
         daily_changes_sp500_df = self._get_up_down_changes_df(sp500_list)
         daily_changes_sp500_df.to_csv(os.path.join(METADATA_FOLDER, 'up_down_sp500.csv'))
 
-        with open("up_down_exception.json", "w") as outfile:
-                json.dump(exception_ticker_list, outfile, indent = 4)
+        os.makedirs(SAVE_FOLDER, exist_ok=True)
+        with open(os.path.join(SAVE_FOLDER, "up_down_exception.json"), "w") as outfile:
+            json.dump(exception_ticker_list, outfile, indent=4)
 
         return daily_changes_nyse_df, daily_changes_nasdaq_df, daily_changes_sp500_df
     
@@ -597,7 +599,8 @@ class JdStockDataManager:
             save_df_to_csv(cdf, t, data_dir=DATA_FOLDER)
 
         # 실패 목록
-        with open('download_fail_list.txt', 'w') as f:
+        os.makedirs(SAVE_FOLDER, exist_ok=True)
+        with open(os.path.join(SAVE_FOLDER, 'download_fail_list.txt'), 'w') as f:
             for tk in sync_fail_ticker_list:
                 f.write(tk + '\n')
 
@@ -662,7 +665,8 @@ class JdStockDataManager:
             save_df_to_csv(cooked_df, ticker, data_dir=DATA_FOLDER)
 
         # 실패 목록 기록
-        with open('sync_fail_list.txt', 'w') as f:
+        os.makedirs(SAVE_FOLDER, exist_ok=True)
+        with open(os.path.join(SAVE_FOLDER, 'sync_fail_list.txt'), 'w') as f:
             for tk in sync_fail_ticker_list:
                 f.write(tk + '\n')
 

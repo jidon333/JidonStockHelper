@@ -26,6 +26,7 @@ from jd_io_utils import (
 from jdGlobal import (
     DATA_FOLDER,
     METADATA_FOLDER,
+    SAVE_FOLDER,
     sync_fail_ticker_list,
     exception_ticker_list
 )
@@ -368,7 +369,8 @@ class JdDataGetter:
 
 
         # 실패 목록
-        with open('sync_fail_list.txt', 'w') as f:
+        os.makedirs(SAVE_FOLDER, exist_ok=True)
+        with open(os.path.join(SAVE_FOLDER, 'sync_fail_list.txt'), 'w') as f:
             for tk in sync_fail_ticker_list:
                 f.write(tk + '\n')
 
@@ -410,7 +412,8 @@ class JdDataGetter:
             logger.debug("[download_stock_datas_from_web] %s done %s/%s", ticker, i, total)
 
         # 실패 목록
-        with open('download_fail_list.txt', 'w') as f:
+        os.makedirs(SAVE_FOLDER, exist_ok=True)
+        with open(os.path.join(SAVE_FOLDER, 'download_fail_list.txt'), 'w') as f:
             for tk in sync_fail_ticker_list:
                 f.write(tk + '\n')
 
